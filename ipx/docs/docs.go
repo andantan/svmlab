@@ -15,6 +15,688 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/svm/rpc/": {
+            "post": {
+                "description": "Passes a method straight through, so anything this API has not wrapped stays reachable.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Call any JSON-RPC method",
+                "parameters": [
+                    {
+                        "description": "Method and params",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.RawRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/account": {
+            "post": {
+                "description": "Returns the owner, executable flag, data size, and data. An account that does not exist is reported with exists=false rather than as an error, since most 32-byte values name one nobody has created.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read an account's on-chain state",
+                "parameters": [
+                    {
+                        "description": "Account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.AccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.AccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/airdrop": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Fund an account on devnet or testnet",
+                "parameters": [
+                    {
+                        "description": "Account and amount",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.AirdropRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.AirdropResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/balance": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read an account's balance",
+                "parameters": [
+                    {
+                        "description": "Account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.AccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.BalanceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/batch": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Call several JSON-RPC methods in one round trip",
+                "parameters": [
+                    {
+                        "description": "Calls",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.BatchRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/blockhash": {
+            "post": {
+                "description": "Returns the blockhash to build against and the block height past which it is rejected, so expiry can be checked rather than guessed.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read a recent blockhash",
+                "parameters": [
+                    {
+                        "description": "Cluster",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.BlockhashResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/fee": {
+            "post": {
+                "description": "The fee follows from the signature count and any compute budget instructions, both of which live in the message, so it is known before signing and cannot be exceeded by execution the way a gas estimate can.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Price a message",
+                "parameters": [
+                    {
+                        "description": "Message",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.FeeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.FeeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/genesis-hash": {
+            "post": {
+                "description": "A genesis hash is not folded into a signature the way EIP-155 binds a chain id, so nothing on chain prevents a transaction from replaying on another cluster. Comparing what the endpoint reports against what config names is the substitute check.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read the cluster's genesis hash and compare it to config",
+                "parameters": [
+                    {
+                        "description": "Cluster",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.GenesisHashResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/health": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read the node's health",
+                "parameters": [
+                    {
+                        "description": "Cluster",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.HealthResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/rent-exemption/mint": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Minimum balance for an SPL Token mint",
+                "parameters": [
+                    {
+                        "description": "Cluster",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/rent-exemption/public-key": {
+            "post": {
+                "description": "Reads the size from a live account, which covers layouts none of the named endpoints describe. Pass a raw byte count to the getMinimumBalanceForRentExemption method through the raw endpoint instead.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Minimum balance for an account of the same size as an existing one",
+                "parameters": [
+                    {
+                        "description": "Account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.AccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/rent-exemption/stake": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Minimum balance for a stake account",
+                "parameters": [
+                    {
+                        "description": "Cluster",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/rent-exemption/system": {
+            "post": {
+                "description": "A wallet holds lamports and no data, so this is the floor any account must clear. It is also what a transfer to a previously unused address has to meet, since the transfer creates the account.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Minimum balance for a plain wallet",
+                "parameters": [
+                    {
+                        "description": "Cluster",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/rent-exemption/token": {
+            "post": {
+                "description": "Every token balance lives in an account of its own, so opening a position in a new token costs this much before any tokens move.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Minimum balance for an SPL Token account",
+                "parameters": [
+                    {
+                        "description": "Cluster",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/rent-exemption/vote": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Minimum balance for a validator vote account",
+                "parameters": [
+                    {
+                        "description": "Cluster",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/slot": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read the current slot",
+                "parameters": [
+                    {
+                        "description": "Cluster",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SlotResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/rpc/transaction/send": {
             "post": {
                 "description": "Submits a fully signed transaction to the cluster and returns its signature. Acceptance is not execution; the transaction still has to land in a block.",
@@ -44,6 +726,134 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/misc.SendTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/transaction/simulate": {
+            "post": {
+                "description": "Runs the transaction against the node's state and returns the program logs either way. The logs are the only account of why execution stopped; nothing here corresponds to a revert string. With sig_verify off the transaction need not be signed, which is what makes this usable before deciding to sign.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Execute a transaction without submitting it",
+                "parameters": [
+                    {
+                        "description": "Transaction",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.SimulateTransactionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SimulateTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/transaction/status": {
+            "post": {
+                "description": "Stands in for an EVM receipt, but found can stay false forever: a transaction whose blockhash expired is forgotten and never lands.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read a transaction's status",
+                "parameters": [
+                    {
+                        "description": "Signature",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.SignatureStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SignatureStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/version": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read the node's software version",
+                "parameters": [
+                    {
+                        "description": "Cluster",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ClusterRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.VersionResponse"
                         }
                     },
                     "400": {
@@ -275,6 +1085,249 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "misc.AccountRequest": {
+            "type": "object",
+            "properties": {
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "testnet"
+                },
+                "commitment": {
+                    "type": "string",
+                    "example": "confirmed"
+                },
+                "public_key": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "misc.AccountResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "string"
+                },
+                "executable": {
+                    "type": "boolean"
+                },
+                "exists": {
+                    "type": "boolean"
+                },
+                "lamports": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "space": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.AirdropRequest": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "1000000000"
+                },
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "testnet"
+                },
+                "commitment": {
+                    "type": "string",
+                    "example": "confirmed"
+                },
+                "public_key": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.AirdropResponse": {
+            "type": "object",
+            "properties": {
+                "signature": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.BalanceResponse": {
+            "type": "object",
+            "properties": {
+                "lamports": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.BatchCall": {
+            "type": "object",
+            "properties": {
+                "method": {
+                    "type": "string"
+                },
+                "params": {}
+            }
+        },
+        "misc.BatchRequest": {
+            "type": "object",
+            "properties": {
+                "calls": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/misc.BatchCall"
+                    }
+                },
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "testnet"
+                }
+            }
+        },
+        "misc.BlockhashResponse": {
+            "type": "object",
+            "properties": {
+                "blockhash": {
+                    "type": "string"
+                },
+                "last_valid_block_height": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.ClusterRequest": {
+            "type": "object",
+            "properties": {
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "testnet"
+                },
+                "commitment": {
+                    "type": "string",
+                    "example": "confirmed"
+                }
+            }
+        },
+        "misc.FeeRequest": {
+            "type": "object",
+            "properties": {
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "testnet"
+                },
+                "commitment": {
+                    "type": "string",
+                    "example": "confirmed"
+                },
+                "message": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.FeeResponse": {
+            "type": "object",
+            "properties": {
+                "lamports": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "valid": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "misc.GenesisHashResponse": {
+            "type": "object",
+            "properties": {
+                "configured": {
+                    "type": "string"
+                },
+                "genesis_hash": {
+                    "type": "string"
+                },
+                "matches": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "misc.HealthResponse": {
+            "type": "object",
+            "properties": {
+                "health": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.RawRequest": {
+            "type": "object",
+            "properties": {
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "testnet"
+                },
+                "method": {
+                    "type": "string",
+                    "example": "getEpochInfo"
+                },
+                "params": {}
+            }
+        },
+        "misc.RentExemptionResponse": {
+            "type": "object",
+            "properties": {
+                "account_type": {
+                    "type": "string"
+                },
+                "lamports": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "space": {
+                    "type": "integer"
+                }
+            }
+        },
         "misc.SendTransactionRequest": {
             "type": "object",
             "properties": {
@@ -284,7 +1337,7 @@ const docTemplate = `{
                 },
                 "chain_network": {
                     "type": "string",
-                    "example": "devnet"
+                    "example": "testnet"
                 },
                 "commitment": {
                     "type": "string",
@@ -368,6 +1421,105 @@ const docTemplate = `{
                 }
             }
         },
+        "misc.SignatureStatusRequest": {
+            "type": "object",
+            "properties": {
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "testnet"
+                },
+                "search_history": {
+                    "description": "SearchHistory looks beyond the node's recent cache. A signature the\ncluster has already forgotten is reported as not found without it.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "signature": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.SignatureStatusResponse": {
+            "type": "object",
+            "properties": {
+                "confirmation_status": {
+                    "type": "string"
+                },
+                "confirmations": {
+                    "type": "integer"
+                },
+                "err": {
+                    "type": "string"
+                },
+                "failed": {
+                    "type": "boolean"
+                },
+                "found": {
+                    "type": "boolean"
+                },
+                "signature": {
+                    "type": "string"
+                },
+                "slot": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.SimulateTransactionRequest": {
+            "type": "object",
+            "properties": {
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "testnet"
+                },
+                "commitment": {
+                    "type": "string",
+                    "example": "confirmed"
+                },
+                "sig_verify": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.SimulateTransactionResponse": {
+            "type": "object",
+            "properties": {
+                "err": {
+                    "type": "string"
+                },
+                "failed": {
+                    "type": "boolean"
+                },
+                "logs": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "units_consumed": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.SlotResponse": {
+            "type": "object",
+            "properties": {
+                "slot": {
+                    "type": "integer"
+                }
+            }
+        },
         "misc.VerifyRequest": {
             "type": "object",
             "properties": {
@@ -388,6 +1540,15 @@ const docTemplate = `{
             "properties": {
                 "valid": {
                     "type": "boolean"
+                }
+            }
+        },
+        "misc.VersionResponse": {
+            "type": "object",
+            "properties": {
+                "version": {
+                    "type": "object",
+                    "additionalProperties": {}
                 }
             }
         },
@@ -417,7 +1578,7 @@ const docTemplate = `{
                 },
                 "chain_network": {
                     "type": "string",
-                    "example": "devnet"
+                    "example": "testnet"
                 },
                 "fee_payer": {
                     "type": "string",
@@ -534,7 +1695,7 @@ const docTemplate = `{
                 },
                 "chain_network": {
                     "type": "string",
-                    "example": "devnet"
+                    "example": "testnet"
                 },
                 "fee_payer": {
                     "description": "FeePayer defaults to the sender. Paying from a different account is\ncommon on Solana, and it changes what \"max\" means: the sender can send\nits whole balance when someone else covers the fee.",

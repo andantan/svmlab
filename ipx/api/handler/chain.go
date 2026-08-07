@@ -9,7 +9,7 @@ import (
 // per-request via body fields instead of a path/header parameter.
 type ChainSelector struct {
 	ChainName    string `json:"chain_name"    example:"solana"`
-	ChainNetwork string `json:"chain_network" example:"devnet"`
+	ChainNetwork string `json:"chain_network" example:"testnet"`
 }
 
 func (c *ChainSelector) ValidateChainSelector() error {

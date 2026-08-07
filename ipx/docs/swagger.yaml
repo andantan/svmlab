@@ -1,12 +1,176 @@
 basePath: /
 definitions:
+  misc.AccountRequest:
+    properties:
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: testnet
+        type: string
+      commitment:
+        example: confirmed
+        type: string
+      public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  misc.AccountResponse:
+    properties:
+      data:
+        type: string
+      executable:
+        type: boolean
+      exists:
+        type: boolean
+      lamports:
+        type: string
+      owner:
+        type: string
+      public_key:
+        type: string
+      sol:
+        type: string
+      space:
+        type: integer
+    type: object
+  misc.AirdropRequest:
+    properties:
+      amount:
+        example: "1000000000"
+        type: string
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: testnet
+        type: string
+      commitment:
+        example: confirmed
+        type: string
+      public_key:
+        type: string
+    type: object
+  misc.AirdropResponse:
+    properties:
+      signature:
+        type: string
+    type: object
+  misc.BalanceResponse:
+    properties:
+      lamports:
+        type: string
+      public_key:
+        type: string
+      sol:
+        type: string
+    type: object
+  misc.BatchCall:
+    properties:
+      method:
+        type: string
+      params: {}
+    type: object
+  misc.BatchRequest:
+    properties:
+      calls:
+        items:
+          $ref: '#/definitions/misc.BatchCall'
+        type: array
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: testnet
+        type: string
+    type: object
+  misc.BlockhashResponse:
+    properties:
+      blockhash:
+        type: string
+      last_valid_block_height:
+        type: integer
+    type: object
+  misc.ClusterRequest:
+    properties:
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: testnet
+        type: string
+      commitment:
+        example: confirmed
+        type: string
+    type: object
+  misc.FeeRequest:
+    properties:
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: testnet
+        type: string
+      commitment:
+        example: confirmed
+        type: string
+      message:
+        type: string
+    type: object
+  misc.FeeResponse:
+    properties:
+      lamports:
+        type: string
+      sol:
+        type: string
+      valid:
+        type: boolean
+    type: object
+  misc.GenesisHashResponse:
+    properties:
+      configured:
+        type: string
+      genesis_hash:
+        type: string
+      matches:
+        type: boolean
+    type: object
+  misc.HealthResponse:
+    properties:
+      health:
+        type: string
+    type: object
+  misc.RawRequest:
+    properties:
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: testnet
+        type: string
+      method:
+        example: getEpochInfo
+        type: string
+      params: {}
+    type: object
+  misc.RentExemptionResponse:
+    properties:
+      account_type:
+        type: string
+      lamports:
+        type: string
+      sol:
+        type: string
+      space:
+        type: integer
+    type: object
   misc.SendTransactionRequest:
     properties:
       chain_name:
         example: solana
         type: string
       chain_network:
-        example: devnet
+        example: testnet
         type: string
       commitment:
         example: confirmed
@@ -65,6 +229,75 @@ definitions:
       transaction_id:
         type: string
     type: object
+  misc.SignatureStatusRequest:
+    properties:
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: testnet
+        type: string
+      search_history:
+        description: |-
+          SearchHistory looks beyond the node's recent cache. A signature the
+          cluster has already forgotten is reported as not found without it.
+        example: true
+        type: boolean
+      signature:
+        type: string
+    type: object
+  misc.SignatureStatusResponse:
+    properties:
+      confirmation_status:
+        type: string
+      confirmations:
+        type: integer
+      err:
+        type: string
+      failed:
+        type: boolean
+      found:
+        type: boolean
+      signature:
+        type: string
+      slot:
+        type: integer
+    type: object
+  misc.SimulateTransactionRequest:
+    properties:
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: testnet
+        type: string
+      commitment:
+        example: confirmed
+        type: string
+      sig_verify:
+        example: false
+        type: boolean
+      transaction:
+        type: string
+    type: object
+  misc.SimulateTransactionResponse:
+    properties:
+      err:
+        type: string
+      failed:
+        type: boolean
+      logs:
+        items:
+          type: string
+        type: array
+      units_consumed:
+        type: integer
+    type: object
+  misc.SlotResponse:
+    properties:
+      slot:
+        type: integer
+    type: object
   misc.VerifyRequest:
     properties:
       message:
@@ -79,6 +312,12 @@ definitions:
     properties:
       valid:
         type: boolean
+    type: object
+  misc.VersionResponse:
+    properties:
+      version:
+        additionalProperties: {}
+        type: object
     type: object
   v1.Account:
     properties:
@@ -98,7 +337,7 @@ definitions:
         example: solana
         type: string
       chain_network:
-        example: devnet
+        example: testnet
         type: string
       fee_payer:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -190,7 +429,7 @@ definitions:
         example: solana
         type: string
       chain_network:
-        example: devnet
+        example: testnet
         type: string
       fee_payer:
         description: |-
@@ -248,6 +487,462 @@ info:
   title: SVMlab API
   version: "1.0"
 paths:
+  /svm/rpc/:
+    post:
+      consumes:
+      - application/json
+      description: Passes a method straight through, so anything this API has not
+        wrapped stays reachable.
+      parameters:
+      - description: Method and params
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.RawRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Call any JSON-RPC method
+      tags:
+      - rpc
+  /svm/rpc/account:
+    post:
+      consumes:
+      - application/json
+      description: Returns the owner, executable flag, data size, and data. An account
+        that does not exist is reported with exists=false rather than as an error,
+        since most 32-byte values name one nobody has created.
+      parameters:
+      - description: Account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.AccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.AccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read an account's on-chain state
+      tags:
+      - rpc
+  /svm/rpc/airdrop:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Account and amount
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.AirdropRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.AirdropResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund an account on devnet or testnet
+      tags:
+      - rpc
+  /svm/rpc/balance:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.AccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.BalanceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read an account's balance
+      tags:
+      - rpc
+  /svm/rpc/batch:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Calls
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.BatchRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Call several JSON-RPC methods in one round trip
+      tags:
+      - rpc
+  /svm/rpc/blockhash:
+    post:
+      consumes:
+      - application/json
+      description: Returns the blockhash to build against and the block height past
+        which it is rejected, so expiry can be checked rather than guessed.
+      parameters:
+      - description: Cluster
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.BlockhashResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read a recent blockhash
+      tags:
+      - rpc
+  /svm/rpc/fee:
+    post:
+      consumes:
+      - application/json
+      description: The fee follows from the signature count and any compute budget
+        instructions, both of which live in the message, so it is known before signing
+        and cannot be exceeded by execution the way a gas estimate can.
+      parameters:
+      - description: Message
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.FeeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.FeeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Price a message
+      tags:
+      - rpc
+  /svm/rpc/genesis-hash:
+    post:
+      consumes:
+      - application/json
+      description: A genesis hash is not folded into a signature the way EIP-155 binds
+        a chain id, so nothing on chain prevents a transaction from replaying on another
+        cluster. Comparing what the endpoint reports against what config names is
+        the substitute check.
+      parameters:
+      - description: Cluster
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.GenesisHashResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read the cluster's genesis hash and compare it to config
+      tags:
+      - rpc
+  /svm/rpc/health:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Cluster
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.HealthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read the node's health
+      tags:
+      - rpc
+  /svm/rpc/rent-exemption/mint:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Cluster
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for an SPL Token mint
+      tags:
+      - rpc
+  /svm/rpc/rent-exemption/public-key:
+    post:
+      consumes:
+      - application/json
+      description: Reads the size from a live account, which covers layouts none of
+        the named endpoints describe. Pass a raw byte count to the getMinimumBalanceForRentExemption
+        method through the raw endpoint instead.
+      parameters:
+      - description: Account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.AccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for an account of the same size as an existing one
+      tags:
+      - rpc
+  /svm/rpc/rent-exemption/stake:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Cluster
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for a stake account
+      tags:
+      - rpc
+  /svm/rpc/rent-exemption/system:
+    post:
+      consumes:
+      - application/json
+      description: A wallet holds lamports and no data, so this is the floor any account
+        must clear. It is also what a transfer to a previously unused address has
+        to meet, since the transfer creates the account.
+      parameters:
+      - description: Cluster
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for a plain wallet
+      tags:
+      - rpc
+  /svm/rpc/rent-exemption/token:
+    post:
+      consumes:
+      - application/json
+      description: Every token balance lives in an account of its own, so opening
+        a position in a new token costs this much before any tokens move.
+      parameters:
+      - description: Cluster
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for an SPL Token account
+      tags:
+      - rpc
+  /svm/rpc/rent-exemption/vote:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Cluster
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for a validator vote account
+      tags:
+      - rpc
+  /svm/rpc/slot:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Cluster
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.SlotResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read the current slot
+      tags:
+      - rpc
   /svm/rpc/transaction/send:
     post:
       consumes:
@@ -276,6 +971,93 @@ paths:
               type: string
             type: object
       summary: Broadcast a signed transaction
+      tags:
+      - rpc
+  /svm/rpc/transaction/simulate:
+    post:
+      consumes:
+      - application/json
+      description: Runs the transaction against the node's state and returns the program
+        logs either way. The logs are the only account of why execution stopped; nothing
+        here corresponds to a revert string. With sig_verify off the transaction need
+        not be signed, which is what makes this usable before deciding to sign.
+      parameters:
+      - description: Transaction
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.SimulateTransactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.SimulateTransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Execute a transaction without submitting it
+      tags:
+      - rpc
+  /svm/rpc/transaction/status:
+    post:
+      consumes:
+      - application/json
+      description: 'Stands in for an EVM receipt, but found can stay false forever:
+        a transaction whose blockhash expired is forgotten and never lands.'
+      parameters:
+      - description: Signature
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.SignatureStatusRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.SignatureStatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read a transaction's status
+      tags:
+      - rpc
+  /svm/rpc/version:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Cluster
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ClusterRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.VersionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read the node's software version
       tags:
       - rpc
   /svm/sign:

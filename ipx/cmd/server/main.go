@@ -51,7 +51,28 @@ func run() error {
 
 	r.Route("/svm/rpc", func(r chi.Router) {
 		rpcHandler := misc.NewRPCHandler(cluster)
+		r.Post("/", rpcHandler.Raw)
+		r.Post("/batch", rpcHandler.Batch)
+		r.Post("/health", rpcHandler.Health)
+		r.Post("/version", rpcHandler.Version)
+		r.Post("/slot", rpcHandler.Slot)
+		r.Post("/genesis-hash", rpcHandler.GenesisHash)
+		r.Post("/blockhash", rpcHandler.Blockhash)
+		r.Post("/balance", rpcHandler.Balance)
+		r.Post("/account", rpcHandler.Account)
+		r.Route("/rent-exemption", func(r chi.Router) {
+			r.Post("/system", rpcHandler.RentExemptionSystem)
+			r.Post("/mint", rpcHandler.RentExemptionMint)
+			r.Post("/token", rpcHandler.RentExemptionToken)
+			r.Post("/stake", rpcHandler.RentExemptionStake)
+			r.Post("/vote", rpcHandler.RentExemptionVote)
+			r.Post("/public-key", rpcHandler.RentExemptionPublicKey)
+		})
+		r.Post("/fee", rpcHandler.Fee)
+		r.Post("/airdrop", rpcHandler.Airdrop)
 		r.Post("/transaction/send", rpcHandler.SendTransaction)
+		r.Post("/transaction/simulate", rpcHandler.SimulateTransaction)
+		r.Post("/transaction/status", rpcHandler.SignatureStatus)
 	})
 
 	r.Route("/svm/sign", func(r chi.Router) {

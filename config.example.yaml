@@ -24,7 +24,7 @@ chain:
     rpc: "RPC_URL"
 
   - name: "solana"
-    network: "devnet"
+    network: "testnet"
     genesis_hash: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"
     native_currency:
       symbol: "SOL"

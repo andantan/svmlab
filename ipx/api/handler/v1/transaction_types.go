@@ -156,14 +156,17 @@ func NewBuildTransactionResponse(tx *types.Transaction, raw, message []byte) *Bu
 
 // SignTransactionRequest signs without broadcasting.
 //
+// Signers are named by public key and resolved against config.yaml, so no
+// secret travels in a request body or turns up in an access log. It also means
+// the server can only sign for accounts it was configured with.
+//
 // Keys may be supplied across several calls, since each fills only its own
 // slot, which is how a transaction moves between co-signers.
 type SignTransactionRequest struct {
 	Transaction string   `json:"transaction"`
-	PrivateKeys []string `json:"private_keys"`
+	PublicKeys  []string `json:"public_keys" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	tx   *types.Transaction
-	keys []*types.PrivateKey
+	tx *types.Transaction
 }
 
 func (r *SignTransactionRequest) ValidateRequest() error {
@@ -175,14 +178,13 @@ func (r *SignTransactionRequest) ValidateRequest() error {
 		return errors.New("transaction: " + err.Error())
 	}
 
-	if len(r.PrivateKeys) == 0 {
-		return errors.New("private_keys: at least one is required")
+	if len(r.PublicKeys) == 0 {
+		return errors.New("public_keys: at least one is required")
 	}
-
-	r.keys = make([]*types.PrivateKey, len(r.PrivateKeys))
-	for i, k := range r.PrivateKeys {
-		if r.keys[i], err = types.NewPrivateKeyFromBase58(strings.TrimSpace(k)); err != nil {
-			return fmt.Errorf("private_keys[%d]: %s", i, err)
+	for i := range r.PublicKeys {
+		r.PublicKeys[i] = strings.TrimSpace(r.PublicKeys[i])
+		if r.PublicKeys[i] == "" {
+			return fmt.Errorf("public_keys[%d]: must not be empty", i)
 		}
 	}
 
@@ -191,10 +193,6 @@ func (r *SignTransactionRequest) ValidateRequest() error {
 
 func (r *SignTransactionRequest) ToTransaction() *types.Transaction {
 	return r.tx
-}
-
-func (r *SignTransactionRequest) ToPrivateKeys() []*types.PrivateKey {
-	return r.keys
 }
 
 // SignTransactionResponse reports the signed bytes and which slots are filled.

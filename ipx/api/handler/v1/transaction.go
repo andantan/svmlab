@@ -8,15 +8,17 @@ import (
 	"github.com/andantan/svmlab/api/handler"
 	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/core/types"
+	"github.com/andantan/svmlab/internal/config"
 	"github.com/andantan/svmlab/internal/rpc"
 )
 
 type TransactionHandler struct {
+	cfg     *config.Config
 	cluster *rpc.Cluster
 }
 
-func NewTransactionHandler(cluster *rpc.Cluster) *TransactionHandler {
-	return &TransactionHandler{cluster: cluster}
+func NewTransactionHandler(cfg *config.Config, cluster *rpc.Cluster) *TransactionHandler {
+	return &TransactionHandler{cfg: cfg, cluster: cluster}
 }
 
 // BuildTransaction godoc
@@ -83,11 +85,11 @@ func (h *TransactionHandler) BuildTransaction(w http.ResponseWriter, r *http.Req
 
 // SignTransaction godoc
 // @Summary      Sign a transaction without broadcasting it
-// @Description  Signs the transaction's message with each supplied key and places the signature in that key's slot. Keys may be supplied across several calls, so a transaction can be completed by co-signers.
+// @Description  Signs the transaction's message with each named signer's key, resolved from config.yaml, and places the signature in that signer's slot. Keys may be named across several calls, so a transaction can be completed by co-signers.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SignTransactionRequest  true  "Transaction and private keys"
+// @Param        body  body      SignTransactionRequest  true  "Transaction and signer public keys"
 // @Success      200   {object}  SignTransactionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v1/transaction/sign [post]
@@ -102,8 +104,24 @@ func (h *TransactionHandler) SignTransaction(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	privs := make([]*types.PrivateKey, len(req.PublicKeys))
+	for i, pub := range req.PublicKeys {
+		entry, err := h.cfg.KeyByPublicKey(pub)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("public_keys[%d]: %s", i, err))
+			return
+		}
+
+		key, err := core.DeriveKeyFromBase58(entry.PrivateKey, entry.PublicKey)
+		if err != nil {
+			handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("public_keys[%d]: failed to derive key: %s", i, err))
+			return
+		}
+		privs[i] = key.PrivateKey
+	}
+
 	tx := req.ToTransaction()
-	if err := core.Signer.SignTransaction(tx, req.ToPrivateKeys()...); err != nil {
+	if err := core.Signer.SignTransaction(tx, privs...); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}

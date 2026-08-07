@@ -103,7 +103,7 @@ const docTemplate = `{
         },
         "/svm/v1/transaction/sign": {
             "post": {
-                "description": "Signs the transaction's message with each supplied key and places the signature in that key's slot. Keys may be supplied across several calls, so a transaction can be completed by co-signers.",
+                "description": "Signs the transaction's message with each named signer's key, resolved from config.yaml, and places the signature in that signer's slot. Keys may be named across several calls, so a transaction can be completed by co-signers.",
                 "consumes": [
                     "application/json"
                 ],
@@ -116,7 +116,7 @@ const docTemplate = `{
                 "summary": "Sign a transaction without broadcasting it",
                 "parameters": [
                     {
-                        "description": "Transaction and private keys",
+                        "description": "Transaction and signer public keys",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -292,11 +292,14 @@ const docTemplate = `{
         "v1.SignTransactionRequest": {
             "type": "object",
             "properties": {
-                "private_keys": {
+                "public_keys": {
                     "type": "array",
                     "items": {
                         "type": "string"
-                    }
+                    },
+                    "example": [
+                        "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                    ]
                 },
                 "transaction": {
                     "type": "string"

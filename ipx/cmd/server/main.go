@@ -48,7 +48,7 @@ func run() error {
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	r.Route("/svm/v1", func(r chi.Router) {
-		tx := v1.NewTransactionHandler(cluster)
+		tx := v1.NewTransactionHandler(cfg, cluster)
 		r.Post("/transaction/build", tx.BuildTransaction)
 		r.Post("/transaction/sign", tx.SignTransaction)
 		r.Post("/transaction/send", tx.SendTransaction)

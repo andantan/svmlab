@@ -1,0 +1,20 @@
+# config
+config.yaml
+!config.example.yaml
+
+# go
+bin/
+*.test
+coverage.out
+
+# rust
+target/
+Cargo.lock
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Docker / local data
+*.log

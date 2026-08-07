@@ -1,5 +1,85 @@
 basePath: /
 definitions:
+  misc.SendTransactionRequest:
+    properties:
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: devnet
+        type: string
+      commitment:
+        example: confirmed
+        type: string
+      skip_preflight:
+        description: |-
+          SkipPreflight disables the node-side simulation that runs before the
+          transaction is broadcast. Leaving it off surfaces most failures without
+          spending a signature, including an expired blockhash.
+        example: false
+        type: boolean
+      transaction:
+        type: string
+    type: object
+  misc.SendTransactionResponse:
+    properties:
+      signature:
+        type: string
+    type: object
+  misc.SignRequest:
+    properties:
+      message:
+        type: string
+      public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  misc.SignResponse:
+    properties:
+      public_key:
+        type: string
+      signature:
+        type: string
+    type: object
+  misc.SignTransactionRequest:
+    properties:
+      public_keys:
+        example:
+        - EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  misc.SignTransactionResponse:
+    properties:
+      fully_signed:
+        type: boolean
+      signatures:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+      transaction_id:
+        type: string
+    type: object
+  misc.VerifyRequest:
+    properties:
+      message:
+        type: string
+      public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      signature:
+        type: string
+    type: object
+  misc.VerifyResponse:
+    properties:
+      valid:
+        type: boolean
+    type: object
   v1.Account:
     properties:
       is_signer:
@@ -78,56 +158,6 @@ definitions:
         example: "11111111111111111111111111111111"
         type: string
     type: object
-  v1.SendTransactionRequest:
-    properties:
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: devnet
-        type: string
-      commitment:
-        example: confirmed
-        type: string
-      skip_preflight:
-        description: |-
-          SkipPreflight disables the node-side simulation that runs before the
-          transaction is broadcast. Leaving it off surfaces most failures without
-          spending a signature.
-        example: false
-        type: boolean
-      transaction:
-        type: string
-    type: object
-  v1.SendTransactionResponse:
-    properties:
-      signature:
-        type: string
-    type: object
-  v1.SignTransactionRequest:
-    properties:
-      public_keys:
-        example:
-        - EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        items:
-          type: string
-        type: array
-      transaction:
-        type: string
-    type: object
-  v1.SignTransactionResponse:
-    properties:
-      fully_signed:
-        type: boolean
-      signatures:
-        items:
-          type: string
-        type: array
-      transaction:
-        type: string
-      transaction_id:
-        type: string
-    type: object
 host: localhost:33153
 info:
   contact: {}
@@ -135,6 +165,130 @@ info:
   title: SVMlab API
   version: "1.0"
 paths:
+  /svm/rpc/transaction/send:
+    post:
+      consumes:
+      - application/json
+      description: Submits a fully signed transaction to the cluster and returns its
+        signature. Acceptance is not execution; the transaction still has to land
+        in a block.
+      parameters:
+      - description: Signed transaction
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.SendTransactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.SendTransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Broadcast a signed transaction
+      tags:
+      - rpc
+  /svm/sign:
+    post:
+      consumes:
+      - application/json
+      description: 'Signs the given bytes with a key resolved from config.yaml and
+        returns the bare signature, assembling nothing around it. The input is the
+        message itself, not a digest: ed25519 hashes internally, so a pre-hashed input
+        yields a signature no verifier holding the real message can check. Pass the
+        message field a build returns to reproduce what the transaction signer does.'
+      parameters:
+      - description: Signer public key and message
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.SignRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.SignResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Sign arbitrary bytes
+      tags:
+      - sign
+  /svm/sign/transaction:
+    post:
+      consumes:
+      - application/json
+      description: Signs the message inside a serialized transaction and writes each
+        signature into its signer's slot. The message is never rebuilt, so the bytes
+        a caller signs are exactly the bytes they were given. Signers are named by
+        public key and resolved from config.yaml. Keys may be named across several
+        calls, so co-signers can complete a transaction one at a time.
+      parameters:
+      - description: Transaction and signer public keys
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.SignTransactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.SignTransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Sign a serialized transaction
+      tags:
+      - sign
+  /svm/sign/verify:
+    post:
+      consumes:
+      - application/json
+      description: Checks a signature against a message and a public key. The key
+        is required and cannot be recovered from the signature, since ed25519 offers
+        no equivalent of ecrecover. Any key may be given, not only one from config.
+      parameters:
+      - description: Public key, message, and signature
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.VerifyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.VerifyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Verify a signature
+      tags:
+      - sign
   /svm/v1/transaction/build:
     post:
       consumes:
@@ -163,66 +317,6 @@ paths:
               type: string
             type: object
       summary: Build an unsigned transaction
-      tags:
-      - transaction
-  /svm/v1/transaction/send:
-    post:
-      consumes:
-      - application/json
-      description: Submits a fully signed transaction to the cluster and returns its
-        signature. Acceptance is not execution; the transaction still has to land
-        in a block.
-      parameters:
-      - description: Signed transaction
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/v1.SendTransactionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SendTransactionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Broadcast a signed transaction
-      tags:
-      - transaction
-  /svm/v1/transaction/sign:
-    post:
-      consumes:
-      - application/json
-      description: Signs the transaction's message with each named signer's key, resolved
-        from config.yaml, and places the signature in that signer's slot. Keys may
-        be named across several calls, so a transaction can be completed by co-signers.
-      parameters:
-      - description: Transaction and signer public keys
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/v1.SignTransactionRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v1.SignTransactionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Sign a transaction without broadcasting it
       tags:
       - transaction
 swagger: "2.0"

@@ -15,6 +15,178 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/svm/rpc/transaction/send": {
+            "post": {
+                "description": "Submits a fully signed transaction to the cluster and returns its signature. Acceptance is not execution; the transaction still has to land in a block.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Broadcast a signed transaction",
+                "parameters": [
+                    {
+                        "description": "Signed transaction",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.SendTransactionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SendTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/sign": {
+            "post": {
+                "description": "Signs the given bytes with a key resolved from config.yaml and returns the bare signature, assembling nothing around it. The input is the message itself, not a digest: ed25519 hashes internally, so a pre-hashed input yields a signature no verifier holding the real message can check. Pass the message field a build returns to reproduce what the transaction signer does.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sign"
+                ],
+                "summary": "Sign arbitrary bytes",
+                "parameters": [
+                    {
+                        "description": "Signer public key and message",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.SignRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SignResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/sign/transaction": {
+            "post": {
+                "description": "Signs the message inside a serialized transaction and writes each signature into its signer's slot. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. Signers are named by public key and resolved from config.yaml. Keys may be named across several calls, so co-signers can complete a transaction one at a time.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sign"
+                ],
+                "summary": "Sign a serialized transaction",
+                "parameters": [
+                    {
+                        "description": "Transaction and signer public keys",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.SignTransactionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SignTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/sign/verify": {
+            "post": {
+                "description": "Checks a signature against a message and a public key. The key is required and cannot be recovered from the signature, since ed25519 offers no equivalent of ecrecover. Any key may be given, not only one from config.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sign"
+                ],
+                "summary": "Verify a signature",
+                "parameters": [
+                    {
+                        "description": "Public key, message, and signature",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.VerifyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.VerifyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v1/transaction/build": {
             "post": {
                 "description": "Compiles instructions into a message and returns the unsigned transaction, the message bytes every signer signs, and the account ordering the compilation produced",
@@ -57,95 +229,125 @@ const docTemplate = `{
                     }
                 }
             }
-        },
-        "/svm/v1/transaction/send": {
-            "post": {
-                "description": "Submits a fully signed transaction to the cluster and returns its signature. Acceptance is not execution; the transaction still has to land in a block.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "transaction"
-                ],
-                "summary": "Broadcast a signed transaction",
-                "parameters": [
-                    {
-                        "description": "Signed transaction",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.SendTransactionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.SendTransactionResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/v1/transaction/sign": {
-            "post": {
-                "description": "Signs the transaction's message with each named signer's key, resolved from config.yaml, and places the signature in that signer's slot. Keys may be named across several calls, so a transaction can be completed by co-signers.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "transaction"
-                ],
-                "summary": "Sign a transaction without broadcasting it",
-                "parameters": [
-                    {
-                        "description": "Transaction and signer public keys",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v1.SignTransactionRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v1.SignTransactionResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
         }
     },
     "definitions": {
+        "misc.SendTransactionRequest": {
+            "type": "object",
+            "properties": {
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "devnet"
+                },
+                "commitment": {
+                    "type": "string",
+                    "example": "confirmed"
+                },
+                "skip_preflight": {
+                    "description": "SkipPreflight disables the node-side simulation that runs before the\ntransaction is broadcast. Leaving it off surfaces most failures without\nspending a signature, including an expired blockhash.",
+                    "type": "boolean",
+                    "example": false
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.SendTransactionResponse": {
+            "type": "object",
+            "properties": {
+                "signature": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.SignRequest": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "misc.SignResponse": {
+            "type": "object",
+            "properties": {
+                "public_key": {
+                    "type": "string"
+                },
+                "signature": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.SignTransactionRequest": {
+            "type": "object",
+            "properties": {
+                "public_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                    ]
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.SignTransactionResponse": {
+            "type": "object",
+            "properties": {
+                "fully_signed": {
+                    "type": "boolean"
+                },
+                "signatures": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "transaction_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.VerifyRequest": {
+            "type": "object",
+            "properties": {
+                "message": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "signature": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.VerifyResponse": {
+            "type": "object",
+            "properties": {
+                "valid": {
+                    "type": "boolean"
+                }
+            }
+        },
         "v1.Account": {
             "type": "object",
             "properties": {
@@ -253,76 +455,6 @@ const docTemplate = `{
                 "program_id": {
                     "type": "string",
                     "example": "11111111111111111111111111111111"
-                }
-            }
-        },
-        "v1.SendTransactionRequest": {
-            "type": "object",
-            "properties": {
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "devnet"
-                },
-                "commitment": {
-                    "type": "string",
-                    "example": "confirmed"
-                },
-                "skip_preflight": {
-                    "description": "SkipPreflight disables the node-side simulation that runs before the\ntransaction is broadcast. Leaving it off surfaces most failures without\nspending a signature.",
-                    "type": "boolean",
-                    "example": false
-                },
-                "transaction": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.SendTransactionResponse": {
-            "type": "object",
-            "properties": {
-                "signature": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.SignTransactionRequest": {
-            "type": "object",
-            "properties": {
-                "public_keys": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    },
-                    "example": [
-                        "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                    ]
-                },
-                "transaction": {
-                    "type": "string"
-                }
-            }
-        },
-        "v1.SignTransactionResponse": {
-            "type": "object",
-            "properties": {
-                "fully_signed": {
-                    "type": "boolean"
-                },
-                "signatures": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "transaction": {
-                    "type": "string"
-                },
-                "transaction_id": {
-                    "type": "string"
                 }
             }
         }

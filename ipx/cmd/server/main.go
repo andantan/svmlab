@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/andantan/svmlab/api/handler/misc"
 	v1 "github.com/andantan/svmlab/api/handler/v1"
 	_ "github.com/andantan/svmlab/docs"
 	"github.com/andantan/svmlab/internal/config"
@@ -47,11 +48,21 @@ func run() error {
 
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
+	r.Route("/svm/rpc", func(r chi.Router) {
+		rpcHandler := misc.NewRPCHandler(cluster)
+		r.Post("/transaction/send", rpcHandler.SendTransaction)
+	})
+
+	r.Route("/svm/sign", func(r chi.Router) {
+		sign := misc.NewSignHandler(cfg)
+		r.Post("/", sign.Sign)
+		r.Post("/verify", sign.Verify)
+		r.Post("/transaction", sign.SignTransaction)
+	})
+
 	r.Route("/svm/v1", func(r chi.Router) {
 		tx := v1.NewTransactionHandler(cfg, cluster)
 		r.Post("/transaction/build", tx.BuildTransaction)
-		r.Post("/transaction/sign", tx.SignTransaction)
-		r.Post("/transaction/send", tx.SendTransaction)
 	})
 
 	fmt.Printf("listening on %s\n", cfg.ServerAddr)

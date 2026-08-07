@@ -5,7 +5,7 @@ import (
 	"crypto/ed25519"
 	"fmt"
 
-	"github.com/mr-tron/base58"
+	"github.com/andantan/svmlab/core/codec"
 )
 
 const (
@@ -54,7 +54,7 @@ func NewPublicKeyFromBytes(b []byte) (*PublicKey, error) {
 // NewPublicKeyFromBase58 parses an address in the form it appears in
 // explorers, RPC payloads, and wallets.
 func NewPublicKeyFromBase58(s string) (*PublicKey, error) {
-	b, err := base58.Decode(s)
+	b, err := codec.Base58.Decode(s)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base58 public key: %w", err)
 	}
@@ -89,7 +89,7 @@ func (k *PublicKey) Bytes() []byte {
 // alone.
 func (k *PublicKey) Base58() string {
 	if k.base58 == "" {
-		k.base58 = base58.Encode(k.Bytes())
+		k.base58 = codec.Base58.Encode(k.Bytes())
 	}
 
 	return k.base58

@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/mr-tron/base58"
+	"github.com/andantan/svmlab/core/codec"
 )
 
 const (
@@ -63,7 +63,7 @@ func NewPrivateKeyFromBytes(b []byte) (*PrivateKey, error) {
 // NewPrivateKeyFromBase58 parses the base58 form of an expanded secret key,
 // which is what wallets such as Phantom import and export.
 func NewPrivateKeyFromBase58(s string) (*PrivateKey, error) {
-	b, err := base58.Decode(s)
+	b, err := codec.Base58.Decode(s)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base58 private key: %w", err)
 	}
@@ -136,7 +136,7 @@ func (k *PrivateKey) Seed() []byte {
 // that the key cannot leak into a log through %v.
 func (k *PrivateKey) Base58() string {
 	if k.base58 == "" {
-		k.base58 = base58.Encode(k.Bytes())
+		k.base58 = codec.Base58.Encode(k.Bytes())
 	}
 
 	return k.base58

@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/mr-tron/base58"
+	"github.com/andantan/svmlab/core/codec"
 )
 
 const (
@@ -55,7 +55,7 @@ func NewHashFromBytes(b []byte) (*Hash, error) {
 // NewHashFromBase58 parses a hash in the form the RPC layer returns it, as
 // with getLatestBlockhash and getGenesisHash.
 func NewHashFromBase58(s string) (*Hash, error) {
-	b, err := base58.Decode(s)
+	b, err := codec.Base58.Decode(s)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base58 hash: %w", err)
 	}
@@ -89,7 +89,7 @@ func (h *Hash) Bytes() []byte {
 // than the 0x-prefixed hex an EVM chain uses.
 func (h *Hash) Base58() string {
 	if h.base58 == "" {
-		h.base58 = base58.Encode(h.Bytes())
+		h.base58 = codec.Base58.Encode(h.Bytes())
 	}
 
 	return h.base58

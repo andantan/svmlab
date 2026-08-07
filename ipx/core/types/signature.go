@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/mr-tron/base58"
+	"github.com/andantan/svmlab/core/codec"
 )
 
 // SignatureLength 32 bytes R point + 32 bytes S scalar
@@ -55,7 +55,7 @@ func NewSignature(b []byte) (*Signature, error) {
 // explorers use, which for the first signature of a transaction is also its
 // transaction id.
 func NewSignatureFromBase58(s string) (*Signature, error) {
-	b, err := base58.Decode(s)
+	b, err := codec.Base58.Decode(s)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base58 signature: %w", err)
 	}
@@ -104,7 +104,7 @@ func (s *Signature) Bytes() []byte {
 
 func (s *Signature) Base58() string {
 	if s.base58 == "" {
-		s.base58 = base58.Encode(s.bytes)
+		s.base58 = codec.Base58.Encode(s.bytes)
 	}
 
 	return s.base58

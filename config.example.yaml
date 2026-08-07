@@ -1,0 +1,44 @@
+server_addr: ":33153"
+
+# Program IDs are identical across every Solana cluster,
+# so they live outside the per-cluster chain entries.
+programs:
+  system: "11111111111111111111111111111111"
+  compute_budget: "ComputeBudget111111111111111111111111111111"
+  token: "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+  token_2022: "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+  associated_token: "ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL"
+  memo: "MemoSq4gqABAXKb96qnH8TysNcWxMyWCqXgDLGmfcHr"
+  stake: "Stake11111111111111111111111111111111111111"
+  vote: "Vote111111111111111111111111111111111111111"
+
+# Solana has no chain id. A cluster is identified by its genesis hash,
+# which can be verified at runtime via the getGenesisHash RPC method.
+chain:
+  - name: "solana"
+    network: "mainnet"
+    genesis_hash: "5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d"
+    native_currency:
+      symbol: "SOL"
+      decimals: 9
+    rpc: "RPC_URL"
+
+  - name: "solana"
+    network: "devnet"
+    genesis_hash: "EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG"
+    native_currency:
+      symbol: "SOL"
+      decimals: 9
+    rpc: "https://api.devnet.solana.com"
+
+# WARNING: LOCAL DEVELOPMENT ONLY
+# Unlike an EVM genesis block, solana-test-validator has no deterministic
+# pre-funded accounts. These keypairs are generated locally and funded via
+# the requestAirdrop RPC method.
+#
+# public_key  — base58, 32 bytes. This IS the account address.
+# private_key — base58, 64 bytes ([seed 32 || public_key 32]).
+keys:
+  - alias: key0
+    public_key: "NEED_KEYGEN"
+    private_key: "NEED_KEYGEN"

@@ -13,6 +13,7 @@ import (
 
 	"github.com/andantan/svmlab/api/handler/misc"
 	v1 "github.com/andantan/svmlab/api/handler/v1"
+	v2 "github.com/andantan/svmlab/api/handler/v2"
 	_ "github.com/andantan/svmlab/docs"
 	"github.com/andantan/svmlab/internal/config"
 	"github.com/andantan/svmlab/internal/rpc"
@@ -63,6 +64,11 @@ func run() error {
 	r.Route("/svm/v1", func(r chi.Router) {
 		tx := v1.NewTransactionHandler(cfg, cluster)
 		r.Post("/transaction/build", tx.BuildTransaction)
+	})
+
+	r.Route("/svm/v2", func(r chi.Router) {
+		tx := v2.NewTransactionHandler(cfg, cluster)
+		r.Post("/transaction/system/transfer", tx.Transfer)
 	})
 
 	fmt.Printf("listening on %s\n", cfg.ServerAddr)

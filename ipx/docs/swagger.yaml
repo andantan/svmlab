@@ -158,6 +158,89 @@ definitions:
         example: "11111111111111111111111111111111"
         type: string
     type: object
+  v2.Header:
+    properties:
+      num_readonly_signed_accounts:
+        type: integer
+      num_readonly_unsigned_accounts:
+        type: integer
+      num_required_signatures:
+        type: integer
+    type: object
+  v2.TransferRequest:
+    properties:
+      allow_unfunded_recipient:
+        description: |-
+          AllowUnfundedRecipient permits sending to an account that does not exist
+          yet. It defaults to false because base58 carries no checksum: a single
+          mistyped character decodes to a different valid address, and an account
+          nobody has ever funded is the only signal that separates a typo from an
+          intended new account. solana transfer guards the same way.
+        example: false
+        type: boolean
+      amount:
+        description: |-
+          Amount is a decimal lamport count, or "max" to send everything the
+          sender can. It is a string so that the two forms share one field and so
+          that a u64 survives a JSON round trip: JSON numbers are floats, and
+          values past 2^53 would lose precision silently.
+        example: "1000000"
+        type: string
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: devnet
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer defaults to the sender. Paying from a different account is
+          common on Solana, and it changes what "max" means: the sender can send
+          its whole balance when someone else covers the fee.
+        example: ""
+        type: string
+      from:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: RecentBlockhash may be left empty, in which case it is fetched.
+        example: ""
+        type: string
+      to:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.TransferResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        description: |-
+          Amount and Fee are strings for the same reason the request's amount is:
+          a JSON number is a float, so a lamport count past 2^53 would reach a
+          JavaScript client already rounded.
+        type: string
+      amount_sol:
+        type: string
+      fee:
+        type: string
+      header:
+        $ref: '#/definitions/v2.Header'
+      message:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      size:
+        type: integer
+      transaction:
+        type: string
+    type: object
 host: localhost:33153
 info:
   contact: {}
@@ -317,6 +400,39 @@ paths:
               type: string
             type: object
       summary: Build an unsigned transaction
+      tags:
+      - transaction
+  /svm/v2/transaction/system/transfer:
+    post:
+      consumes:
+      - application/json
+      description: Assembles a System Program transfer and returns the same shape
+        as a v1 build, so sign and send accept it unchanged. Amount is a lamport count,
+        or "max" to send everything the sender can. Sending to an account that does
+        not exist is refused unless allow_unfunded_recipient is set, since base58
+        has no checksum and a mistyped address is otherwise indistinguishable from
+        an intended new one.
+      parameters:
+      - description: Sender, recipient, and amount
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.TransferRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.TransferResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a native SOL transfer
       tags:
       - transaction
 swagger: "2.0"

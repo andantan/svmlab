@@ -229,6 +229,49 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/svm/v2/transaction/system/transfer": {
+            "post": {
+                "description": "Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. Amount is a lamport count, or \"max\" to send everything the sender can. Sending to an account that does not exist is refused unless allow_unfunded_recipient is set, since base58 has no checksum and a mistyped address is otherwise indistinguishable from an intended new one.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Build a native SOL transfer",
+                "parameters": [
+                    {
+                        "description": "Sender, recipient, and amount",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.TransferRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.TransferResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -455,6 +498,103 @@ const docTemplate = `{
                 "program_id": {
                     "type": "string",
                     "example": "11111111111111111111111111111111"
+                }
+            }
+        },
+        "v2.Header": {
+            "type": "object",
+            "properties": {
+                "num_readonly_signed_accounts": {
+                    "type": "integer"
+                },
+                "num_readonly_unsigned_accounts": {
+                    "type": "integer"
+                },
+                "num_required_signatures": {
+                    "type": "integer"
+                }
+            }
+        },
+        "v2.TransferRequest": {
+            "type": "object",
+            "properties": {
+                "allow_unfunded_recipient": {
+                    "description": "AllowUnfundedRecipient permits sending to an account that does not exist\nyet. It defaults to false because base58 carries no checksum: a single\nmistyped character decodes to a different valid address, and an account\nnobody has ever funded is the only signal that separates a typo from an\nintended new account. solana transfer guards the same way.",
+                    "type": "boolean",
+                    "example": false
+                },
+                "amount": {
+                    "description": "Amount is a decimal lamport count, or \"max\" to send everything the\nsender can. It is a string so that the two forms share one field and so\nthat a u64 survives a JSON round trip: JSON numbers are floats, and\nvalues past 2^53 would lose precision silently.",
+                    "type": "string",
+                    "example": "1000000"
+                },
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "devnet"
+                },
+                "fee_payer": {
+                    "description": "FeePayer defaults to the sender. Paying from a different account is\ncommon on Solana, and it changes what \"max\" means: the sender can send\nits whole balance when someone else covers the fee.",
+                    "type": "string",
+                    "example": ""
+                },
+                "from": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash may be left empty, in which case it is fetched.",
+                    "type": "string",
+                    "example": ""
+                },
+                "to": {
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                }
+            }
+        },
+        "v2.TransferResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "amount": {
+                    "description": "Amount and Fee are strings for the same reason the request's amount is:\na JSON number is a float, so a lamport count past 2^53 would reach a\nJavaScript client already rounded.",
+                    "type": "string"
+                },
+                "amount_sol": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "header": {
+                    "$ref": "#/definitions/v2.Header"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "transaction": {
+                    "type": "string"
                 }
             }
         }

@@ -1,0 +1,226 @@
+basePath: /
+definitions:
+  v1.Account:
+    properties:
+      is_signer:
+        example: true
+        type: boolean
+      is_writable:
+        example: true
+        type: boolean
+      public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v1.BuildTransactionRequest:
+    properties:
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: devnet
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      instructions:
+        items:
+          $ref: '#/definitions/v1.Instruction'
+        type: array
+      recent_blockhash:
+        description: |-
+          RecentBlockhash may be left empty, in which case it is fetched from the
+          cluster. Supplying it makes the call deterministic, which is what allows
+          the same request to reproduce identical bytes.
+        example: ""
+        type: string
+    type: object
+  v1.BuildTransactionResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      header:
+        $ref: '#/definitions/v1.Header'
+      message:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      size:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v1.Header:
+    properties:
+      num_readonly_signed_accounts:
+        type: integer
+      num_readonly_unsigned_accounts:
+        type: integer
+      num_required_signatures:
+        type: integer
+    type: object
+  v1.Instruction:
+    properties:
+      accounts:
+        items:
+          $ref: '#/definitions/v1.Account'
+        type: array
+      data:
+        example: AgAAAECcAAAAAAAA
+        type: string
+      program_id:
+        example: "11111111111111111111111111111111"
+        type: string
+    type: object
+  v1.SendTransactionRequest:
+    properties:
+      chain_name:
+        example: solana
+        type: string
+      chain_network:
+        example: devnet
+        type: string
+      commitment:
+        example: confirmed
+        type: string
+      skip_preflight:
+        description: |-
+          SkipPreflight disables the node-side simulation that runs before the
+          transaction is broadcast. Leaving it off surfaces most failures without
+          spending a signature.
+        example: false
+        type: boolean
+      transaction:
+        type: string
+    type: object
+  v1.SendTransactionResponse:
+    properties:
+      signature:
+        type: string
+    type: object
+  v1.SignTransactionRequest:
+    properties:
+      private_keys:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v1.SignTransactionResponse:
+    properties:
+      fully_signed:
+        type: boolean
+      signatures:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+      transaction_id:
+        type: string
+    type: object
+host: localhost:33153
+info:
+  contact: {}
+  description: Solana transaction API
+  title: SVMlab API
+  version: "1.0"
+paths:
+  /svm/v1/transaction/build:
+    post:
+      consumes:
+      - application/json
+      description: Compiles instructions into a message and returns the unsigned transaction,
+        the message bytes every signer signs, and the account ordering the compilation
+        produced
+      parameters:
+      - description: Fee payer, blockhash, and instructions
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.BuildTransactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.BuildTransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build an unsigned transaction
+      tags:
+      - transaction
+  /svm/v1/transaction/send:
+    post:
+      consumes:
+      - application/json
+      description: Submits a fully signed transaction to the cluster and returns its
+        signature. Acceptance is not execution; the transaction still has to land
+        in a block.
+      parameters:
+      - description: Signed transaction
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.SendTransactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SendTransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Broadcast a signed transaction
+      tags:
+      - transaction
+  /svm/v1/transaction/sign:
+    post:
+      consumes:
+      - application/json
+      description: Signs the transaction's message with each supplied key and places
+        the signature in that key's slot. Keys may be supplied across several calls,
+        so a transaction can be completed by co-signers.
+      parameters:
+      - description: Transaction and private keys
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v1.SignTransactionRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v1.SignTransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Sign a transaction without broadcasting it
+      tags:
+      - transaction
+swagger: "2.0"

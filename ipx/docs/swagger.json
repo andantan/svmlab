@@ -1,0 +1,321 @@
+{
+    "swagger": "2.0",
+    "info": {
+        "description": "Solana transaction API",
+        "title": "SVMlab API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "host": "localhost:33153",
+    "basePath": "/",
+    "paths": {
+        "/svm/v1/transaction/build": {
+            "post": {
+                "description": "Compiles instructions into a message and returns the unsigned transaction, the message bytes every signer signs, and the account ordering the compilation produced",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Build an unsigned transaction",
+                "parameters": [
+                    {
+                        "description": "Fee payer, blockhash, and instructions",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.BuildTransactionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.BuildTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v1/transaction/send": {
+            "post": {
+                "description": "Submits a fully signed transaction to the cluster and returns its signature. Acceptance is not execution; the transaction still has to land in a block.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Broadcast a signed transaction",
+                "parameters": [
+                    {
+                        "description": "Signed transaction",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.SendTransactionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.SendTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v1/transaction/sign": {
+            "post": {
+                "description": "Signs the transaction's message with each supplied key and places the signature in that key's slot. Keys may be supplied across several calls, so a transaction can be completed by co-signers.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Sign a transaction without broadcasting it",
+                "parameters": [
+                    {
+                        "description": "Transaction and private keys",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v1.SignTransactionRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v1.SignTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "definitions": {
+        "v1.Account": {
+            "type": "object",
+            "properties": {
+                "is_signer": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "is_writable": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "public_key": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v1.BuildTransactionRequest": {
+            "type": "object",
+            "properties": {
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "devnet"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "instructions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.Instruction"
+                    }
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash may be left empty, in which case it is fetched from the\ncluster. Supplying it makes the call deterministic, which is what allows\nthe same request to reproduce identical bytes.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v1.BuildTransactionResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "header": {
+                    "$ref": "#/definitions/v1.Header"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1.Header": {
+            "type": "object",
+            "properties": {
+                "num_readonly_signed_accounts": {
+                    "type": "integer"
+                },
+                "num_readonly_unsigned_accounts": {
+                    "type": "integer"
+                },
+                "num_required_signatures": {
+                    "type": "integer"
+                }
+            }
+        },
+        "v1.Instruction": {
+            "type": "object",
+            "properties": {
+                "accounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v1.Account"
+                    }
+                },
+                "data": {
+                    "type": "string",
+                    "example": "AgAAAECcAAAAAAAA"
+                },
+                "program_id": {
+                    "type": "string",
+                    "example": "11111111111111111111111111111111"
+                }
+            }
+        },
+        "v1.SendTransactionRequest": {
+            "type": "object",
+            "properties": {
+                "chain_name": {
+                    "type": "string",
+                    "example": "solana"
+                },
+                "chain_network": {
+                    "type": "string",
+                    "example": "devnet"
+                },
+                "commitment": {
+                    "type": "string",
+                    "example": "confirmed"
+                },
+                "skip_preflight": {
+                    "description": "SkipPreflight disables the node-side simulation that runs before the\ntransaction is broadcast. Leaving it off surfaces most failures without\nspending a signature.",
+                    "type": "boolean",
+                    "example": false
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1.SendTransactionResponse": {
+            "type": "object",
+            "properties": {
+                "signature": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1.SignTransactionRequest": {
+            "type": "object",
+            "properties": {
+                "private_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v1.SignTransactionResponse": {
+            "type": "object",
+            "properties": {
+                "fully_signed": {
+                    "type": "boolean"
+                },
+                "signatures": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "transaction_id": {
+                    "type": "string"
+                }
+            }
+        }
+    }
+}

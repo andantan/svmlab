@@ -447,26 +447,25 @@ func (r *RentExemptionSpaceRequest) ToSpace() uint64 {
 	return r.space
 }
 
+// AirdropAmount is what every airdrop requests.
+//
+// It is fixed rather than taken from the body because the faucet decides the
+// real limit anyway, and asking for more than it allows fails the whole call
+// rather than giving less. Half a SOL sits well inside what devnet and testnet
+// hand out, so the amount was never a useful choice to offer.
+const AirdropAmount = types.LamportsPerSol / 2
+
 // AirdropRequest funds an account on devnet or testnet. Mainnet refuses it.
 type AirdropRequest struct {
 	PublicKey string `json:"public_key"`
-	Amount    string `json:"amount" example:"1000000000"`
 
 	publicKey *types.PublicKey
-	amount    uint64
 }
 
 func (r *AirdropRequest) ValidateRequest() error {
 	var err error
 	if r.publicKey, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.PublicKey)); err != nil {
 		return errors.New("public_key: " + err.Error())
-	}
-
-	if r.amount, err = strconv.ParseUint(strings.TrimSpace(r.Amount), 10, 64); err != nil {
-		return errors.New("amount: must be a decimal lamport count")
-	}
-	if r.amount == 0 {
-		return errors.New("amount: must be greater than zero")
 	}
 
 	return nil
@@ -476,16 +475,18 @@ func (r *AirdropRequest) ToPublicKey() *types.PublicKey {
 	return r.publicKey
 }
 
-func (r *AirdropRequest) Lamports() uint64 {
-	return r.amount
-}
-
 type AirdropResponse struct {
 	Signature string `json:"signature"`
+	Lamports  string `json:"lamports"`
+	SOL       string `json:"sol"`
 }
 
 func NewAirdropResponse(sig *types.Signature) *AirdropResponse {
-	return &AirdropResponse{Signature: sig.Base58()}
+	return &AirdropResponse{
+		Signature: sig.Base58(),
+		Lamports:  strconv.FormatUint(AirdropAmount, 10),
+		SOL:       types.LamportsToSol(AirdropAmount),
+	}
 }
 
 // RawRequest passes a method straight through to the node.

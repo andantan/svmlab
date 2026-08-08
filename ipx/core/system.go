@@ -13,18 +13,25 @@ import (
 // plays. It is an index into a fixed list rather than a hash of a signature,
 // so it carries no type information and cannot be recovered from a name.
 const (
-	SystemInstructionCreateAccount uint32 = 0
-	SystemInstructionAssign        uint32 = 1
-	SystemInstructionTransfer      uint32 = 2
-	SystemInstructionAllocate      uint32 = 8
+	SystemInstructionCreateAccount         uint32 = 0
+	SystemInstructionAssign                uint32 = 1
+	SystemInstructionTransfer              uint32 = 2
+	SystemInstructionCreateAccountWithSeed uint32 = 3
+	SystemInstructionAllocate              uint32 = 8
+	SystemInstructionAllocateWithSeed      uint32 = 9
+	SystemInstructionAssignWithSeed        uint32 = 10
+	SystemInstructionTransferWithSeed      uint32 = 11
 )
 
-// SystemAccountSpace is a plain wallet: lamports and no data.
-const SystemAccountSpace uint64 = 0
+const (
+	// SystemAccountSpace is a plain wallet: lamports and no data.
+	SystemAccountSpace uint64 = 0
 
-// MaxPermittedDataLength is the largest data size an account may be created
-// with, which the runtime enforces rather than merely charging rent for.
-const MaxPermittedDataLength uint64 = 10 << 20
+	// MaxPermittedDataLength is the largest data size an account may be
+	// created with, which the runtime enforces rather than merely charging
+	// rent for.
+	MaxPermittedDataLength uint64 = 10 << 20
+)
 
 // system builds instructions for the program that owns every account not yet
 // assigned elsewhere.
@@ -77,8 +84,8 @@ func (s *system) Transfer(from, to *types.PublicKey, lamports uint64) (*types.In
 		return nil, fmt.Errorf("system transfer: sender and recipient are the same account")
 	}
 
-	data := codec.Bincode.AppendU32(nil, SystemInstructionTransfer)
-	data = codec.Bincode.AppendU64(data, lamports)
+	data := codec.Binary.AppendU32(nil, SystemInstructionTransfer)
+	data = codec.Binary.AppendU64(data, lamports)
 
 	return types.NewInstruction(s.id, types.NewAccounts(
 		types.NewWritableSignerAccount(from),
@@ -113,10 +120,10 @@ func (s *system) CreateAccount(from, newAccount, owner *types.PublicKey, lamport
 		return nil, fmt.Errorf("system create account: %d bytes exceeds the %d byte limit", space, MaxPermittedDataLength)
 	}
 
-	data := codec.Bincode.AppendU32(nil, SystemInstructionCreateAccount)
-	data = codec.Bincode.AppendU64(data, lamports)
-	data = codec.Bincode.AppendU64(data, space)
-	data = codec.Bincode.AppendBytes(data, owner.Bytes())
+	data := codec.Binary.AppendU32(nil, SystemInstructionCreateAccount)
+	data = codec.Binary.AppendU64(data, lamports)
+	data = codec.Binary.AppendU64(data, space)
+	data = codec.Binary.AppendBytes(data, owner.Bytes())
 
 	return types.NewInstruction(s.id, types.NewAccounts(
 		types.NewWritableSignerAccount(from),
@@ -137,8 +144,8 @@ func (s *system) Allocate(account *types.PublicKey, space uint64) (*types.Instru
 		return nil, fmt.Errorf("system allocate: %d bytes exceeds the %d byte limit", space, MaxPermittedDataLength)
 	}
 
-	data := codec.Bincode.AppendU32(nil, SystemInstructionAllocate)
-	data = codec.Bincode.AppendU64(data, space)
+	data := codec.Binary.AppendU32(nil, SystemInstructionAllocate)
+	data = codec.Binary.AppendU64(data, space)
 
 	return types.NewInstruction(s.id, types.NewAccounts(
 		types.NewWritableSignerAccount(account),
@@ -162,10 +169,148 @@ func (s *system) Assign(account, owner *types.PublicKey) (*types.Instruction, er
 		return nil, fmt.Errorf("system assign: owner is required")
 	}
 
-	data := codec.Bincode.AppendU32(nil, SystemInstructionAssign)
-	data = codec.Bincode.AppendBytes(data, owner.Bytes())
+	data := codec.Binary.AppendU32(nil, SystemInstructionAssign)
+	data = codec.Binary.AppendBytes(data, owner.Bytes())
 
 	return types.NewInstruction(s.id, types.NewAccounts(
 		types.NewWritableSignerAccount(account),
+	), data), nil
+}
+
+// CreateAccountWithSeed funds a new account at an address derived from a base
+// key, a seed, and the owner.
+//
+// The new account does not sign, which is the whole difference from
+// CreateAccount: nobody holds a secret for a derived address, so there is no
+// signature it could produce. Base signs in its place, which means whoever
+// controls base controls every address derived from it.
+//
+// The address is derived here rather than taken as an argument. The runtime
+// recomputes it and rejects the instruction if it disagrees, so accepting one
+// from a caller would only add a way to be wrong.
+func (s *system) CreateAccountWithSeed(from, base *types.PublicKey, seed string, owner *types.PublicKey, lamports, space uint64) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
+	if from.IsNil() {
+		return nil, fmt.Errorf("system create account with seed: funder is required")
+	}
+	if space > MaxPermittedDataLength {
+		return nil, fmt.Errorf("system create account with seed: %d bytes exceeds the %d byte limit", space, MaxPermittedDataLength)
+	}
+
+	derived, err := types.CreateWithSeed(base, seed, owner)
+	if err != nil {
+		return nil, fmt.Errorf("system create account with seed: %w", err)
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionCreateAccountWithSeed)
+	data = codec.Binary.AppendBytes(data, base.Bytes())
+	data = codec.Binary.AppendString(data, seed)
+	data = codec.Binary.AppendU64(data, lamports)
+	data = codec.Binary.AppendU64(data, space)
+	data = codec.Binary.AppendBytes(data, owner.Bytes())
+
+	return types.NewInstruction(s.id, types.NewAccounts(
+		types.NewWritableSignerAccount(from),
+		types.NewWritableAccount(derived),
+		types.NewReadonlySignerAccount(base),
+	), data), nil
+}
+
+// TransferWithSeed moves lamports out of a seed-derived account.
+//
+// The sender is debited without signing, since base signs for it. That is what
+// makes a derived address usable as a holding account: it can be funded by
+// anyone and spent only by whoever holds the base key.
+//
+// The owner is the one the address was derived for, not a new one. It has to
+// be the System Program for the transfer itself to be legal, since only the
+// owning program may debit an account.
+func (s *system) TransferWithSeed(base *types.PublicKey, seed string, owner, to *types.PublicKey, lamports uint64) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
+	if to.IsNil() {
+		return nil, fmt.Errorf("system transfer with seed: recipient is required")
+	}
+
+	derived, err := types.CreateWithSeed(base, seed, owner)
+	if err != nil {
+		return nil, fmt.Errorf("system transfer with seed: %w", err)
+	}
+	if derived.Equal(to) {
+		return nil, fmt.Errorf("system transfer with seed: sender and recipient are the same account")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionTransferWithSeed)
+	data = codec.Binary.AppendU64(data, lamports)
+	data = codec.Binary.AppendString(data, seed)
+	data = codec.Binary.AppendBytes(data, owner.Bytes())
+
+	return types.NewInstruction(s.id, types.NewAccounts(
+		types.NewWritableAccount(derived),
+		types.NewReadonlySignerAccount(base),
+		types.NewWritableAccount(to),
+	), data), nil
+}
+
+// AllocateWithSeed reserves data space on a seed-derived account.
+//
+// The owner is the one the address was derived for. Allocation still requires
+// the account to be System-owned, so this is the step taken before assigning
+// it away, on an address that was derived for its eventual owner from the
+// start.
+func (s *system) AllocateWithSeed(base *types.PublicKey, seed string, owner *types.PublicKey, space uint64) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
+	if space > MaxPermittedDataLength {
+		return nil, fmt.Errorf("system allocate with seed: %d bytes exceeds the %d byte limit", space, MaxPermittedDataLength)
+	}
+
+	derived, err := types.CreateWithSeed(base, seed, owner)
+	if err != nil {
+		return nil, fmt.Errorf("system allocate with seed: %w", err)
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionAllocateWithSeed)
+	data = codec.Binary.AppendBytes(data, base.Bytes())
+	data = codec.Binary.AppendString(data, seed)
+	data = codec.Binary.AppendU64(data, space)
+	data = codec.Binary.AppendBytes(data, owner.Bytes())
+
+	return types.NewInstruction(s.id, types.NewAccounts(
+		types.NewWritableAccount(derived),
+		types.NewReadonlySignerAccount(base),
+	), data), nil
+}
+
+// AssignWithSeed hands a seed-derived account to the program it was derived
+// for.
+//
+// One owner serves two purposes here, which is the part worth reading twice:
+// it is both the new owner and the owner the address is derived from. So an
+// account can only be assigned to the program its address already encodes, and
+// the usual flow is to derive for the target program first, fund that address
+// to bring it into existence, then allocate and assign.
+func (s *system) AssignWithSeed(base *types.PublicKey, seed string, owner *types.PublicKey) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
+
+	derived, err := types.CreateWithSeed(base, seed, owner)
+	if err != nil {
+		return nil, fmt.Errorf("system assign with seed: %w", err)
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionAssignWithSeed)
+	data = codec.Binary.AppendBytes(data, base.Bytes())
+	data = codec.Binary.AppendString(data, seed)
+	data = codec.Binary.AppendBytes(data, owner.Bytes())
+
+	return types.NewInstruction(s.id, types.NewAccounts(
+		types.NewWritableAccount(derived),
+		types.NewReadonlySignerAccount(base),
 	), data), nil
 }

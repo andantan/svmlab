@@ -44,15 +44,16 @@ definitions:
     type: object
   misc.AirdropRequest:
     properties:
-      amount:
-        example: "1000000000"
-        type: string
       public_key:
         type: string
     type: object
   misc.AirdropResponse:
     properties:
+      lamports:
+        type: string
       signature:
+        type: string
+      sol:
         type: string
     type: object
   misc.BalanceResponse:
@@ -474,6 +475,9 @@ definitions:
       new_account:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
+      owner:
+        example: "11111111111111111111111111111111"
+        type: string
       space:
         example: "0"
         type: string
@@ -509,6 +513,235 @@ definitions:
         type: array
       space:
         type: integer
+      transaction:
+        type: string
+    type: object
+  v2.SystemSeedAllocateRequest:
+    properties:
+      base:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      owner:
+        example: "11111111111111111111111111111111"
+        type: string
+      seed:
+        example: vault-1
+        type: string
+      space:
+        example: "165"
+        type: string
+    type: object
+  v2.SystemSeedAllocateResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      derived_address:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.SystemSeedAssignRequest:
+    properties:
+      base:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      owner:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      seed:
+        example: vault-1
+        type: string
+    type: object
+  v2.SystemSeedAssignResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      derived_address:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      owner:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SystemSeedCreateAccountRequest:
+    properties:
+      base:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      from:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      lamports:
+        example: "890880"
+        type: string
+      owner:
+        example: "11111111111111111111111111111111"
+        type: string
+      seed:
+        example: vault-1
+        type: string
+      space:
+        example: "0"
+        type: string
+    type: object
+  v2.SystemSeedCreateAccountResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      derived_address:
+        description: |-
+          DerivedAddress is what base, seed, and owner produce. It is the account
+          being created, and it is absent from signers because nobody holds a
+          secret for it.
+        type: string
+      fee:
+        type: string
+      lamports:
+        type: string
+      lamports_sol:
+        type: string
+      message:
+        type: string
+      owner:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.SystemSeedTransferMaxRequest:
+    properties:
+      base:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      owner:
+        example: "11111111111111111111111111111111"
+        type: string
+      seed:
+        example: vault-1
+        type: string
+      to:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.SystemSeedTransferMaxResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      amount_sol:
+        type: string
+      derived_address:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SystemSeedTransferRequest:
+    properties:
+      amount:
+        example: "1000000"
+        type: string
+      base:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      owner:
+        example: "11111111111111111111111111111111"
+        type: string
+      seed:
+        example: vault-1
+        type: string
+      to:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.SystemSeedTransferResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      amount_sol:
+        type: string
+      derived_address:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
       transaction:
         type: string
     type: object
@@ -721,8 +954,11 @@ paths:
     post:
       consumes:
       - application/json
+      description: Requests a fixed half a SOL. The amount is not a field because
+        the faucet enforces its own limit, and asking above it fails the call rather
+        than handing out less.
       parameters:
-      - description: Account and amount
+      - description: Account
         in: body
         name: body
         required: true
@@ -1662,17 +1898,16 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Funds a new account and sizes its data, leaving it owned by the
-        System Program. The owner is not a request field: only the owning program
-        may debit an account or write its data, so handing a new account to anything
-        other than a program locks its lamports permanently. Accounts owned by another
-        program belong to that program''s own endpoints. The new account signs alongside
-        the funder, which is what has no EVM counterpart: an address does not exist
-        until someone holding its private key authorizes its creation. Lamports must
-        reach the rent-exempt minimum for the requested space, which this checks before
-        returning.'
+      description: 'Funds a new account, sizes its data, and assigns it an owner.
+        The owner must be executable: only the owning program may debit an account
+        or write its data, so an account owned by a plain address is locked from the
+        moment it exists. Pass the System Program for an ordinary account. The new
+        account signs alongside the funder, which is what has no EVM counterpart:
+        an address does not exist until someone holding its private key authorizes
+        its creation. Lamports must reach the rent-exempt minimum for the requested
+        space, which this checks before returning.'
       parameters:
-      - description: Funder, new account, lamports, and space
+      - description: Funder, new account, owner, lamports, and space
         in: body
         name: body
         required: true
@@ -1702,6 +1937,221 @@ paths:
               type: string
             type: object
       summary: Build a System Program account creation
+      tags:
+      - transaction
+  /svm/v2/transaction/system/seed/allocate:
+    post:
+      consumes:
+      - application/json
+      description: Reserves data space on SHA256(base || seed || owner) with base
+        signing in the account's place. Allocation still requires the account to be
+        System-owned, so this is the step taken before assigning it away, on an address
+        derived for its eventual owner from the start. Growing an account raises its
+        rent-exempt floor, so the balance is checked against the minimum for the new
+        size.
+      parameters:
+      - description: Base, seed, owner, and space
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemSeedAllocateRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemSeedAllocateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build an allocation on a seed-derived address
+      tags:
+      - transaction
+  /svm/v2/transaction/system/seed/assign:
+    post:
+      consumes:
+      - application/json
+      description: 'Hands SHA256(base || seed || owner) to that same owner. There
+        is no separate new-owner field, because one owner does both jobs: it is what
+        the address is derived from and what the account is assigned to, so an account
+        can only be handed to the program its own address already encodes. The owner
+        must be executable, since assigning to a plain address locks the account permanently.'
+      parameters:
+      - description: Base, seed, and owner
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemSeedAssignRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemSeedAssignResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build an ownership assignment on a seed-derived address
+      tags:
+      - transaction
+  /svm/v2/transaction/system/seed/create-account:
+    post:
+      consumes:
+      - application/json
+      description: 'Creates an account at SHA256(base || seed || owner) and hands
+        it to that owner in one instruction, so a program-owned account needs no separate
+        allocate and assign. The owner must be executable, and it changes the address:
+        the same base and seed derive somewhere else for a different owner. The derived
+        account never signs, which is the difference from create-account: nobody holds
+        a secret for it, so base signs in its place and whoever controls base controls
+        every address derived from it. The address is derived rather than accepted,
+        since the runtime recomputes it and rejects a mismatch.'
+      parameters:
+      - description: Funder, base, seed, owner, lamports, and space
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemSeedCreateAccountRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemSeedCreateAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build an account creation at a seed-derived address
+      tags:
+      - transaction
+  /svm/v2/transaction/system/seed/transfer:
+    post:
+      consumes:
+      - application/json
+      description: 'Debits SHA256(base || seed || owner) without that account signing,
+        since base signs for it. That is what makes a derived address usable as a
+        holding account: anyone can fund it, and only the holder of base can spend
+        it. The account must still be System-owned for a system transfer to debit
+        it, which is checked before returning.'
+      parameters:
+      - description: Base, seed, owner, recipient, and amount
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemSeedTransferRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemSeedTransferResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a transfer out of a seed-derived address
+      tags:
+      - transaction
+  /svm/v2/transaction/system/seed/transfer/max:
+    post:
+      consumes:
+      - application/json
+      description: 'Sends everything SHA256(base || seed || owner) holds. The amount
+        is the whole balance with nothing held back, because a derived address can
+        never pay the fee: a fee payer has to sign, and this account cannot. That
+        also means no probe is needed to price the message first, since the amount
+        does not depend on the fee here the way it does for a plain transfer. Emptying
+        the account lets the runtime reclaim it.'
+      parameters:
+      - description: Base, seed, owner, and recipient
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemSeedTransferMaxRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemSeedTransferMaxResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a transfer of a seed-derived address's entire balance
       tags:
       - transaction
   /svm/v2/transaction/system/transfer:

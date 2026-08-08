@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"crypto/ed25519"
+	"crypto/sha256"
 	"fmt"
 
 	"github.com/andantan/svmlab/core/codec"
@@ -11,6 +12,9 @@ import (
 const (
 	PublicKeyLength       = ed25519.PublicKeySize
 	PublicKeyBase58Length = 44
+
+	// MaxSeedLength is the longest seed CreateWithSeed may use.
+	MaxSeedLength = 32
 )
 
 // PublicKey is an ed25519 public key.
@@ -62,6 +66,44 @@ func NewPublicKeyFromBase58(s string) (*PublicKey, error) {
 	k.base58 = s
 
 	return k, nil
+}
+
+// CreateWithSeed derives an address from a base key, a seed, and an owner.
+//
+//	address = SHA256(base || seed || owner)
+//
+// This is not a program derived address. There is no curve check and no bump:
+// the result may well land on the curve, and nothing cares, because a PDA is
+// unsignable by construction while this address is merely never signed for.
+// Authority here is the base key, so whoever can sign for base controls every
+// address derived from it, and the derived account never signs for itself.
+//
+// Deriving an address is separate from using one. Only the System Program's
+// with-seed instructions accept such an address, and building those is what
+// core's System builders do with the result.
+func CreateWithSeed(base *PublicKey, seed string, owner *PublicKey) (*PublicKey, error) {
+	if base.IsNil() {
+		return nil, fmt.Errorf("create with seed: base is required")
+	}
+	if owner.IsNil() {
+		return nil, fmt.Errorf("create with seed: owner is required")
+	}
+	if len(seed) > MaxSeedLength {
+		return nil, fmt.Errorf("create with seed: seed is %d bytes but the limit is %d", len(seed), MaxSeedLength)
+	}
+
+	ownerBytes := owner.Bytes()
+	if len(ownerBytes) >= len(pdaMarker) &&
+		string(ownerBytes[len(ownerBytes)-len(pdaMarker):]) == pdaMarker {
+		return nil, fmt.Errorf("create with seed: owner ends with %q, which is reserved for program derived addresses", pdaMarker)
+	}
+
+	h := sha256.New()
+	h.Write(base.Bytes())
+	h.Write([]byte(seed))
+	h.Write(ownerBytes)
+
+	return NewPublicKeyFromBytes(h.Sum(nil))
 }
 
 func (k *PublicKey) IsNil() bool {

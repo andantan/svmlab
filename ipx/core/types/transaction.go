@@ -126,7 +126,7 @@ func (t *Transaction) Serialize() ([]byte, error) {
 			len(t.Signatures), t.Message.NumSigners())
 	}
 
-	out, err := codec.Bincode.AppendShortVecLen(nil, len(t.Signatures))
+	out, err := codec.Binary.AppendShortVecLen(nil, len(t.Signatures))
 	if err != nil {
 		return nil, fmt.Errorf("transaction signatures: %w", err)
 	}
@@ -134,14 +134,14 @@ func (t *Transaction) Serialize() ([]byte, error) {
 		if sig.IsNil() {
 			return nil, fmt.Errorf("transaction: signature[%d] is nil", i)
 		}
-		out = codec.Bincode.AppendBytes(out, sig.Bytes())
+		out = codec.Binary.AppendBytes(out, sig.Bytes())
 	}
 
 	message, err := t.Message.Serialize()
 	if err != nil {
 		return nil, fmt.Errorf("transaction message: %w", err)
 	}
-	out = codec.Bincode.AppendBytes(out, message)
+	out = codec.Binary.AppendBytes(out, message)
 
 	if len(out) > MaxTransactionSize {
 		return nil, fmt.Errorf("transaction: %d bytes exceeds the %d byte limit", len(out), MaxTransactionSize)
@@ -152,7 +152,7 @@ func (t *Transaction) Serialize() ([]byte, error) {
 
 // DeserializeTransaction parses the wire format.
 func DeserializeTransaction(raw []byte) (*Transaction, error) {
-	n, size, err := codec.Bincode.ReadShortVecLen(raw)
+	n, size, err := codec.Binary.ReadShortVecLen(raw)
 	if err != nil {
 		return nil, fmt.Errorf("transaction signatures: %w", err)
 	}
@@ -161,7 +161,7 @@ func DeserializeTransaction(raw []byte) (*Transaction, error) {
 	signatures := make([]*Signature, n)
 	for i := range signatures {
 		var b []byte
-		if b, raw, err = codec.Bincode.ReadBytes(raw, SignatureLength); err != nil {
+		if b, raw, err = codec.Binary.ReadBytes(raw, SignatureLength); err != nil {
 			return nil, fmt.Errorf("transaction signature[%d]: %w", i, err)
 		}
 		if signatures[i], err = NewSignature(b); err != nil {

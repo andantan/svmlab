@@ -246,11 +246,11 @@ func (m *Message) IsWritable(i int) bool {
 //	short-vec  number of instructions
 //	...        compiled instructions
 func (m *Message) Serialize() ([]byte, error) {
-	out := codec.Bincode.AppendU8(nil, m.Header.NumRequiredSignatures)
-	out = codec.Bincode.AppendU8(out, m.Header.NumReadonlySignedAccounts)
-	out = codec.Bincode.AppendU8(out, m.Header.NumReadonlyUnsignedAccounts)
+	out := codec.Binary.AppendU8(nil, m.Header.NumRequiredSignatures)
+	out = codec.Binary.AppendU8(out, m.Header.NumReadonlySignedAccounts)
+	out = codec.Binary.AppendU8(out, m.Header.NumReadonlyUnsignedAccounts)
 
-	out, err := codec.Bincode.AppendShortVecLen(out, len(m.AccountKeys))
+	out, err := codec.Binary.AppendShortVecLen(out, len(m.AccountKeys))
 	if err != nil {
 		return nil, fmt.Errorf("message account keys: %w", err)
 	}
@@ -258,12 +258,12 @@ func (m *Message) Serialize() ([]byte, error) {
 		if k.IsNil() {
 			return nil, fmt.Errorf("message: account key[%d] is nil", i)
 		}
-		out = codec.Bincode.AppendBytes(out, k.Bytes())
+		out = codec.Binary.AppendBytes(out, k.Bytes())
 	}
 
-	out = codec.Bincode.AppendBytes(out, m.RecentBlockhash.Bytes())
+	out = codec.Binary.AppendBytes(out, m.RecentBlockhash.Bytes())
 
-	out, err = codec.Bincode.AppendShortVecLen(out, len(m.Instructions))
+	out, err = codec.Binary.AppendShortVecLen(out, len(m.Instructions))
 	if err != nil {
 		return nil, fmt.Errorf("message instructions: %w", err)
 	}
@@ -272,7 +272,7 @@ func (m *Message) Serialize() ([]byte, error) {
 		if err != nil {
 			return nil, fmt.Errorf("message instruction[%d]: %w", i, err)
 		}
-		out = codec.Bincode.AppendBytes(out, raw)
+		out = codec.Binary.AppendBytes(out, raw)
 	}
 
 	return out, nil
@@ -288,20 +288,20 @@ func DeserializeMessage(raw []byte) (*Message, error) {
 		return nil, fmt.Errorf("message: versioned message (v%d) is not supported", raw[0]&0x7f)
 	}
 
-	numRequiredSignatures, raw, err := codec.Bincode.ReadU8(raw)
+	numRequiredSignatures, raw, err := codec.Binary.ReadU8(raw)
 	if err != nil {
 		return nil, fmt.Errorf("message header: %w", err)
 	}
-	numReadonlySigned, raw, err := codec.Bincode.ReadU8(raw)
+	numReadonlySigned, raw, err := codec.Binary.ReadU8(raw)
 	if err != nil {
 		return nil, fmt.Errorf("message header: %w", err)
 	}
-	numReadonlyUnsigned, raw, err := codec.Bincode.ReadU8(raw)
+	numReadonlyUnsigned, raw, err := codec.Binary.ReadU8(raw)
 	if err != nil {
 		return nil, fmt.Errorf("message header: %w", err)
 	}
 
-	n, size, err := codec.Bincode.ReadShortVecLen(raw)
+	n, size, err := codec.Binary.ReadShortVecLen(raw)
 	if err != nil {
 		return nil, fmt.Errorf("message account keys: %w", err)
 	}
@@ -310,7 +310,7 @@ func DeserializeMessage(raw []byte) (*Message, error) {
 	keys := make([]*PublicKey, n)
 	for i := range keys {
 		var b []byte
-		b, raw, err = codec.Bincode.ReadBytes(raw, PublicKeyLength)
+		b, raw, err = codec.Binary.ReadBytes(raw, PublicKeyLength)
 		if err != nil {
 			return nil, fmt.Errorf("message account key[%d]: %w", i, err)
 		}
@@ -319,7 +319,7 @@ func DeserializeMessage(raw []byte) (*Message, error) {
 		}
 	}
 
-	b, raw, err := codec.Bincode.ReadBytes(raw, HashLength)
+	b, raw, err := codec.Binary.ReadBytes(raw, HashLength)
 	if err != nil {
 		return nil, fmt.Errorf("message recent blockhash: %w", err)
 	}
@@ -328,7 +328,7 @@ func DeserializeMessage(raw []byte) (*Message, error) {
 		return nil, fmt.Errorf("message recent blockhash: %w", err)
 	}
 
-	n, size, err = codec.Bincode.ReadShortVecLen(raw)
+	n, size, err = codec.Binary.ReadShortVecLen(raw)
 	if err != nil {
 		return nil, fmt.Errorf("message instructions: %w", err)
 	}

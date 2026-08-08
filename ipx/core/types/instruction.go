@@ -102,19 +102,19 @@ func (i *CompiledInstruction) IsNil() bool {
 //	short-vec  data length
 //	[u8]       data
 func (i *CompiledInstruction) Serialize() ([]byte, error) {
-	out := codec.Bincode.AppendU8(nil, i.ProgramIDIndex)
+	out := codec.Binary.AppendU8(nil, i.ProgramIDIndex)
 
-	out, err := codec.Bincode.AppendShortVecLen(out, len(i.AccountIndexes))
+	out, err := codec.Binary.AppendShortVecLen(out, len(i.AccountIndexes))
 	if err != nil {
 		return nil, fmt.Errorf("instruction account indexes: %w", err)
 	}
-	out = codec.Bincode.AppendBytes(out, i.AccountIndexes)
+	out = codec.Binary.AppendBytes(out, i.AccountIndexes)
 
-	out, err = codec.Bincode.AppendShortVecLen(out, len(i.Data))
+	out, err = codec.Binary.AppendShortVecLen(out, len(i.Data))
 	if err != nil {
 		return nil, fmt.Errorf("instruction data: %w", err)
 	}
-	out = codec.Bincode.AppendBytes(out, i.Data)
+	out = codec.Binary.AppendBytes(out, i.Data)
 
 	return out, nil
 }
@@ -122,25 +122,25 @@ func (i *CompiledInstruction) Serialize() ([]byte, error) {
 // DeserializeCompiledInstruction reads one instruction and returns the
 // remaining input, so a caller can walk a message's instruction list.
 func DeserializeCompiledInstruction(src []byte) (*CompiledInstruction, []byte, error) {
-	programIDIndex, src, err := codec.Bincode.ReadU8(src)
+	programIDIndex, src, err := codec.Binary.ReadU8(src)
 	if err != nil {
 		return nil, nil, fmt.Errorf("instruction program id index: %w", err)
 	}
 
-	n, size, err := codec.Bincode.ReadShortVecLen(src)
+	n, size, err := codec.Binary.ReadShortVecLen(src)
 	if err != nil {
 		return nil, nil, fmt.Errorf("instruction account indexes: %w", err)
 	}
-	indexes, src, err := codec.Bincode.ReadBytes(src[size:], n)
+	indexes, src, err := codec.Binary.ReadBytes(src[size:], n)
 	if err != nil {
 		return nil, nil, fmt.Errorf("instruction account indexes: %w", err)
 	}
 
-	n, size, err = codec.Bincode.ReadShortVecLen(src)
+	n, size, err = codec.Binary.ReadShortVecLen(src)
 	if err != nil {
 		return nil, nil, fmt.Errorf("instruction data: %w", err)
 	}
-	data, src, err := codec.Bincode.ReadBytes(src[size:], n)
+	data, src, err := codec.Binary.ReadBytes(src[size:], n)
 	if err != nil {
 		return nil, nil, fmt.Errorf("instruction data: %w", err)
 	}

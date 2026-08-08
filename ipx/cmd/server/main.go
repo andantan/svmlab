@@ -120,6 +120,11 @@ func run() error {
 		r.Post("/transaction/system/create-account", tx.SystemCreateAccount)
 		r.Post("/transaction/system/allocate", tx.SystemAllocate)
 		r.Post("/transaction/system/assign", tx.SystemAssign)
+		r.Post("/transaction/system/seed/create-account", tx.SystemSeedCreateAccount)
+		r.Post("/transaction/system/seed/transfer", tx.SystemSeedTransfer)
+		r.Post("/transaction/system/seed/transfer/max", tx.SystemSeedTransferMax)
+		r.Post("/transaction/system/seed/allocate", tx.SystemSeedAllocate)
+		r.Post("/transaction/system/seed/assign", tx.SystemSeedAssign)
 	})
 
 	fmt.Printf("listening on %s\n", cfg.ServerAddr)

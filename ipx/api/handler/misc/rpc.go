@@ -635,10 +635,11 @@ func (h *RPCHandler) RentExemptionPublicKey(w http.ResponseWriter, r *http.Reque
 
 // Airdrop godoc
 // @Summary      Fund an account on devnet or testnet
+// @Description  Requests a fixed half a SOL. The amount is not a field because the faucet enforces its own limit, and asking above it fails the call rather than handing out less.
 // @Tags         rpc
 // @Accept       json
 // @Produce      json
-// @Param        body  body      AirdropRequest  true  "Account and amount"
+// @Param        body  body      AirdropRequest  true  "Account"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  AirdropResponse
@@ -660,7 +661,7 @@ func (h *RPCHandler) Airdrop(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	sig, err := chain.Cli.RequestAirdrop(r.Context(), req.ToPublicKey(), req.Lamports(), rpc.CommitmentConfirmed)
+	sig, err := chain.Cli.RequestAirdrop(r.Context(), req.ToPublicKey(), AirdropAmount, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return

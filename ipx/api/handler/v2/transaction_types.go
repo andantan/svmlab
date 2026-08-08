@@ -187,12 +187,14 @@ func NewSystemTransferMaxResponse(tx *types.Transaction, raw, message []byte, am
 type SystemCreateAccountRequest struct {
 	From       string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 	NewAccount string `json:"new_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	Owner      string `json:"owner" example:"11111111111111111111111111111111"`
 	Lamports   string `json:"lamports" example:"890880"`
 	Space      string `json:"space" example:"0"`
 	FeePayer   string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
 	from       *types.PublicKey
 	newAccount *types.PublicKey
+	owner      *types.PublicKey
 	feePayer   *types.PublicKey
 	lamports   uint64
 	space      uint64
@@ -208,6 +210,9 @@ func (r *SystemCreateAccountRequest) ValidateRequest() error {
 	}
 	if r.from.Equal(r.newAccount) {
 		return errors.New("from and new_account are the same account")
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -241,6 +246,10 @@ func (r *SystemCreateAccountRequest) FromKey() *types.PublicKey {
 
 func (r *SystemCreateAccountRequest) NewAccountKey() *types.PublicKey {
 	return r.newAccount
+}
+
+func (r *SystemCreateAccountRequest) OwnerKey() *types.PublicKey {
+	return r.owner
 }
 
 func (r *SystemCreateAccountRequest) FeePayerKey() *types.PublicKey {
@@ -453,6 +462,536 @@ func NewSystemAssignResponse(tx *types.Transaction, raw, message []byte, owner *
 		AccountKeys:     keys,
 		Signers:         signers,
 		Owner:           owner.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// SystemSeedCreateAccountRequest creates an account at a derived address.
+//
+// The address is not a field: it follows from base, seed, and the owner, and
+// the runtime recomputes it and rejects a mismatch. The owner is fixed to the
+// System Program for the same reason it is in create-account.
+type SystemSeedCreateAccountRequest struct {
+	From     string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Base     string `json:"base" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Seed     string `json:"seed" example:"vault-1"`
+	Owner    string `json:"owner" example:"11111111111111111111111111111111"`
+	Lamports string `json:"lamports" example:"890880"`
+	Space    string `json:"space" example:"0"`
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	from     *types.PublicKey
+	base     *types.PublicKey
+	owner    *types.PublicKey
+	feePayer *types.PublicKey
+	lamports uint64
+	space    uint64
+}
+
+func (r *SystemSeedCreateAccountRequest) ValidateRequest() error {
+	var err error
+	if r.from, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
+		return errors.New("from: " + err.Error())
+	}
+	if r.base, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Base)); err != nil {
+		return errors.New("base: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.Seed = strings.TrimSpace(r.Seed)
+	if r.Seed == "" {
+		return errors.New("seed is required")
+	}
+	if len(r.Seed) > types.MaxSeedLength {
+		return fmt.Errorf("seed: %d bytes exceeds the %d byte limit", len(r.Seed), types.MaxSeedLength)
+	}
+
+	lamports := strings.TrimSpace(r.Lamports)
+	if lamports == "" {
+		return errors.New("lamports is required")
+	}
+	if r.lamports, err = strconv.ParseUint(lamports, 10, 64); err != nil {
+		return errors.New("lamports: must be a decimal lamport count")
+	}
+
+	space := strings.TrimSpace(r.Space)
+	if space == "" {
+		return errors.New("space is required")
+	}
+	if r.space, err = strconv.ParseUint(space, 10, 64); err != nil {
+		return errors.New("space: must be a decimal byte count")
+	}
+	if r.space > core.MaxPermittedDataLength {
+		return fmt.Errorf("space: %d bytes exceeds the %d byte limit", r.space, core.MaxPermittedDataLength)
+	}
+
+	return nil
+}
+
+func (r *SystemSeedCreateAccountRequest) FromKey() *types.PublicKey {
+	return r.from
+}
+
+func (r *SystemSeedCreateAccountRequest) BaseKey() *types.PublicKey {
+	return r.base
+}
+
+func (r *SystemSeedCreateAccountRequest) OwnerKey() *types.PublicKey {
+	return r.owner
+}
+
+func (r *SystemSeedCreateAccountRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *SystemSeedCreateAccountRequest) ToLamports() uint64 {
+	return r.lamports
+}
+
+func (r *SystemSeedCreateAccountRequest) ToSpace() uint64 {
+	return r.space
+}
+
+type SystemSeedCreateAccountResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	// DerivedAddress is what base, seed, and owner produce. It is the account
+	// being created, and it is absent from signers because nobody holds a
+	// secret for it.
+	DerivedAddress string `json:"derived_address"`
+
+	Lamports    string `json:"lamports"`
+	LamportsSOL string `json:"lamports_sol"`
+	RentExempt  string `json:"rent_exempt"`
+	Space       uint64 `json:"space"`
+	Owner       string `json:"owner"`
+	Fee         string `json:"fee"`
+}
+
+func NewSystemSeedCreateAccountResponse(tx *types.Transaction, raw, message []byte, derived, owner *types.PublicKey, lamports, rentExempt, space, fee uint64) *SystemSeedCreateAccountResponse {
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SystemSeedCreateAccountResponse{
+		Transaction:     base64.StdEncoding.EncodeToString(raw),
+		Message:         base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		DerivedAddress:  derived.Base58(),
+		Lamports:        strconv.FormatUint(lamports, 10),
+		LamportsSOL:     types.LamportsToSol(lamports),
+		RentExempt:      strconv.FormatUint(rentExempt, 10),
+		Space:           space,
+		Owner:           owner.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// SystemSeedTransferRequest moves lamports out of a derived address.
+//
+// Owner is the one the address was derived for, not a new one. It is often the
+// System Program, but an address derived for a program it has not been
+// assigned to yet is still System-owned and still spendable this way.
+type SystemSeedTransferRequest struct {
+	Base     string `json:"base" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Seed     string `json:"seed" example:"vault-1"`
+	Owner    string `json:"owner" example:"11111111111111111111111111111111"`
+	To       string `json:"to" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	Amount   string `json:"amount" example:"1000000"`
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	base     *types.PublicKey
+	owner    *types.PublicKey
+	to       *types.PublicKey
+	feePayer *types.PublicKey
+	amount   uint64
+}
+
+func (r *SystemSeedTransferRequest) ValidateRequest() error {
+	var err error
+	if r.base, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Base)); err != nil {
+		return errors.New("base: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.to, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.To)); err != nil {
+		return errors.New("to: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.Seed = strings.TrimSpace(r.Seed)
+	if r.Seed == "" {
+		return errors.New("seed is required")
+	}
+	if len(r.Seed) > types.MaxSeedLength {
+		return fmt.Errorf("seed: %d bytes exceeds the %d byte limit", len(r.Seed), types.MaxSeedLength)
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: must be a decimal lamport count")
+	}
+	if r.amount == 0 {
+		return errors.New("amount: must be greater than zero")
+	}
+
+	return nil
+}
+
+func (r *SystemSeedTransferRequest) BaseKey() *types.PublicKey {
+	return r.base
+}
+
+func (r *SystemSeedTransferRequest) OwnerKey() *types.PublicKey {
+	return r.owner
+}
+
+func (r *SystemSeedTransferRequest) ToKey() *types.PublicKey {
+	return r.to
+}
+
+func (r *SystemSeedTransferRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *SystemSeedTransferRequest) ToLamports() uint64 {
+	return r.amount
+}
+
+type SystemSeedTransferResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+	DerivedAddress  string   `json:"derived_address"`
+	Amount          string   `json:"amount"`
+	AmountSOL       string   `json:"amount_sol"`
+	Fee             string   `json:"fee"`
+}
+
+func NewSystemSeedTransferResponse(tx *types.Transaction, raw, message []byte, derived *types.PublicKey, amount, fee uint64) *SystemSeedTransferResponse {
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SystemSeedTransferResponse{
+		Transaction:     base64.StdEncoding.EncodeToString(raw),
+		Message:         base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		DerivedAddress:  derived.Base58(),
+		Amount:          strconv.FormatUint(amount, 10),
+		AmountSOL:       types.LamportsToSol(amount),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+type SystemSeedAllocateRequest struct {
+	Base     string `json:"base" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Seed     string `json:"seed" example:"vault-1"`
+	Owner    string `json:"owner" example:"11111111111111111111111111111111"`
+	Space    string `json:"space" example:"165"`
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	base     *types.PublicKey
+	owner    *types.PublicKey
+	feePayer *types.PublicKey
+	space    uint64
+}
+
+func (r *SystemSeedAllocateRequest) ValidateRequest() error {
+	var err error
+	if r.base, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Base)); err != nil {
+		return errors.New("base: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.Seed = strings.TrimSpace(r.Seed)
+	if r.Seed == "" {
+		return errors.New("seed is required")
+	}
+	if len(r.Seed) > types.MaxSeedLength {
+		return fmt.Errorf("seed: %d bytes exceeds the %d byte limit", len(r.Seed), types.MaxSeedLength)
+	}
+
+	space := strings.TrimSpace(r.Space)
+	if space == "" {
+		return errors.New("space is required")
+	}
+	if r.space, err = strconv.ParseUint(space, 10, 64); err != nil {
+		return errors.New("space: must be a decimal byte count")
+	}
+	if r.space == 0 {
+		return errors.New("space: must be greater than zero")
+	}
+	if r.space > core.MaxPermittedDataLength {
+		return fmt.Errorf("space: %d bytes exceeds the %d byte limit", r.space, core.MaxPermittedDataLength)
+	}
+
+	return nil
+}
+
+func (r *SystemSeedAllocateRequest) BaseKey() *types.PublicKey {
+	return r.base
+}
+
+func (r *SystemSeedAllocateRequest) OwnerKey() *types.PublicKey {
+	return r.owner
+}
+
+func (r *SystemSeedAllocateRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *SystemSeedAllocateRequest) ToSpace() uint64 {
+	return r.space
+}
+
+type SystemSeedAllocateResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+	DerivedAddress  string   `json:"derived_address"`
+	Space           uint64   `json:"space"`
+	RentExempt      string   `json:"rent_exempt"`
+	Fee             string   `json:"fee"`
+}
+
+func NewSystemSeedAllocateResponse(tx *types.Transaction, raw, message []byte, derived *types.PublicKey, space, rentExempt, fee uint64) *SystemSeedAllocateResponse {
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SystemSeedAllocateResponse{
+		Transaction:     base64.StdEncoding.EncodeToString(raw),
+		Message:         base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		DerivedAddress:  derived.Base58(),
+		Space:           space,
+		RentExempt:      strconv.FormatUint(rentExempt, 10),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// SystemSeedAssignRequest hands a derived account to the program it was
+// derived for.
+//
+// There is no separate new-owner field. One owner does both jobs: it is what
+// the address is derived from and what the account is assigned to, so an
+// account can only be handed to the program its own address already encodes.
+type SystemSeedAssignRequest struct {
+	Base     string `json:"base" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Seed     string `json:"seed" example:"vault-1"`
+	Owner    string `json:"owner" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	base     *types.PublicKey
+	owner    *types.PublicKey
+	feePayer *types.PublicKey
+}
+
+func (r *SystemSeedAssignRequest) ValidateRequest() error {
+	var err error
+	if r.base, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Base)); err != nil {
+		return errors.New("base: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.Seed = strings.TrimSpace(r.Seed)
+	if r.Seed == "" {
+		return errors.New("seed is required")
+	}
+	if len(r.Seed) > types.MaxSeedLength {
+		return fmt.Errorf("seed: %d bytes exceeds the %d byte limit", len(r.Seed), types.MaxSeedLength)
+	}
+
+	return nil
+}
+
+func (r *SystemSeedAssignRequest) BaseKey() *types.PublicKey {
+	return r.base
+}
+
+func (r *SystemSeedAssignRequest) OwnerKey() *types.PublicKey {
+	return r.owner
+}
+
+func (r *SystemSeedAssignRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+type SystemSeedAssignResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+	DerivedAddress  string   `json:"derived_address"`
+	Owner           string   `json:"owner"`
+	Fee             string   `json:"fee"`
+}
+
+func NewSystemSeedAssignResponse(tx *types.Transaction, raw, message []byte, derived, owner *types.PublicKey, fee uint64) *SystemSeedAssignResponse {
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SystemSeedAssignResponse{
+		Transaction:     base64.StdEncoding.EncodeToString(raw),
+		Message:         base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		DerivedAddress:  derived.Base58(),
+		Owner:           owner.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+type SystemSeedTransferMaxRequest struct {
+	Base     string `json:"base" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Seed     string `json:"seed" example:"vault-1"`
+	Owner    string `json:"owner" example:"11111111111111111111111111111111"`
+	To       string `json:"to" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	base     *types.PublicKey
+	owner    *types.PublicKey
+	to       *types.PublicKey
+	feePayer *types.PublicKey
+}
+
+func (r *SystemSeedTransferMaxRequest) ValidateRequest() error {
+	var err error
+	if r.base, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Base)); err != nil {
+		return errors.New("base: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.to, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.To)); err != nil {
+		return errors.New("to: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.Seed = strings.TrimSpace(r.Seed)
+	if r.Seed == "" {
+		return errors.New("seed is required")
+	}
+	if len(r.Seed) > types.MaxSeedLength {
+		return fmt.Errorf("seed: %d bytes exceeds the %d byte limit", len(r.Seed), types.MaxSeedLength)
+	}
+
+	return nil
+}
+
+func (r *SystemSeedTransferMaxRequest) BaseKey() *types.PublicKey {
+	return r.base
+}
+
+func (r *SystemSeedTransferMaxRequest) OwnerKey() *types.PublicKey {
+	return r.owner
+}
+
+func (r *SystemSeedTransferMaxRequest) ToKey() *types.PublicKey {
+	return r.to
+}
+
+func (r *SystemSeedTransferMaxRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+type SystemSeedTransferMaxResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+	DerivedAddress  string   `json:"derived_address"`
+	Amount          string   `json:"amount"`
+	AmountSOL       string   `json:"amount_sol"`
+	Fee             string   `json:"fee"`
+}
+
+func NewSystemSeedTransferMaxResponse(tx *types.Transaction, raw, message []byte, derived *types.PublicKey, amount, fee uint64) *SystemSeedTransferMaxResponse {
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SystemSeedTransferMaxResponse{
+		Transaction:     base64.StdEncoding.EncodeToString(raw),
+		Message:         base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		DerivedAddress:  derived.Base58(),
+		Amount:          strconv.FormatUint(amount, 10),
+		AmountSOL:       types.LamportsToSol(amount),
 		Fee:             strconv.FormatUint(fee, 10),
 	}
 }

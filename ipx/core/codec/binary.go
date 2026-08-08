@@ -6,9 +6,9 @@ import (
 	"math"
 )
 
-type bincodeCodec struct{}
+type binaryCodec struct{}
 
-var Bincode = new(bincodeCodec)
+var Binary = new(binaryCodec)
 
 const (
 	// ShortVecMaxLen is the largest length a short-vec prefix can express.
@@ -33,7 +33,7 @@ const (
 // rather than as a general decoder.
 
 // AppendU8 appends a single byte.
-func (c *bincodeCodec) AppendU8(dst []byte, v uint8) []byte {
+func (_ *binaryCodec) AppendU8(dst []byte, v uint8) []byte {
 	return append(dst, v)
 }
 
@@ -41,19 +41,34 @@ func (c *bincodeCodec) AppendU8(dst []byte, v uint8) []byte {
 //
 // Instruction discriminants are u32, so this is what selects a System Program
 // operation, in the role an EVM four-byte selector plays.
-func (c *bincodeCodec) AppendU32(dst []byte, v uint32) []byte {
+func (_ *binaryCodec) AppendU32(dst []byte, v uint32) []byte {
 	return binary.LittleEndian.AppendUint32(dst, v)
 }
 
 // AppendU64 appends a little-endian uint64, the width of every lamport amount.
-func (c *bincodeCodec) AppendU64(dst []byte, v uint64) []byte {
+func (_ *binaryCodec) AppendU64(dst []byte, v uint64) []byte {
 	return binary.LittleEndian.AppendUint64(dst, v)
 }
 
 // AppendBytes appends raw bytes with no length prefix, for fixed-width values
 // such as a public key, a hash, or a signature.
-func (c *bincodeCodec) AppendBytes(dst []byte, b []byte) []byte {
+func (_ *binaryCodec) AppendBytes(dst []byte, b []byte) []byte {
 	return append(dst, b...)
+}
+
+// AppendString appends a bincode string: a u64 length followed by raw UTF-8
+// bytes.
+//
+// The length is a full u64 rather than the short-vec prefix used elsewhere.
+// That substitution applies to the sequences a transaction is assembled from,
+// meaning the account list, the instruction list, and an instruction's data,
+// and not to fields inside an instruction payload, which stay plain bincode.
+// A short-vec here would encode the same seed as different bytes, and the
+// runtime would derive a different address from them.
+func (c *binaryCodec) AppendString(dst []byte, s string) []byte {
+	dst = c.AppendU64(dst, uint64(len(s)))
+
+	return append(dst, s...)
 }
 
 // AppendShortVecLen appends a compact-u16 length prefix.
@@ -71,7 +86,7 @@ func (c *bincodeCodec) AppendBytes(dst []byte, b []byte) []byte {
 // Below 128 this is a single byte identical to the plain length, which is why
 // a wrong implementation still works on short lists and only breaks once a
 // transaction carries 128 or more accounts or instruction bytes.
-func (c *bincodeCodec) AppendShortVecLen(dst []byte, n int) ([]byte, error) {
+func (_ *binaryCodec) AppendShortVecLen(dst []byte, n int) ([]byte, error) {
 	if n < 0 || n > ShortVecMaxLen {
 		return nil, fmt.Errorf("short-vec length must be 0..%d but got: %d", ShortVecMaxLen, n)
 	}
@@ -88,7 +103,7 @@ func (c *bincodeCodec) AppendShortVecLen(dst []byte, n int) ([]byte, error) {
 }
 
 // ShortVecLenSize reports how many bytes AppendShortVecLen would write.
-func (c *bincodeCodec) ShortVecLenSize(n int) (int, error) {
+func (_ *binaryCodec) ShortVecLenSize(n int) (int, error) {
 	if n < 0 || n > ShortVecMaxLen {
 		return 0, fmt.Errorf("short-vec length must be 0..%d but got: %d", ShortVecMaxLen, n)
 	}
@@ -110,7 +125,7 @@ func (c *bincodeCodec) ShortVecLenSize(n int) (int, error) {
 // it needs decodes to the same number but serializes differently, and a
 // transaction whose bytes do not round-trip has a different signature than the
 // one the sender produced.
-func (c *bincodeCodec) ReadShortVecLen(src []byte) (int, int, error) {
+func (c *binaryCodec) ReadShortVecLen(src []byte) (int, int, error) {
 	n, size := 0, 0
 	for {
 		if size >= len(src) {
@@ -145,39 +160,39 @@ func (c *bincodeCodec) ReadShortVecLen(src []byte) (int, int, error) {
 }
 
 // ReadU8 reads a single byte and returns the remaining input.
-func (c *bincodeCodec) ReadU8(src []byte) (uint8, []byte, error) {
+func (_ *binaryCodec) ReadU8(src []byte) (uint8, []byte, error) {
 	if len(src) < 1 {
-		return 0, nil, fmt.Errorf("bincode: need 1 byte for u8 but got: %d", len(src))
+		return 0, nil, fmt.Errorf("binary: need 1 byte for u8 but got: %d", len(src))
 	}
 
 	return src[0], src[1:], nil
 }
 
 // ReadU32 reads a little-endian uint32 and returns the remaining input.
-func (c *bincodeCodec) ReadU32(src []byte) (uint32, []byte, error) {
+func (_ *binaryCodec) ReadU32(src []byte) (uint32, []byte, error) {
 	if len(src) < 4 {
-		return 0, nil, fmt.Errorf("bincode: need 4 bytes for u32 but got: %d", len(src))
+		return 0, nil, fmt.Errorf("binary: need 4 bytes for u32 but got: %d", len(src))
 	}
 
 	return binary.LittleEndian.Uint32(src), src[4:], nil
 }
 
 // ReadU64 reads a little-endian uint64 and returns the remaining input.
-func (c *bincodeCodec) ReadU64(src []byte) (uint64, []byte, error) {
+func (_ *binaryCodec) ReadU64(src []byte) (uint64, []byte, error) {
 	if len(src) < 8 {
-		return 0, nil, fmt.Errorf("bincode: need 8 bytes for u64 but got: %d", len(src))
+		return 0, nil, fmt.Errorf("binary: need 8 bytes for u64 but got: %d", len(src))
 	}
 
 	return binary.LittleEndian.Uint64(src), src[8:], nil
 }
 
 // ReadBytes reads n raw bytes and returns the remaining input.
-func (c *bincodeCodec) ReadBytes(src []byte, n int) ([]byte, []byte, error) {
+func (_ *binaryCodec) ReadBytes(src []byte, n int) ([]byte, []byte, error) {
 	if n < 0 {
-		return nil, nil, fmt.Errorf("bincode: negative read length: %d", n)
+		return nil, nil, fmt.Errorf("binary: negative read length: %d", n)
 	}
 	if len(src) < n {
-		return nil, nil, fmt.Errorf("bincode: need %d bytes but got: %d", n, len(src))
+		return nil, nil, fmt.Errorf("binary: need %d bytes but got: %d", n, len(src))
 	}
 
 	return src[:n], src[n:], nil

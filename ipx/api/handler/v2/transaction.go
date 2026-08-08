@@ -253,11 +253,11 @@ func (h *TransactionHandler) SystemTransferMax(w http.ResponseWriter, r *http.Re
 
 // SystemCreateAccount godoc
 // @Summary      Build a System Program account creation
-// @Description  Funds a new account and sizes its data, leaving it owned by the System Program. The owner is not a request field: only the owning program may debit an account or write its data, so handing a new account to anything other than a program locks its lamports permanently. Accounts owned by another program belong to that program's own endpoints. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning.
+// @Description  Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account owned by a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemCreateAccountRequest  true  "Funder, new account, lamports, and space"
+// @Param        body  body      SystemCreateAccountRequest  true  "Funder, new account, owner, lamports, and space"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemCreateAccountResponse
@@ -286,7 +286,7 @@ func (h *TransactionHandler) SystemCreateAccount(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ix, err := core.System.CreateAccount(req.FromKey(), req.NewAccountKey(), core.System.ID(), req.ToLamports(), req.ToSpace())
+	ix, err := core.System.CreateAccount(req.FromKey(), req.NewAccountKey(), req.OwnerKey(), req.ToLamports(), req.ToSpace())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -318,6 +318,22 @@ func (h *TransactionHandler) SystemCreateAccount(w http.ResponseWriter, r *http.
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
 			"lamports: %d does not meet the %d lamport rent-exemption minimum for %d bytes",
 			req.ToLamports(), newAccountRent, req.ToSpace()))
+		return
+	}
+
+	// Only the owning program may debit an account or write its data, so an
+	// account handed to something that cannot be invoked is locked from the
+	// moment it exists. The System Program is itself executable, so the
+	// ordinary case passes.
+	ownerInfo, err := chain.Cli.AccountInfo(r.Context(), req.OwnerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read owner: %s", err))
+		return
+	}
+	if ownerInfo == nil || !ownerInfo.Executable {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"owner: %s is not an executable program, and an account it owns could never be debited or written",
+			req.OwnerKey()))
 		return
 	}
 
@@ -392,7 +408,7 @@ func (h *TransactionHandler) SystemCreateAccount(w http.ResponseWriter, r *http.
 		return
 	}
 
-	handler.WriteOK(w, NewSystemCreateAccountResponse(tx, raw, messageBytes, core.System.ID(), req.ToLamports(), newAccountRent, req.ToSpace(), fee))
+	handler.WriteOK(w, NewSystemCreateAccountResponse(tx, raw, messageBytes, req.OwnerKey(), req.ToLamports(), newAccountRent, req.ToSpace(), fee))
 }
 
 // SystemAllocate godoc
@@ -659,4 +675,691 @@ func (h *TransactionHandler) SystemAssign(w http.ResponseWriter, r *http.Request
 	}
 
 	handler.WriteOK(w, NewSystemAssignResponse(tx, raw, messageBytes, req.OwnerKey(), fee))
+}
+
+// SystemSeedCreateAccount godoc
+// @Summary      Build an account creation at a seed-derived address
+// @Description  Creates an account at SHA256(base || seed || owner) and hands it to that owner in one instruction, so a program-owned account needs no separate allocate and assign. The owner must be executable, and it changes the address: the same base and seed derive somewhere else for a different owner. The derived account never signs, which is the difference from create-account: nobody holds a secret for it, so base signs in its place and whoever controls base controls every address derived from it. The address is derived rather than accepted, since the runtime recomputes it and rejects a mismatch.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemSeedCreateAccountRequest  true  "Funder, base, seed, owner, lamports, and space"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemSeedCreateAccountResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/seed/create-account [post]
+func (h *TransactionHandler) SystemSeedCreateAccount(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemSeedCreateAccountRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	derived, err := types.CreateWithSeed(req.BaseKey(), req.Seed, req.OwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.CreateAccountWithSeed(req.FromKey(), req.BaseKey(), req.Seed, req.OwnerKey(), req.ToLamports(), req.ToSpace())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	newAccountRent, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), req.ToSpace(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+	if req.ToLamports() < newAccountRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"lamports: %d does not meet the %d lamport rent-exemption minimum for %d bytes",
+			req.ToLamports(), newAccountRent, req.ToSpace()))
+		return
+	}
+
+	// Only the owning program may debit an account or write its data, so an
+	// account handed to something that cannot be invoked is locked from the
+	// moment it exists. The System Program is itself executable, so the
+	// ordinary case passes.
+	ownerInfo, err := chain.Cli.AccountInfo(r.Context(), req.OwnerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read owner: %s", err))
+		return
+	}
+	if ownerInfo == nil || !ownerInfo.Executable {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"owner: %s is not an executable program, and an account it owns could never be debited or written",
+			req.OwnerKey()))
+		return
+	}
+
+	exists, err := chain.Cli.Exists(r.Context(), derived, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to check derived account: %s", err))
+		return
+	}
+	if exists {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"seed: %s already exists, so base and seed together name an account that has been created", derived))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance: %s", err))
+		return
+	}
+
+	spent := req.ToLamports()
+	if req.FromKey().Equal(req.FeePayerKey()) {
+		spent += fee
+	}
+	if balance < spent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: balance %d lamports does not cover %d lamports", balance, spent))
+		return
+	}
+	if remaining := balance - spent; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FromKey(), remaining, minRent))
+		return
+	}
+
+	if !req.FromKey().Equal(req.FeePayerKey()) {
+		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+			return
+		}
+		if feePayerBalance < fee {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+			return
+		}
+		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+			return
+		}
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemSeedCreateAccountResponse(tx, raw, messageBytes, derived, req.OwnerKey(), req.ToLamports(), newAccountRent, req.ToSpace(), fee))
+}
+
+// SystemSeedTransfer godoc
+// @Summary      Build a transfer out of a seed-derived address
+// @Description  Debits SHA256(base || seed || owner) without that account signing, since base signs for it. That is what makes a derived address usable as a holding account: anyone can fund it, and only the holder of base can spend it. The account must still be System-owned for a system transfer to debit it, which is checked before returning.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemSeedTransferRequest  true  "Base, seed, owner, recipient, and amount"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemSeedTransferResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/seed/transfer [post]
+func (h *TransactionHandler) SystemSeedTransfer(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemSeedTransferRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	derived, err := types.CreateWithSeed(req.BaseKey(), req.Seed, req.OwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.TransferWithSeed(req.BaseKey(), req.Seed, req.OwnerKey(), req.ToKey(), req.ToLamports())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), derived, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read derived account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s does not exist", derived))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"seed: %s is owned by %s, and only the owning program may debit an account",
+			derived, info.Owner))
+		return
+	}
+	if info.Lamports < req.ToLamports() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"amount: %s holds %d lamports, short of %d", derived, info.Lamports, req.ToLamports()))
+		return
+	}
+	if remaining := info.Lamports - req.ToLamports(); remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"amount: would leave %s with %d lamports, below the %d lamport rent-exemption minimum",
+			derived, remaining, minRent))
+		return
+	}
+
+	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+		return
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemSeedTransferResponse(tx, raw, messageBytes, derived, req.ToLamports(), fee))
+}
+
+// SystemSeedAllocate godoc
+// @Summary      Build an allocation on a seed-derived address
+// @Description  Reserves data space on SHA256(base || seed || owner) with base signing in the account's place. Allocation still requires the account to be System-owned, so this is the step taken before assigning it away, on an address derived for its eventual owner from the start. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemSeedAllocateRequest  true  "Base, seed, owner, and space"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemSeedAllocateResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/seed/allocate [post]
+func (h *TransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemSeedAllocateRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	derived, err := types.CreateWithSeed(req.BaseKey(), req.Seed, req.OwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.AllocateWithSeed(req.BaseKey(), req.Seed, req.OwnerKey(), req.ToSpace())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), derived, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read derived account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s does not exist", derived))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"seed: %s is owned by %s, and only the owning program may size an account",
+			derived, info.Owner))
+		return
+	}
+	if info.Space != 0 {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"seed: %s is already allocated %d bytes", derived, info.Space))
+		return
+	}
+
+	rentExempt, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), req.ToSpace(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+	if info.Lamports < rentExempt {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"space: %s holds %d lamports, below the %d lamport rent-exemption minimum for %d bytes",
+			derived, info.Lamports, rentExempt, req.ToSpace()))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+		return
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemSeedAllocateResponse(tx, raw, messageBytes, derived, req.ToSpace(), rentExempt, fee))
+}
+
+// SystemSeedAssign godoc
+// @Summary      Build an ownership assignment on a seed-derived address
+// @Description  Hands SHA256(base || seed || owner) to that same owner. There is no separate new-owner field, because one owner does both jobs: it is what the address is derived from and what the account is assigned to, so an account can only be handed to the program its own address already encodes. The owner must be executable, since assigning to a plain address locks the account permanently.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemSeedAssignRequest  true  "Base, seed, and owner"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemSeedAssignResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/seed/assign [post]
+func (h *TransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemSeedAssignRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	derived, err := types.CreateWithSeed(req.BaseKey(), req.Seed, req.OwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.AssignWithSeed(req.BaseKey(), req.Seed, req.OwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	ownerInfo, err := chain.Cli.AccountInfo(r.Context(), req.OwnerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read owner: %s", err))
+		return
+	}
+	if ownerInfo == nil || !ownerInfo.Executable {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"owner: %s is not an executable program, and assigning to it would lock the account permanently",
+			req.OwnerKey()))
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), derived, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read derived account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s does not exist", derived))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"seed: %s is owned by %s, and only the owning program may reassign an account",
+			derived, info.Owner))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+		return
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemSeedAssignResponse(tx, raw, messageBytes, derived, req.OwnerKey(), fee))
+}
+
+// SystemSeedTransferMax godoc
+// @Summary      Build a transfer of a seed-derived address's entire balance
+// @Description  Sends everything SHA256(base || seed || owner) holds. The amount is the whole balance with nothing held back, because a derived address can never pay the fee: a fee payer has to sign, and this account cannot. That also means no probe is needed to price the message first, since the amount does not depend on the fee here the way it does for a plain transfer. Emptying the account lets the runtime reclaim it.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemSeedTransferMaxRequest  true  "Base, seed, owner, and recipient"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemSeedTransferMaxResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/seed/transfer/max [post]
+func (h *TransactionHandler) SystemSeedTransferMax(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemSeedTransferMaxRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	derived, err := types.CreateWithSeed(req.BaseKey(), req.Seed, req.OwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), derived, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read derived account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s does not exist", derived))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"seed: %s is owned by %s, and only the owning program may debit an account",
+			derived, info.Owner))
+		return
+	}
+	if info.Lamports == 0 {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("amount: %s has no balance", derived))
+		return
+	}
+
+	// The whole balance goes, with no fee subtracted, because the fee comes
+	// from an account that can sign and this one cannot.
+	amount := info.Lamports
+
+	ix, err := core.System.TransferWithSeed(req.BaseKey(), req.Seed, req.OwnerKey(), req.ToKey(), amount)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+		return
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemSeedTransferMaxResponse(tx, raw, messageBytes, derived, amount, fee))
 }

@@ -250,3 +250,147 @@ func (h *TransactionHandler) SystemTransferMax(w http.ResponseWriter, r *http.Re
 
 	handler.WriteOK(w, NewSystemTransferMaxResponse(tx, raw, messageBytes, amount, fee))
 }
+
+// SystemCreateAccount godoc
+// @Summary      Build a System Program account creation
+// @Description  Funds a new account and sizes its data, leaving it owned by the System Program. The owner is not a request field: only the owning program may debit an account or write its data, so handing a new account to anything other than a program locks its lamports permanently. Accounts owned by another program belong to that program's own endpoints. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemCreateAccountRequest  true  "Funder, new account, lamports, and space"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemCreateAccountResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/create-account [post]
+func (h *TransactionHandler) SystemCreateAccount(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemCreateAccountRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.CreateAccount(req.FromKey(), req.NewAccountKey(), core.System.ID(), req.ToLamports(), req.ToSpace())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	// The new account has to reach the rent-exempt minimum for its own size,
+	// which is a different number from the one a plain wallet must hold.
+	newAccountRent, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), req.ToSpace(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+	if req.ToLamports() < newAccountRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"lamports: %d does not meet the %d lamport rent-exemption minimum for %d bytes",
+			req.ToLamports(), newAccountRent, req.ToSpace()))
+		return
+	}
+
+	// Creating an account that already exists fails, and unlike a transfer to
+	// an unfunded address there is no reading of it as intent.
+	exists, err := chain.Cli.Exists(r.Context(), req.NewAccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to check new account: %s", err))
+		return
+	}
+	if exists {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("new_account: %s already exists", req.NewAccountKey()))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance: %s", err))
+		return
+	}
+
+	spent := req.ToLamports()
+	if req.FromKey().Equal(req.FeePayerKey()) {
+		spent += fee
+	}
+	if balance < spent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: balance %d lamports does not cover %d lamports", balance, spent))
+		return
+	}
+	if remaining := balance - spent; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FromKey(), remaining, minRent))
+		return
+	}
+
+	if !req.FromKey().Equal(req.FeePayerKey()) {
+		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+			return
+		}
+		if feePayerBalance < fee {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+			return
+		}
+		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+			return
+		}
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemCreateAccountResponse(tx, raw, messageBytes, core.System.ID(), req.ToLamports(), newAccountRent, req.ToSpace(), fee))
+}

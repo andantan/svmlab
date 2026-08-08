@@ -1,5 +1,22 @@
 basePath: /
 definitions:
+  misc.AccountOwnerRequest:
+    properties:
+      public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  misc.AccountOwnerResponse:
+    properties:
+      exists:
+        type: boolean
+      owner:
+        type: string
+      public_key:
+        type: string
+      system_owned:
+        type: boolean
+    type: object
   misc.AccountRequest:
     properties:
       public_key:
@@ -81,6 +98,13 @@ definitions:
       valid:
         type: boolean
     type: object
+  misc.GenerateKeypairResponse:
+    properties:
+      private_key:
+        type: string
+      public_key:
+        type: string
+    type: object
   misc.GenesisHashResponse:
     properties:
       configured:
@@ -102,10 +126,70 @@ definitions:
         type: string
       params: {}
     type: object
-  misc.RentExemptionResponse:
+  misc.RentExemptionMintResponse:
     properties:
-      account_type:
+      lamports:
         type: string
+      sol:
+        type: string
+      space:
+        type: integer
+    type: object
+  misc.RentExemptionPublicKeyResponse:
+    properties:
+      lamports:
+        type: string
+      public_key:
+        type: string
+      sol:
+        type: string
+      space:
+        type: integer
+    type: object
+  misc.RentExemptionSpaceRequest:
+    properties:
+      space:
+        example: "165"
+        type: string
+    type: object
+  misc.RentExemptionSpaceResponse:
+    properties:
+      lamports:
+        type: string
+      sol:
+        type: string
+      space:
+        type: integer
+    type: object
+  misc.RentExemptionStakeResponse:
+    properties:
+      lamports:
+        type: string
+      sol:
+        type: string
+      space:
+        type: integer
+    type: object
+  misc.RentExemptionSystemResponse:
+    properties:
+      lamports:
+        type: string
+      sol:
+        type: string
+      space:
+        type: integer
+    type: object
+  misc.RentExemptionTokenResponse:
+    properties:
+      lamports:
+        type: string
+      sol:
+        type: string
+      space:
+        type: integer
+    type: object
+  misc.RentExemptionVoteResponse:
+    properties:
       lamports:
         type: string
       sol:
@@ -140,6 +224,10 @@ definitions:
     type: object
   misc.SignTransactionRequest:
     properties:
+      private_keys:
+        items:
+          type: string
+        type: array
       public_keys:
         example:
         - EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -298,6 +386,58 @@ definitions:
         type: string
       program_id:
         example: "11111111111111111111111111111111"
+        type: string
+    type: object
+  v2.SystemCreateAccountRequest:
+    properties:
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      from:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      lamports:
+        example: "890880"
+        type: string
+      new_account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+      space:
+        example: "0"
+        type: string
+    type: object
+  v2.SystemCreateAccountResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        type: string
+      lamports:
+        type: string
+      lamports_sol:
+        type: string
+      message:
+        type: string
+      owner:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt:
+        description: |-
+          RentExempt is the floor the requested space had to clear. It is
+          reported because the server had to resolve it to validate lamports
+          anyway, and it is what a caller needs to know to fund the next one
+          without guessing.
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
         type: string
     type: object
   v2.SystemTransferMaxRequest:
@@ -462,6 +602,47 @@ paths:
               type: string
             type: object
       summary: Read an account's on-chain state
+      tags:
+      - rpc
+  /svm/rpc/account/owner:
+    post:
+      consumes:
+      - application/json
+      description: Only the owning program may debit an account or write its data.
+        An account owned by anything other than the System Program cannot be moved
+        with a system transfer, and one owned by a non-executable address cannot be
+        moved at all, so system_owned answers whether the balance is still reachable.
+      parameters:
+      - description: Account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.AccountOwnerRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.AccountOwnerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read who owns an account
       tags:
       - rpc
   /svm/rpc/airdrop:
@@ -730,7 +911,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/misc.RentExemptionResponse'
+            $ref: '#/definitions/misc.RentExemptionMintResponse'
         "400":
           description: Bad Request
           schema:
@@ -744,9 +925,9 @@ paths:
     post:
       consumes:
       - application/json
-      description: Reads the size from a live account, which covers layouts none of
-        the named endpoints describe. Pass a raw byte count to the getMinimumBalanceForRentExemption
-        method through the raw endpoint instead.
+      description: Reads the size from a live account, so the caller does not have
+        to know the layout. Pass a byte count to the space endpoint instead when the
+        account does not exist yet.
       parameters:
       - description: Account
         in: body
@@ -770,7 +951,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/misc.RentExemptionResponse'
+            $ref: '#/definitions/misc.RentExemptionPublicKeyResponse'
         "400":
           description: Bad Request
           schema:
@@ -778,6 +959,45 @@ paths:
               type: string
             type: object
       summary: Minimum balance for an account of the same size as an existing one
+      tags:
+      - rpc
+  /svm/rpc/rent-exemption/space:
+    post:
+      consumes:
+      - application/json
+      description: Takes a byte count rather than an account kind, which covers layouts
+        none of the named endpoints describe and sizes no live account holds yet.
+      parameters:
+      - description: Space
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.RentExemptionSpaceRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionSpaceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for a size given directly
       tags:
       - rpc
   /svm/rpc/rent-exemption/stake:
@@ -799,7 +1019,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/misc.RentExemptionResponse'
+            $ref: '#/definitions/misc.RentExemptionStakeResponse'
         "400":
           description: Bad Request
           schema:
@@ -831,7 +1051,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/misc.RentExemptionResponse'
+            $ref: '#/definitions/misc.RentExemptionSystemResponse'
         "400":
           description: Bad Request
           schema:
@@ -862,7 +1082,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/misc.RentExemptionResponse'
+            $ref: '#/definitions/misc.RentExemptionTokenResponse'
         "400":
           description: Bad Request
           schema:
@@ -891,7 +1111,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/misc.RentExemptionResponse'
+            $ref: '#/definitions/misc.RentExemptionVoteResponse'
         "400":
           description: Bad Request
           schema:
@@ -1126,12 +1346,15 @@ paths:
       consumes:
       - application/json
       description: Signs the message inside a serialized transaction and writes each
-        signature into its signer's slot. The message is never rebuilt, so the bytes
-        a caller signs are exactly the bytes they were given. Signers are named by
-        public key and resolved from config.yaml. Keys may be named across several
-        calls, so co-signers can complete a transaction one at a time.
+        signature into its signer's slot, found from the key rather than from the
+        order given. The message is never rebuilt, so the bytes a caller signs are
+        exactly the bytes they were given. public_keys are resolved from config.yaml
+        and private_keys carry the secret directly, for a signer such as a newly created
+        account that is not registered; the two may be mixed in one call. Keys may
+        also be named across several calls, so co-signers can complete a transaction
+        one at a time.
       parameters:
-      - description: Transaction and signer public keys
+      - description: Transaction and its signers
         in: body
         name: body
         required: true
@@ -1203,6 +1426,40 @@ paths:
       summary: Verify a signature
       tags:
       - sign
+  /svm/tool/generate/keypair:
+    post:
+      description: 'Returns a new key pair in the base58 form config.yaml expects,
+        so it can be added as a keys entry and used as a signer. Nothing is written
+        or funded: the address does not exist on any cluster until a transaction creates
+        it, which is what makes a fresh pair usable as the new_account of a create-account
+        build.'
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.GenerateKeypairResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Generate an ed25519 key pair
+      tags:
+      - tool
   /svm/v1/transaction/build:
     post:
       consumes:
@@ -1241,6 +1498,52 @@ paths:
               type: string
             type: object
       summary: Build an unsigned transaction
+      tags:
+      - transaction
+  /svm/v2/transaction/system/create-account:
+    post:
+      consumes:
+      - application/json
+      description: 'Funds a new account and sizes its data, leaving it owned by the
+        System Program. The owner is not a request field: only the owning program
+        may debit an account or write its data, so handing a new account to anything
+        other than a program locks its lamports permanently. Accounts owned by another
+        program belong to that program''s own endpoints. The new account signs alongside
+        the funder, which is what has no EVM counterpart: an address does not exist
+        until someone holding its private key authorizes its creation. Lamports must
+        reach the rent-exempt minimum for the requested space, which this checks before
+        returning.'
+      parameters:
+      - description: Funder, new account, lamports, and space
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemCreateAccountRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemCreateAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a System Program account creation
       tags:
       - transaction
   /svm/v2/transaction/system/transfer:

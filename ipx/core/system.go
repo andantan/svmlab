@@ -22,6 +22,10 @@ const (
 // SystemAccountSpace is a plain wallet: lamports and no data.
 const SystemAccountSpace uint64 = 0
 
+// MaxPermittedDataLength is the largest data size an account may be created
+// with, which the runtime enforces rather than merely charging rent for.
+const MaxPermittedDataLength uint64 = 10 << 20
+
 // system builds instructions for the program that owns every account not yet
 // assigned elsewhere.
 //
@@ -42,6 +46,12 @@ var System = new(system)
 // Init records the System Program id, read from config at startup.
 func (s *system) Init(id *types.PublicKey) {
 	s.id = id
+}
+
+// ID is the System Program id, which callers need when it is not the program
+// being invoked but the value being passed, as the owner of a new account is.
+func (s *system) ID() *types.PublicKey {
+	return s.id
 }
 
 // Transfer moves lamports from one account to another.
@@ -99,6 +109,9 @@ func (s *system) CreateAccount(from, newAccount, owner *types.PublicKey, lamport
 	if owner.IsNil() {
 		return nil, fmt.Errorf("system create account: owner is required")
 	}
+	if space > MaxPermittedDataLength {
+		return nil, fmt.Errorf("system create account: %d bytes exceeds the %d byte limit", space, MaxPermittedDataLength)
+	}
 
 	data := codec.Bincode.AppendU32(nil, SystemInstructionCreateAccount)
 	data = codec.Bincode.AppendU64(data, lamports)
@@ -119,6 +132,9 @@ func (s *system) Allocate(account *types.PublicKey, space uint64) (*types.Instru
 	}
 	if account.IsNil() {
 		return nil, fmt.Errorf("system allocate: account is required")
+	}
+	if space > MaxPermittedDataLength {
+		return nil, fmt.Errorf("system allocate: %d bytes exceeds the %d byte limit", space, MaxPermittedDataLength)
 	}
 
 	data := codec.Bincode.AppendU32(nil, SystemInstructionAllocate)

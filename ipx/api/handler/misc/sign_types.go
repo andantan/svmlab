@@ -11,17 +11,23 @@ import (
 
 // SignTransactionRequest names the signers for a serialized transaction.
 //
-// Signers are named by public key and resolved against config.yaml, so no
-// secret travels in a request body or turns up in an access log. It also means
-// the server can only sign for accounts it was configured with.
+// Signers come from either side and may be mixed in one call. PublicKeys are
+// resolved against config.yaml, so no secret travels in the body and the
+// server signs only for accounts it was configured with. PrivateKeys carry the
+// secret directly, which is what an account created in the same flow needs:
+// its key authorizes its own creation once and is not worth registering.
 //
-// Keys may be named across several calls, since each fills only its own slot,
-// which is how a transaction moves between co-signers.
+// Neither list is positional. A slot is found from the key itself, since the
+// serialized message lists its signers in slot order, so order here is free
+// and keys may be named across several calls as a transaction moves between
+// co-signers.
 type SignTransactionRequest struct {
 	Transaction string   `json:"transaction"`
 	PublicKeys  []string `json:"public_keys" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	PrivateKeys []string `json:"private_keys"`
 
-	tx *types.Transaction
+	tx          *types.Transaction
+	privateKeys []*types.PrivateKey
 }
 
 func (r *SignTransactionRequest) ValidateRequest() error {
@@ -33,13 +39,21 @@ func (r *SignTransactionRequest) ValidateRequest() error {
 		return errors.New("transaction: " + err.Error())
 	}
 
-	if len(r.PublicKeys) == 0 {
-		return errors.New("public_keys: at least one is required")
+	if len(r.PublicKeys) == 0 && len(r.PrivateKeys) == 0 {
+		return errors.New("public_keys or private_keys: at least one key is required")
 	}
+
 	for i := range r.PublicKeys {
 		r.PublicKeys[i] = strings.TrimSpace(r.PublicKeys[i])
 		if r.PublicKeys[i] == "" {
 			return fmt.Errorf("public_keys[%d]: must not be empty", i)
+		}
+	}
+
+	r.privateKeys = make([]*types.PrivateKey, len(r.PrivateKeys))
+	for i := range r.PrivateKeys {
+		if r.privateKeys[i], err = types.NewPrivateKeyFromBase58(strings.TrimSpace(r.PrivateKeys[i])); err != nil {
+			return fmt.Errorf("private_keys[%d]: %s", i, err)
 		}
 	}
 
@@ -48,6 +62,10 @@ func (r *SignTransactionRequest) ValidateRequest() error {
 
 func (r *SignTransactionRequest) ToTransaction() *types.Transaction {
 	return r.tx
+}
+
+func (r *SignTransactionRequest) ToPrivateKeys() []*types.PrivateKey {
+	return r.privateKeys
 }
 
 // SignTransactionResponse reports the signed bytes and which slots are filled.

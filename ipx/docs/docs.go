@@ -130,6 +130,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/rpc/account/owner": {
+            "post": {
+                "description": "Only the owning program may debit an account or write its data. An account owned by anything other than the System Program cannot be moved with a system transfer, and one owned by a non-executable address cannot be moved at all, so system_owned answers whether the balance is still reachable.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read who owns an account",
+                "parameters": [
+                    {
+                        "description": "Account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.AccountOwnerRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.AccountOwnerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/rpc/airdrop": {
             "post": {
                 "consumes": [
@@ -519,7 +576,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                            "$ref": "#/definitions/misc.RentExemptionMintResponse"
                         }
                     },
                     "400": {
@@ -536,7 +593,7 @@ const docTemplate = `{
         },
         "/svm/rpc/rent-exemption/public-key": {
             "post": {
-                "description": "Reads the size from a live account, which covers layouts none of the named endpoints describe. Pass a raw byte count to the getMinimumBalanceForRentExemption method through the raw endpoint instead.",
+                "description": "Reads the size from a live account, so the caller does not have to know the layout. Pass a byte count to the space endpoint instead when the account does not exist yet.",
                 "consumes": [
                     "application/json"
                 ],
@@ -576,7 +633,64 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                            "$ref": "#/definitions/misc.RentExemptionPublicKeyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/rent-exemption/space": {
+            "post": {
+                "description": "Takes a byte count rather than an account kind, which covers layouts none of the named endpoints describe and sizes no live account holds yet.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Minimum balance for a size given directly",
+                "parameters": [
+                    {
+                        "description": "Space",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionSpaceRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionSpaceResponse"
                         }
                     },
                     "400": {
@@ -620,7 +734,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                            "$ref": "#/definitions/misc.RentExemptionStakeResponse"
                         }
                     },
                     "400": {
@@ -665,7 +779,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                            "$ref": "#/definitions/misc.RentExemptionSystemResponse"
                         }
                     },
                     "400": {
@@ -710,7 +824,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                            "$ref": "#/definitions/misc.RentExemptionTokenResponse"
                         }
                     },
                     "400": {
@@ -754,7 +868,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionResponse"
+                            "$ref": "#/definitions/misc.RentExemptionVoteResponse"
                         }
                     },
                     "400": {
@@ -1087,7 +1201,7 @@ const docTemplate = `{
         },
         "/svm/sign/transaction": {
             "post": {
-                "description": "Signs the message inside a serialized transaction and writes each signature into its signer's slot. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. Signers are named by public key and resolved from config.yaml. Keys may be named across several calls, so co-signers can complete a transaction one at a time.",
+                "description": "Signs the message inside a serialized transaction and writes each signature into its signer's slot, found from the key rather than from the order given. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. public_keys are resolved from config.yaml and private_keys carry the secret directly, for a signer such as a newly created account that is not registered; the two may be mixed in one call. Keys may also be named across several calls, so co-signers can complete a transaction one at a time.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1100,7 +1214,7 @@ const docTemplate = `{
                 "summary": "Sign a serialized transaction",
                 "parameters": [
                     {
-                        "description": "Transaction and signer public keys",
+                        "description": "Transaction and its signers",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1199,6 +1313,51 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/tool/generate/keypair": {
+            "post": {
+                "description": "Returns a new key pair in the base58 form config.yaml expects, so it can be added as a keys entry and used as a signer. Nothing is written or funded: the address does not exist on any cluster until a transaction creates it, which is what makes a fresh pair usable as the new_account of a create-account build.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool"
+                ],
+                "summary": "Generate an ed25519 key pair",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.GenerateKeypairResponse"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v1/transaction/build": {
             "post": {
                 "description": "Compiles instructions into a message and returns the unsigned transaction, the message bytes every signer signs, and the account ordering the compilation produced",
@@ -1242,6 +1401,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v1.BuildTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/system/create-account": {
+            "post": {
+                "description": "Funds a new account and sizes its data, leaving it owned by the System Program. The owner is not a request field: only the owning program may debit an account or write its data, so handing a new account to anything other than a program locks its lamports permanently. Accounts owned by another program belong to that program's own endpoints. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Build a System Program account creation",
+                "parameters": [
+                    {
+                        "description": "Funder, new account, lamports, and space",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemCreateAccountRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemCreateAccountResponse"
                         }
                     },
                     "400": {
@@ -1372,6 +1588,32 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "misc.AccountOwnerRequest": {
+            "type": "object",
+            "properties": {
+                "public_key": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "misc.AccountOwnerResponse": {
+            "type": "object",
+            "properties": {
+                "exists": {
+                    "type": "boolean"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                },
+                "system_owned": {
+                    "type": "boolean"
+                }
+            }
+        },
         "misc.AccountRequest": {
             "type": "object",
             "properties": {
@@ -1497,6 +1739,17 @@ const docTemplate = `{
                 }
             }
         },
+        "misc.GenerateKeypairResponse": {
+            "type": "object",
+            "properties": {
+                "private_key": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                }
+            }
+        },
         "misc.GenesisHashResponse": {
             "type": "object",
             "properties": {
@@ -1529,12 +1782,105 @@ const docTemplate = `{
                 "params": {}
             }
         },
-        "misc.RentExemptionResponse": {
+        "misc.RentExemptionMintResponse": {
             "type": "object",
             "properties": {
-                "account_type": {
+                "lamports": {
                     "type": "string"
                 },
+                "sol": {
+                    "type": "string"
+                },
+                "space": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.RentExemptionPublicKeyResponse": {
+            "type": "object",
+            "properties": {
+                "lamports": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "space": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.RentExemptionSpaceRequest": {
+            "type": "object",
+            "properties": {
+                "space": {
+                    "type": "string",
+                    "example": "165"
+                }
+            }
+        },
+        "misc.RentExemptionSpaceResponse": {
+            "type": "object",
+            "properties": {
+                "lamports": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "space": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.RentExemptionStakeResponse": {
+            "type": "object",
+            "properties": {
+                "lamports": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "space": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.RentExemptionSystemResponse": {
+            "type": "object",
+            "properties": {
+                "lamports": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "space": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.RentExemptionTokenResponse": {
+            "type": "object",
+            "properties": {
+                "lamports": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "space": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.RentExemptionVoteResponse": {
+            "type": "object",
+            "properties": {
                 "lamports": {
                     "type": "string"
                 },
@@ -1588,6 +1934,12 @@ const docTemplate = `{
         "misc.SignTransactionRequest": {
             "type": "object",
             "properties": {
+                "private_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "public_keys": {
                     "type": "array",
                     "items": {
@@ -1823,6 +2175,76 @@ const docTemplate = `{
                 "program_id": {
                     "type": "string",
                     "example": "11111111111111111111111111111111"
+                }
+            }
+        },
+        "v2.SystemCreateAccountRequest": {
+            "type": "object",
+            "properties": {
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "from": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "lamports": {
+                    "type": "string",
+                    "example": "890880"
+                },
+                "new_account": {
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                },
+                "space": {
+                    "type": "string",
+                    "example": "0"
+                }
+            }
+        },
+        "v2.SystemCreateAccountResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "lamports": {
+                    "type": "string"
+                },
+                "lamports_sol": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "rent_exempt": {
+                    "description": "RentExempt is the floor the requested space had to clear. It is\nreported because the server had to resolve it to validate lamports\nanyway, and it is what a caller needs to know to fund the next one\nwithout guessing.",
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "space": {
+                    "type": "integer"
+                },
+                "transaction": {
+                    "type": "string"
                 }
             }
         },

@@ -21,11 +21,11 @@ func NewSignHandler(cfg *config.Config) *SignHandler {
 
 // SignTransaction godoc
 // @Summary      Sign a serialized transaction
-// @Description  Signs the message inside a serialized transaction and writes each signature into its signer's slot. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. Signers are named by public key and resolved from config.yaml. Keys may be named across several calls, so co-signers can complete a transaction one at a time.
+// @Description  Signs the message inside a serialized transaction and writes each signature into its signer's slot, found from the key rather than from the order given. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. public_keys are resolved from config.yaml and private_keys carry the secret directly, for a signer such as a newly created account that is not registered; the two may be mixed in one call. Keys may also be named across several calls, so co-signers can complete a transaction one at a time.
 // @Tags         sign
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SignTransactionRequest  true  "Transaction and signer public keys"
+// @Param        body  body      SignTransactionRequest  true  "Transaction and its signers"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SignTransactionResponse
@@ -42,7 +42,7 @@ func (h *SignHandler) SignTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	privs := make([]*types.PrivateKey, len(req.PublicKeys))
+	privs := make([]*types.PrivateKey, 0, len(req.PublicKeys)+len(req.PrivateKeys))
 	for i, pub := range req.PublicKeys {
 		entry, err := h.cfg.KeyByPublicKey(pub)
 		if err != nil {
@@ -55,8 +55,9 @@ func (h *SignHandler) SignTransaction(w http.ResponseWriter, r *http.Request) {
 			handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("public_keys[%d]: failed to derive key: %s", i, err))
 			return
 		}
-		privs[i] = key.PrivateKey
+		privs = append(privs, key.PrivateKey)
 	}
+	privs = append(privs, req.ToPrivateKeys()...)
 
 	tx := req.ToTransaction()
 	if err := core.Signer.SignTransaction(tx, privs...); err != nil {

@@ -6,7 +6,6 @@ import (
 	"net/http"
 
 	"github.com/andantan/svmlab/api/handler"
-	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/internal/rpc"
 )
 
@@ -131,6 +130,43 @@ func (h *RPCHandler) Account(w http.ResponseWriter, r *http.Request) {
 	handler.WriteOK(w, NewAccountResponse(req.ToPublicKey(), info))
 }
 
+// AccountOwner godoc
+// @Summary      Read who owns an account
+// @Description  Only the owning program may debit an account or write its data. An account owned by anything other than the System Program cannot be moved with a system transfer, and one owned by a non-executable address cannot be moved at all, so system_owned answers whether the balance is still reachable.
+// @Tags         rpc
+// @Accept       json
+// @Produce      json
+// @Param        body  body      AccountOwnerRequest  true  "Account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  AccountOwnerResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/rpc/account/owner [post]
+func (h *RPCHandler) AccountOwner(w http.ResponseWriter, r *http.Request) {
+	req := new(AccountOwnerRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.ToPublicKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewAccountOwnerResponse(req.ToPublicKey(), info))
+}
+
 // Slot godoc
 // @Summary      Read the current slot
 // @Tags         rpc
@@ -236,7 +272,7 @@ func (h *RPCHandler) GenesisHash(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Blockhash godoc
+// BlockHash godoc
 // @Summary      Read a recent blockhash
 // @Description  Returns the blockhash to build against and the block height past which it is rejected, so expiry can be checked rather than guessed. Fetched at finalized commitment, since a blockhash from a less settled view risks belonging to a fork.
 // @Tags         rpc
@@ -246,7 +282,7 @@ func (h *RPCHandler) GenesisHash(w http.ResponseWriter, r *http.Request) {
 // @Success      200   {object}  BlockhashResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/blockhash [post]
-func (h *RPCHandler) Blockhash(w http.ResponseWriter, r *http.Request) {
+func (h *RPCHandler) BlockHash(w http.ResponseWriter, r *http.Request) {
 	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, err.Error())
@@ -381,28 +417,6 @@ func (h *RPCHandler) Fee(w http.ResponseWriter, r *http.Request) {
 	handler.WriteOK(w, NewFeeResponse(fee, valid))
 }
 
-// rentExemption answers the minimum balance for a size, shared by the typed
-// endpoints below.
-//
-// Commitment is fixed rather than taken from a request: the answer is a
-// protocol constant derived from the requested size, not live account state,
-// so it does not vary with how settled the view of the cluster is.
-func (h *RPCHandler) rentExemption(w http.ResponseWriter, r *http.Request, accountType string, space uint64) {
-	chain, err := rpc.ChainFromContext(r.Context())
-	if err != nil {
-		handler.WriteError(w, http.StatusInternalServerError, err.Error())
-		return
-	}
-
-	lamports, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), space, rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, err.Error())
-		return
-	}
-
-	handler.WriteOK(w, NewRentExemptionResponse(accountType, space, lamports))
-}
-
 // RentExemptionSystem godoc
 // @Summary      Minimum balance for a plain wallet
 // @Description  A wallet holds lamports and no data, so this is the floor any account must clear. It is also what a transfer to a previously unused address has to meet, since the transfer creates the account.
@@ -410,11 +424,23 @@ func (h *RPCHandler) rentExemption(w http.ResponseWriter, r *http.Request, accou
 // @Produce      json
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
-// @Success      200   {object}  RentExemptionResponse
+// @Success      200   {object}  RentExemptionSystemResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/system [post]
 func (h *RPCHandler) RentExemptionSystem(w http.ResponseWriter, r *http.Request) {
-	h.rentExemption(w, r, "system", core.SystemAccountSpace)
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lamports, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewRentExemptionSystemResponse(lamports))
 }
 
 // RentExemptionMint godoc
@@ -423,11 +449,23 @@ func (h *RPCHandler) RentExemptionSystem(w http.ResponseWriter, r *http.Request)
 // @Produce      json
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
-// @Success      200   {object}  RentExemptionResponse
+// @Success      200   {object}  RentExemptionMintResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/mint [post]
 func (h *RPCHandler) RentExemptionMint(w http.ResponseWriter, r *http.Request) {
-	h.rentExemption(w, r, "mint", core.MintSpace)
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lamports, err := chain.Cli.MinimumBalanceForRentExemptionMint(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewRentExemptionMintResponse(lamports))
 }
 
 // RentExemptionToken godoc
@@ -437,11 +475,23 @@ func (h *RPCHandler) RentExemptionMint(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
-// @Success      200   {object}  RentExemptionResponse
+// @Success      200   {object}  RentExemptionTokenResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/token [post]
 func (h *RPCHandler) RentExemptionToken(w http.ResponseWriter, r *http.Request) {
-	h.rentExemption(w, r, "token", core.TokenAccountSpace)
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lamports, err := chain.Cli.MinimumBalanceForRentExemptionToken(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewRentExemptionTokenResponse(lamports))
 }
 
 // RentExemptionStake godoc
@@ -450,11 +500,23 @@ func (h *RPCHandler) RentExemptionToken(w http.ResponseWriter, r *http.Request) 
 // @Produce      json
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
-// @Success      200   {object}  RentExemptionResponse
+// @Success      200   {object}  RentExemptionStakeResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/stake [post]
 func (h *RPCHandler) RentExemptionStake(w http.ResponseWriter, r *http.Request) {
-	h.rentExemption(w, r, "stake", core.StakeAccountSpace)
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lamports, err := chain.Cli.MinimumBalanceForRentExemptionStake(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewRentExemptionStakeResponse(lamports))
 }
 
 // RentExemptionVote godoc
@@ -463,23 +525,73 @@ func (h *RPCHandler) RentExemptionStake(w http.ResponseWriter, r *http.Request) 
 // @Produce      json
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
-// @Success      200   {object}  RentExemptionResponse
+// @Success      200   {object}  RentExemptionVoteResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/vote [post]
 func (h *RPCHandler) RentExemptionVote(w http.ResponseWriter, r *http.Request) {
-	h.rentExemption(w, r, "vote", core.VoteAccountSpace)
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lamports, err := chain.Cli.MinimumBalanceForRentExemptionVote(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewRentExemptionVoteResponse(lamports))
+}
+
+// RentExemptionSpace godoc
+// @Summary      Minimum balance for a size given directly
+// @Description  Takes a byte count rather than an account kind, which covers layouts none of the named endpoints describe and sizes no live account holds yet.
+// @Tags         rpc
+// @Accept       json
+// @Produce      json
+// @Param        body  body      RentExemptionSpaceRequest  true  "Space"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  RentExemptionSpaceResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/rpc/rent-exemption/space [post]
+func (h *RPCHandler) RentExemptionSpace(w http.ResponseWriter, r *http.Request) {
+	req := new(RentExemptionSpaceRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lamports, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), req.ToSpace(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewRentExemptionSpaceResponse(req.ToSpace(), lamports))
 }
 
 // RentExemptionPublicKey godoc
 // @Summary      Minimum balance for an account of the same size as an existing one
-// @Description  Reads the size from a live account, which covers layouts none of the named endpoints describe. Pass a raw byte count to the getMinimumBalanceForRentExemption method through the raw endpoint instead.
+// @Description  Reads the size from a live account, so the caller does not have to know the layout. Pass a byte count to the space endpoint instead when the account does not exist yet.
 // @Tags         rpc
 // @Accept       json
 // @Produce      json
 // @Param        body  body      AccountRequest  true  "Account"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
-// @Success      200   {object}  RentExemptionResponse
+// @Success      200   {object}  RentExemptionPublicKeyResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/public-key [post]
 func (h *RPCHandler) RentExemptionPublicKey(w http.ResponseWriter, r *http.Request) {
@@ -518,7 +630,7 @@ func (h *RPCHandler) RentExemptionPublicKey(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	handler.WriteOK(w, NewRentExemptionResponse("", info.Space, lamports))
+	handler.WriteOK(w, NewRentExemptionPublicKeyResponse(req.ToPublicKey(), info.Space, lamports))
 }
 
 // Airdrop godoc

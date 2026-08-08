@@ -3,9 +3,11 @@ package v2
 import (
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
+	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/core/types"
 )
 
@@ -178,6 +180,123 @@ func NewSystemTransferMaxResponse(tx *types.Transaction, raw, message []byte, am
 		Signers:         signers,
 		Amount:          strconv.FormatUint(amount, 10),
 		AmountSOL:       types.LamportsToSol(amount),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+type SystemCreateAccountRequest struct {
+	From       string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	NewAccount string `json:"new_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	Lamports   string `json:"lamports" example:"890880"`
+	Space      string `json:"space" example:"0"`
+	FeePayer   string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	from       *types.PublicKey
+	newAccount *types.PublicKey
+	feePayer   *types.PublicKey
+	lamports   uint64
+	space      uint64
+}
+
+func (r *SystemCreateAccountRequest) ValidateRequest() error {
+	var err error
+	if r.from, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
+		return errors.New("from: " + err.Error())
+	}
+	if r.newAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewAccount)); err != nil {
+		return errors.New("new_account: " + err.Error())
+	}
+	if r.from.Equal(r.newAccount) {
+		return errors.New("from and new_account are the same account")
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	lamports := strings.TrimSpace(r.Lamports)
+	if lamports == "" {
+		return errors.New("lamports is required")
+	}
+	if r.lamports, err = strconv.ParseUint(lamports, 10, 64); err != nil {
+		return errors.New("lamports: must be a decimal lamport count")
+	}
+
+	space := strings.TrimSpace(r.Space)
+	if space == "" {
+		return errors.New("space is required")
+	}
+	if r.space, err = strconv.ParseUint(space, 10, 64); err != nil {
+		return errors.New("space: must be a decimal byte count")
+	}
+	if r.space > core.MaxPermittedDataLength {
+		return fmt.Errorf("space: %d bytes exceeds the %d byte limit", r.space, core.MaxPermittedDataLength)
+	}
+
+	return nil
+}
+
+func (r *SystemCreateAccountRequest) FromKey() *types.PublicKey {
+	return r.from
+}
+
+func (r *SystemCreateAccountRequest) NewAccountKey() *types.PublicKey {
+	return r.newAccount
+}
+
+func (r *SystemCreateAccountRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *SystemCreateAccountRequest) ToLamports() uint64 {
+	return r.lamports
+}
+
+func (r *SystemCreateAccountRequest) ToSpace() uint64 {
+	return r.space
+}
+
+type SystemCreateAccountResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+	Lamports        string   `json:"lamports"`
+	LamportsSOL     string   `json:"lamports_sol"`
+
+	// RentExempt is the floor the requested space had to clear. It is
+	// reported because the server had to resolve it to validate lamports
+	// anyway, and it is what a caller needs to know to fund the next one
+	// without guessing.
+	RentExempt string `json:"rent_exempt"`
+
+	Space uint64 `json:"space"`
+	Owner string `json:"owner"`
+	Fee   string `json:"fee"`
+}
+
+func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, owner *types.PublicKey, lamports, rentExempt, space, fee uint64) *SystemCreateAccountResponse {
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SystemCreateAccountResponse{
+		Transaction:     base64.StdEncoding.EncodeToString(raw),
+		Message:         base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		Lamports:        strconv.FormatUint(lamports, 10),
+		LamportsSOL:     types.LamportsToSol(lamports),
+		RentExempt:      strconv.FormatUint(rentExempt, 10),
+		Space:           space,
+		Owner:           owner.Base58(),
 		Fee:             strconv.FormatUint(fee, 10),
 	}
 }

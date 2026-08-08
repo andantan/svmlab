@@ -68,15 +68,17 @@ func run() error {
 		r.Post("/version", rpcHandler.Version)
 		r.Post("/slot", rpcHandler.Slot)
 		r.Post("/genesis-hash", rpcHandler.GenesisHash)
-		r.Post("/blockhash", rpcHandler.Blockhash)
+		r.Post("/blockhash", rpcHandler.BlockHash)
 		r.Post("/balance", rpcHandler.Balance)
 		r.Post("/account", rpcHandler.Account)
+		r.Post("/account/owner", rpcHandler.AccountOwner)
 		r.Route("/rent-exemption", func(r chi.Router) {
 			r.Post("/system", rpcHandler.RentExemptionSystem)
 			r.Post("/mint", rpcHandler.RentExemptionMint)
 			r.Post("/token", rpcHandler.RentExemptionToken)
 			r.Post("/stake", rpcHandler.RentExemptionStake)
 			r.Post("/vote", rpcHandler.RentExemptionVote)
+			r.Post("/space", rpcHandler.RentExemptionSpace)
 			r.Post("/public-key", rpcHandler.RentExemptionPublicKey)
 		})
 		r.Post("/fee", rpcHandler.Fee)
@@ -95,6 +97,13 @@ func run() error {
 		r.Post("/transaction", sign.SignTransaction)
 	})
 
+	r.Route("/svm/tool", func(r chi.Router) {
+		r.Use(handler.RequireChain(cluster))
+
+		tool := misc.NewToolHandler()
+		r.Post("/generate/keypair", tool.GenerateKeypair)
+	})
+
 	r.Route("/svm/v1", func(r chi.Router) {
 		r.Use(handler.RequireChain(cluster))
 
@@ -108,6 +117,7 @@ func run() error {
 		tx := v2.NewTransactionHandler(cfg)
 		r.Post("/transaction/system/transfer", tx.SystemTransfer)
 		r.Post("/transaction/system/transfer/max", tx.SystemTransferMax)
+		r.Post("/transaction/system/create-account", tx.SystemCreateAccount)
 	})
 
 	fmt.Printf("listening on %s\n", cfg.ServerAddr)

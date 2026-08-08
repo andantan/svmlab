@@ -1409,6 +1409,120 @@
                 }
             }
         },
+        "/svm/v2/transaction/system/allocate": {
+            "post": {
+                "description": "Reserves data space on an existing System-owned account. Only the owning program may size an account, so this works on an account the System Program still owns and not one already assigned elsewhere. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size rather than the old one.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Build a System Program allocation",
+                "parameters": [
+                    {
+                        "description": "Account and space",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemAllocateRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemAllocateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/system/assign": {
+            "post": {
+                "description": "Hands a System-owned account to another program, which is the step that puts an account under a program's control. Ownership is a field on the account rather than a mapping the program keeps, which is the inverse of an EVM contract holding balances for its users in its own storage. The owner must be executable: only the owning program may debit an account or write its data, so assigning to a plain address locks the account and its lamports permanently.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Build a System Program ownership assignment",
+                "parameters": [
+                    {
+                        "description": "Account and new owner",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemAssignRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemAssignResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/system/create-account": {
             "post": {
                 "description": "Funds a new account and sizes its data, leaving it owned by the System Program. The owner is not a request field: only the owning program may debit an account or write its data, so handing a new account to anything other than a program locks its lamports permanently. Accounts owned by another program belong to that program's own endpoints. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning.",
@@ -2169,6 +2283,108 @@
                 "program_id": {
                     "type": "string",
                     "example": "11111111111111111111111111111111"
+                }
+            }
+        },
+        "v2.SystemAllocateRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "space": {
+                    "type": "string",
+                    "example": "128"
+                }
+            }
+        },
+        "v2.SystemAllocateResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "rent_exempt": {
+                    "description": "RentExempt is the balance the account must hold once it is this size.\nGrowing an account raises its floor, so a balance that was exempt\nbefore the call can stop being exempt after it.",
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "space": {
+                    "type": "integer"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SystemAssignRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "11111111111111111111111111111111"
+                }
+            }
+        },
+        "v2.SystemAssignResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
                 }
             }
         },

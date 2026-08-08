@@ -388,6 +388,78 @@ definitions:
         example: "11111111111111111111111111111111"
         type: string
     type: object
+  v2.SystemAllocateRequest:
+    properties:
+      account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      space:
+        example: "128"
+        type: string
+    type: object
+  v2.SystemAllocateResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        type: string
+      message:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt:
+        description: |-
+          RentExempt is the balance the account must hold once it is this size.
+          Growing an account raises its floor, so a balance that was exempt
+          before the call can stop being exempt after it.
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.SystemAssignRequest:
+    properties:
+      account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      owner:
+        example: "11111111111111111111111111111111"
+        type: string
+    type: object
+  v2.SystemAssignResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        type: string
+      message:
+        type: string
+      owner:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.SystemCreateAccountRequest:
     properties:
       fee_payer:
@@ -1498,6 +1570,92 @@ paths:
               type: string
             type: object
       summary: Build an unsigned transaction
+      tags:
+      - transaction
+  /svm/v2/transaction/system/allocate:
+    post:
+      consumes:
+      - application/json
+      description: Reserves data space on an existing System-owned account. Only the
+        owning program may size an account, so this works on an account the System
+        Program still owns and not one already assigned elsewhere. Growing an account
+        raises its rent-exempt floor, so the balance is checked against the minimum
+        for the new size rather than the old one.
+      parameters:
+      - description: Account and space
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemAllocateRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemAllocateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a System Program allocation
+      tags:
+      - transaction
+  /svm/v2/transaction/system/assign:
+    post:
+      consumes:
+      - application/json
+      description: 'Hands a System-owned account to another program, which is the
+        step that puts an account under a program''s control. Ownership is a field
+        on the account rather than a mapping the program keeps, which is the inverse
+        of an EVM contract holding balances for its users in its own storage. The
+        owner must be executable: only the owning program may debit an account or
+        write its data, so assigning to a plain address locks the account and its
+        lamports permanently.'
+      parameters:
+      - description: Account and new owner
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemAssignRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemAssignResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a System Program ownership assignment
       tags:
       - transaction
   /svm/v2/transaction/system/create-account:

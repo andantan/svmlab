@@ -118,6 +118,8 @@ func run() error {
 		r.Post("/transaction/system/transfer", tx.SystemTransfer)
 		r.Post("/transaction/system/transfer/max", tx.SystemTransferMax)
 		r.Post("/transaction/system/create-account", tx.SystemCreateAccount)
+		r.Post("/transaction/system/allocate", tx.SystemAllocate)
+		r.Post("/transaction/system/assign", tx.SystemAssign)
 	})
 
 	fmt.Printf("listening on %s\n", cfg.ServerAddr)

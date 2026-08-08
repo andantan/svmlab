@@ -394,3 +394,269 @@ func (h *TransactionHandler) SystemCreateAccount(w http.ResponseWriter, r *http.
 
 	handler.WriteOK(w, NewSystemCreateAccountResponse(tx, raw, messageBytes, core.System.ID(), req.ToLamports(), newAccountRent, req.ToSpace(), fee))
 }
+
+// SystemAllocate godoc
+// @Summary      Build a System Program allocation
+// @Description  Reserves data space on an existing System-owned account. Only the owning program may size an account, so this works on an account the System Program still owns and not one already assigned elsewhere. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size rather than the old one.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemAllocateRequest  true  "Account and space"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemAllocateResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/allocate [post]
+func (h *TransactionHandler) SystemAllocate(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemAllocateRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.Allocate(req.AccountKey(), req.ToSpace())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	// One lookup answers everything the runtime will check: whether the
+	// account exists, who owns it, whether it is already sized, and what it
+	// holds.
+	info, err := chain.Cli.AccountInfo(r.Context(), req.AccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s does not exist", req.AccountKey()))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"account: %s is owned by %s, and only the owning program may size an account",
+			req.AccountKey(), info.Owner))
+		return
+	}
+	if info.Space != 0 {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"account: %s is already allocated %d bytes", req.AccountKey(), info.Space))
+		return
+	}
+
+	rentExempt, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), req.ToSpace(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+	if info.Lamports < rentExempt {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"space: %s holds %d lamports, below the %d lamport rent-exemption minimum for %d bytes",
+			req.AccountKey(), info.Lamports, rentExempt, req.ToSpace()))
+		return
+	}
+
+	if !req.AccountKey().Equal(req.FeePayerKey()) {
+		minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+			return
+		}
+
+		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+			return
+		}
+		if feePayerBalance < fee {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+			return
+		}
+		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+			return
+		}
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemAllocateResponse(tx, raw, messageBytes, req.ToSpace(), rentExempt, fee))
+}
+
+// SystemAssign godoc
+// @Summary      Build a System Program ownership assignment
+// @Description  Hands a System-owned account to another program, which is the step that puts an account under a program's control. Ownership is a field on the account rather than a mapping the program keeps, which is the inverse of an EVM contract holding balances for its users in its own storage. The owner must be executable: only the owning program may debit an account or write its data, so assigning to a plain address locks the account and its lamports permanently.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemAssignRequest  true  "Account and new owner"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemAssignResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/assign [post]
+func (h *TransactionHandler) SystemAssign(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemAssignRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.Assign(req.AccountKey(), req.OwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	// Assigning to something that cannot be invoked is unrecoverable: the new
+	// owner can never debit the account, and the System Program can no longer
+	// assign it back because assignment requires the current owner. The
+	// System Program itself is executable, so assigning back to it passes.
+	ownerInfo, err := chain.Cli.AccountInfo(r.Context(), req.OwnerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read owner: %s", err))
+		return
+	}
+	if ownerInfo == nil || !ownerInfo.Executable {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"owner: %s is not an executable program, and assigning to it would lock the account permanently",
+			req.OwnerKey()))
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.AccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s does not exist", req.AccountKey()))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"account: %s is owned by %s, and only the owning program may reassign an account",
+			req.AccountKey(), info.Owner))
+		return
+	}
+
+	if !req.AccountKey().Equal(req.FeePayerKey()) {
+		minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+			return
+		}
+
+		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+			return
+		}
+		if feePayerBalance < fee {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+			return
+		}
+		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+			return
+		}
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemAssignResponse(tx, raw, messageBytes, req.OwnerKey(), fee))
+}

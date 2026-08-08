@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/andantan/svmlab/api/handler"
 	"github.com/andantan/svmlab/core/types"
 )
 
@@ -33,7 +32,6 @@ type Instruction struct {
 }
 
 type BuildTransactionRequest struct {
-	handler.ChainSelector
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
 	// RecentBlockhash may be left empty, in which case it is fetched from the
@@ -48,10 +46,6 @@ type BuildTransactionRequest struct {
 }
 
 func (r *BuildTransactionRequest) ValidateRequest() error {
-	if err := r.ValidateChainSelector(); err != nil {
-		return err
-	}
-
 	var err error
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())

@@ -50,6 +50,12 @@ func NewAccount(k *PublicKey, isSigner, isWritable bool) *Account {
 	}
 }
 
+type Accounts []*Account
+
+func NewAccounts(accs ...*Account) Accounts {
+	return accs
+}
+
 // NewWritableSignerAccount describes an account that both authorizes the
 // instruction and is modified by it, as the sender of a transfer is.
 func NewWritableSignerAccount(k *PublicKey) *Account {

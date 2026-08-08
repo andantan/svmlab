@@ -26,6 +26,8 @@ func NewSignHandler(cfg *config.Config) *SignHandler {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SignTransactionRequest  true  "Transaction and signer public keys"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SignTransactionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/sign/transaction [post]
@@ -78,6 +80,8 @@ func (h *SignHandler) SignTransaction(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SignRequest  true  "Signer public key and message"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SignResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/sign [post]
@@ -120,6 +124,8 @@ func (h *SignHandler) Sign(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      VerifyRequest  true  "Public key, message, and signature"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  VerifyResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/sign/verify [post]

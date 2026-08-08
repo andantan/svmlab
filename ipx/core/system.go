@@ -19,28 +19,29 @@ const (
 	SystemInstructionAllocate      uint32 = 8
 )
 
-type systemProgram struct {
-	id *types.PublicKey
-}
+// SystemAccountSpace is a plain wallet: lamports and no data.
+const SystemAccountSpace uint64 = 0
 
-// SystemProgram builds instructions for the program that owns every account
-// not yet assigned elsewhere.
+// system builds instructions for the program that owns every account not yet
+// assigned elsewhere.
 //
 // It has no EVM counterpart because the EVM builds these operations into the
 // protocol. Moving ether is a transaction field, and creating an account is a
 // side effect of being sent funds. Here both are ordinary instructions to an
 // ordinary program, which is why a transfer is a call rather than a value.
-var SystemProgram = func() *systemProgram {
-	id, err := types.NewPublicKeyFromBase58(types.SystemProgramID)
-	if err != nil {
-		panic(fmt.Sprintf("core: invalid system program id: %v", err))
-	}
+//
+// The program id is the same on every Solana cluster, so it is captured once
+// via Init rather than threaded through every call the way a per-chain address
+// would be.
+type system struct {
+	id *types.PublicKey
+}
 
-	return &systemProgram{id: id}
-}()
+var System = new(system)
 
-func (p *systemProgram) ID() *types.PublicKey {
-	return p.id
+// Init records the System Program id, read from config at startup.
+func (s *system) Init(id *types.PublicKey) {
+	s.id = id
 }
 
 // Transfer moves lamports from one account to another.
@@ -52,7 +53,10 @@ func (p *systemProgram) ID() *types.PublicKey {
 // requires the resulting balance to reach the rent-exempt minimum, currently
 // 890880 lamports for an empty account. A smaller amount to a new address fails
 // rather than creating a dust account.
-func (p *systemProgram) Transfer(from, to *types.PublicKey, lamports uint64) (*types.Instruction, error) {
+func (s *system) Transfer(from, to *types.PublicKey, lamports uint64) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
 	if from.IsNil() {
 		return nil, fmt.Errorf("system transfer: sender is required")
 	}
@@ -66,10 +70,10 @@ func (p *systemProgram) Transfer(from, to *types.PublicKey, lamports uint64) (*t
 	data := codec.Bincode.AppendU32(nil, SystemInstructionTransfer)
 	data = codec.Bincode.AppendU64(data, lamports)
 
-	return types.NewInstruction(p.id, []*types.Account{
+	return types.NewInstruction(s.id, types.NewAccounts(
 		types.NewWritableSignerAccount(from),
 		types.NewWritableAccount(to),
-	}, data), nil
+	), data), nil
 }
 
 // CreateAccount funds a new account, sizes its data, and assigns it an owner.
@@ -82,7 +86,10 @@ func (p *systemProgram) Transfer(from, to *types.PublicKey, lamports uint64) (*t
 //
 // Lamports must cover the rent-exempt minimum for the requested space, or the
 // runtime rejects the instruction.
-func (p *systemProgram) CreateAccount(from, newAccount, owner *types.PublicKey, lamports, space uint64) (*types.Instruction, error) {
+func (s *system) CreateAccount(from, newAccount, owner *types.PublicKey, lamports, space uint64) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
 	if from.IsNil() {
 		return nil, fmt.Errorf("system create account: funder is required")
 	}
@@ -98,15 +105,18 @@ func (p *systemProgram) CreateAccount(from, newAccount, owner *types.PublicKey, 
 	data = codec.Bincode.AppendU64(data, space)
 	data = codec.Bincode.AppendBytes(data, owner.Bytes())
 
-	return types.NewInstruction(p.id, []*types.Account{
+	return types.NewInstruction(s.id, types.NewAccounts(
 		types.NewWritableSignerAccount(from),
 		types.NewWritableSignerAccount(newAccount),
-	}, data), nil
+	), data), nil
 }
 
 // Allocate reserves data space on an existing account owned by the System
 // Program.
-func (p *systemProgram) Allocate(account *types.PublicKey, space uint64) (*types.Instruction, error) {
+func (s *system) Allocate(account *types.PublicKey, space uint64) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
 	if account.IsNil() {
 		return nil, fmt.Errorf("system allocate: account is required")
 	}
@@ -114,9 +124,9 @@ func (p *systemProgram) Allocate(account *types.PublicKey, space uint64) (*types
 	data := codec.Bincode.AppendU32(nil, SystemInstructionAllocate)
 	data = codec.Bincode.AppendU64(data, space)
 
-	return types.NewInstruction(p.id, []*types.Account{
+	return types.NewInstruction(s.id, types.NewAccounts(
 		types.NewWritableSignerAccount(account),
-	}, data), nil
+	), data), nil
 }
 
 // Assign hands ownership of an account to another program.
@@ -125,7 +135,10 @@ func (p *systemProgram) Allocate(account *types.PublicKey, space uint64) (*types
 // puts an account under a program's control. Ownership here is a field on the
 // account rather than a mapping the program keeps, which is the inverse of an
 // EVM contract holding balances for its users in its own storage.
-func (p *systemProgram) Assign(account, owner *types.PublicKey) (*types.Instruction, error) {
+func (s *system) Assign(account, owner *types.PublicKey) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
 	if account.IsNil() {
 		return nil, fmt.Errorf("system assign: account is required")
 	}
@@ -136,7 +149,7 @@ func (p *systemProgram) Assign(account, owner *types.PublicKey) (*types.Instruct
 	data := codec.Bincode.AppendU32(nil, SystemInstructionAssign)
 	data = codec.Bincode.AppendBytes(data, owner.Bytes())
 
-	return types.NewInstruction(p.id, []*types.Account{
+	return types.NewInstruction(s.id, types.NewAccounts(
 		types.NewWritableSignerAccount(account),
-	}, data), nil
+	), data), nil
 }

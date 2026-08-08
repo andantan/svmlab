@@ -13,10 +13,6 @@ const (
 	PublicKeyBase58Length = 44
 )
 
-const (
-	SystemProgramID = "11111111111111111111111111111111" // 32 zero bytes
-)
-
 // PublicKey is an ed25519 public key.
 //
 // On Solana this one value fills three roles that are distinct on an EVM

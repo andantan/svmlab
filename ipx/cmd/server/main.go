@@ -11,9 +11,12 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/andantan/svmlab/api/handler"
 	"github.com/andantan/svmlab/api/handler/misc"
 	v1 "github.com/andantan/svmlab/api/handler/v1"
 	v2 "github.com/andantan/svmlab/api/handler/v2"
+	"github.com/andantan/svmlab/core"
+	"github.com/andantan/svmlab/core/types"
 	_ "github.com/andantan/svmlab/docs"
 	"github.com/andantan/svmlab/internal/config"
 	"github.com/andantan/svmlab/internal/rpc"
@@ -41,7 +44,13 @@ func run() error {
 		return err
 	}
 
-	cluster := rpc.NewCluster(cfg.Chains, cfg.Programs)
+	systemProgramID, err := types.NewPublicKeyFromBase58(cfg.Programs.System)
+	if err != nil {
+		return fmt.Errorf("config: programs.system: %w", err)
+	}
+	core.System.Init(systemProgramID)
+
+	cluster := rpc.NewCluster(cfg.Chains)
 
 	r := chi.NewRouter()
 	r.Use(middleware.Logger)
@@ -50,7 +59,9 @@ func run() error {
 	r.Get("/swagger/*", httpSwagger.WrapHandler)
 
 	r.Route("/svm/rpc", func(r chi.Router) {
-		rpcHandler := misc.NewRPCHandler(cluster)
+		r.Use(handler.RequireChain(cluster))
+
+		rpcHandler := misc.NewRPCHandler()
 		r.Post("/", rpcHandler.Raw)
 		r.Post("/batch", rpcHandler.Batch)
 		r.Post("/health", rpcHandler.Health)
@@ -76,6 +87,8 @@ func run() error {
 	})
 
 	r.Route("/svm/sign", func(r chi.Router) {
+		r.Use(handler.RequireChain(cluster))
+
 		sign := misc.NewSignHandler(cfg)
 		r.Post("/", sign.Sign)
 		r.Post("/verify", sign.Verify)
@@ -83,13 +96,18 @@ func run() error {
 	})
 
 	r.Route("/svm/v1", func(r chi.Router) {
-		tx := v1.NewTransactionHandler(cfg, cluster)
+		r.Use(handler.RequireChain(cluster))
+
+		tx := v1.NewTransactionHandler(cfg)
 		r.Post("/transaction/build", tx.BuildTransaction)
 	})
 
 	r.Route("/svm/v2", func(r chi.Router) {
-		tx := v2.NewTransactionHandler(cfg, cluster)
-		r.Post("/transaction/system/transfer", tx.Transfer)
+		r.Use(handler.RequireChain(cluster))
+
+		tx := v2.NewTransactionHandler(cfg)
+		r.Post("/transaction/system/transfer", tx.SystemTransfer)
+		r.Post("/transaction/system/transfer/max", tx.SystemTransferMax)
 	})
 
 	fmt.Printf("listening on %s\n", cfg.ServerAddr)

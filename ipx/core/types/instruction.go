@@ -37,6 +37,12 @@ func NewInstruction(programID *PublicKey, accounts []*Account, data []byte) *Ins
 	}
 }
 
+type Instructions []*Instruction
+
+func NewInstructions(ixs ...*Instruction) Instructions {
+	return ixs
+}
+
 func (i *Instruction) IsNil() bool {
 	if i == nil || i.ProgramID.IsNil() {
 		return true

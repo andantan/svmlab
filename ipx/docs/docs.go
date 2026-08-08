@@ -37,6 +37,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.RawRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -81,6 +95,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.AccountRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -123,6 +151,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.AirdropRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -165,6 +207,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.AccountRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -207,6 +263,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.BatchRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -231,10 +301,7 @@ const docTemplate = `{
         },
         "/svm/rpc/blockhash": {
             "post": {
-                "description": "Returns the blockhash to build against and the block height past which it is rejected, so expiry can be checked rather than guessed.",
-                "consumes": [
-                    "application/json"
-                ],
+                "description": "Returns the blockhash to build against and the block height past which it is rejected, so expiry can be checked rather than guessed. Fetched at finalized commitment, since a blockhash from a less settled view risks belonging to a fork.",
                 "produces": [
                     "application/json"
                 ],
@@ -244,13 +311,18 @@ const docTemplate = `{
                 "summary": "Read a recent blockhash",
                 "parameters": [
                     {
-                        "description": "Cluster",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.ClusterRequest"
-                        }
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -294,6 +366,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.FeeRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -318,9 +404,6 @@ const docTemplate = `{
         "/svm/rpc/genesis-hash": {
             "post": {
                 "description": "A genesis hash is not folded into a signature the way EIP-155 binds a chain id, so nothing on chain prevents a transaction from replaying on another cluster. Comparing what the endpoint reports against what config names is the substitute check.",
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -330,13 +413,18 @@ const docTemplate = `{
                 "summary": "Read the cluster's genesis hash and compare it to config",
                 "parameters": [
                     {
-                        "description": "Cluster",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.ClusterRequest"
-                        }
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -360,9 +448,6 @@ const docTemplate = `{
         },
         "/svm/rpc/health": {
             "post": {
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -372,13 +457,18 @@ const docTemplate = `{
                 "summary": "Read the node's health",
                 "parameters": [
                     {
-                        "description": "Cluster",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.ClusterRequest"
-                        }
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -402,9 +492,6 @@ const docTemplate = `{
         },
         "/svm/rpc/rent-exemption/mint": {
             "post": {
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -414,13 +501,18 @@ const docTemplate = `{
                 "summary": "Minimum balance for an SPL Token mint",
                 "parameters": [
                     {
-                        "description": "Cluster",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.ClusterRequest"
-                        }
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -464,6 +556,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.AccountRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -487,9 +593,6 @@ const docTemplate = `{
         },
         "/svm/rpc/rent-exemption/stake": {
             "post": {
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -499,13 +602,18 @@ const docTemplate = `{
                 "summary": "Minimum balance for a stake account",
                 "parameters": [
                     {
-                        "description": "Cluster",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.ClusterRequest"
-                        }
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -530,9 +638,6 @@ const docTemplate = `{
         "/svm/rpc/rent-exemption/system": {
             "post": {
                 "description": "A wallet holds lamports and no data, so this is the floor any account must clear. It is also what a transfer to a previously unused address has to meet, since the transfer creates the account.",
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -542,13 +647,18 @@ const docTemplate = `{
                 "summary": "Minimum balance for a plain wallet",
                 "parameters": [
                     {
-                        "description": "Cluster",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.ClusterRequest"
-                        }
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -573,9 +683,6 @@ const docTemplate = `{
         "/svm/rpc/rent-exemption/token": {
             "post": {
                 "description": "Every token balance lives in an account of its own, so opening a position in a new token costs this much before any tokens move.",
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -585,13 +692,18 @@ const docTemplate = `{
                 "summary": "Minimum balance for an SPL Token account",
                 "parameters": [
                     {
-                        "description": "Cluster",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.ClusterRequest"
-                        }
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -615,9 +727,6 @@ const docTemplate = `{
         },
         "/svm/rpc/rent-exemption/vote": {
             "post": {
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -627,13 +736,18 @@ const docTemplate = `{
                 "summary": "Minimum balance for a validator vote account",
                 "parameters": [
                     {
-                        "description": "Cluster",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.ClusterRequest"
-                        }
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -657,9 +771,6 @@ const docTemplate = `{
         },
         "/svm/rpc/slot": {
             "post": {
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -669,13 +780,18 @@ const docTemplate = `{
                 "summary": "Read the current slot",
                 "parameters": [
                     {
-                        "description": "Cluster",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.ClusterRequest"
-                        }
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -719,6 +835,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.SendTransactionRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -742,7 +872,7 @@ const docTemplate = `{
         },
         "/svm/rpc/transaction/simulate": {
             "post": {
-                "description": "Runs the transaction against the node's state and returns the program logs either way. The logs are the only account of why execution stopped; nothing here corresponds to a revert string. With sig_verify off the transaction need not be signed, which is what makes this usable before deciding to sign.",
+                "description": "Runs a fully signed transaction against the node's state without broadcasting it, and returns the program logs either way. The logs are the only account of why execution stopped; nothing here corresponds to a revert string.",
                 "consumes": [
                     "application/json"
                 ],
@@ -762,6 +892,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.SimulateTransactionRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -805,6 +949,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.SignatureStatusRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -828,9 +986,6 @@ const docTemplate = `{
         },
         "/svm/rpc/version": {
             "post": {
-                "consumes": [
-                    "application/json"
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -840,13 +995,18 @@ const docTemplate = `{
                 "summary": "Read the node's software version",
                 "parameters": [
                     {
-                        "description": "Cluster",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.ClusterRequest"
-                        }
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -890,6 +1050,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.SignRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -933,6 +1107,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.SignTransactionRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -976,6 +1164,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/misc.VerifyRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -1019,6 +1221,20 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/v1.BuildTransactionRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
@@ -1042,7 +1258,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/transfer": {
             "post": {
-                "description": "Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. Amount is a lamport count, or \"max\" to send everything the sender can. Sending to an account that does not exist is refused unless allow_unfunded_recipient is set, since base58 has no checksum and a mistyped address is otherwise indistinguishable from an intended new one.",
+                "description": "Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. The recent blockhash is always fetched, and the recipient is not required to exist yet. To send the sender's entire balance, use transfer/max instead.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1060,15 +1276,86 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.TransferRequest"
+                            "$ref": "#/definitions/v2.SystemTransferRequest"
                         }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.TransferResponse"
+                            "$ref": "#/definitions/v2.SystemTransferResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/system/transfer/max": {
+            "post": {
+                "description": "Assembles a System Program transfer moving everything the sender can send. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Build a native SOL transfer of the sender's entire balance",
+                "parameters": [
+                    {
+                        "description": "Sender and recipient",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemTransferMaxRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemTransferMaxResponse"
                         }
                     },
                     "400": {
@@ -1088,18 +1375,6 @@ const docTemplate = `{
         "misc.AccountRequest": {
             "type": "object",
             "properties": {
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
-                },
-                "commitment": {
-                    "type": "string",
-                    "example": "confirmed"
-                },
                 "public_key": {
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
@@ -1141,18 +1416,6 @@ const docTemplate = `{
                 "amount": {
                     "type": "string",
                     "example": "1000000000"
-                },
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
-                },
-                "commitment": {
-                    "type": "string",
-                    "example": "confirmed"
                 },
                 "public_key": {
                     "type": "string"
@@ -1198,14 +1461,6 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/misc.BatchCall"
                     }
-                },
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
                 }
             }
         },
@@ -1220,38 +1475,9 @@ const docTemplate = `{
                 }
             }
         },
-        "misc.ClusterRequest": {
-            "type": "object",
-            "properties": {
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
-                },
-                "commitment": {
-                    "type": "string",
-                    "example": "confirmed"
-                }
-            }
-        },
         "misc.FeeRequest": {
             "type": "object",
             "properties": {
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
-                },
-                "commitment": {
-                    "type": "string",
-                    "example": "confirmed"
-                },
                 "message": {
                     "type": "string"
                 }
@@ -1296,14 +1522,6 @@ const docTemplate = `{
         "misc.RawRequest": {
             "type": "object",
             "properties": {
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
-                },
                 "method": {
                     "type": "string",
                     "example": "getEpochInfo"
@@ -1331,23 +1549,6 @@ const docTemplate = `{
         "misc.SendTransactionRequest": {
             "type": "object",
             "properties": {
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
-                },
-                "commitment": {
-                    "type": "string",
-                    "example": "confirmed"
-                },
-                "skip_preflight": {
-                    "description": "SkipPreflight disables the node-side simulation that runs before the\ntransaction is broadcast. Leaving it off surfaces most failures without\nspending a signature, including an expired blockhash.",
-                    "type": "boolean",
-                    "example": false
-                },
                 "transaction": {
                     "type": "string"
                 }
@@ -1424,19 +1625,6 @@ const docTemplate = `{
         "misc.SignatureStatusRequest": {
             "type": "object",
             "properties": {
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
-                },
-                "search_history": {
-                    "description": "SearchHistory looks beyond the node's recent cache. A signature the\ncluster has already forgotten is reported as not found without it.",
-                    "type": "boolean",
-                    "example": true
-                },
                 "signature": {
                     "type": "string"
                 }
@@ -1471,22 +1659,6 @@ const docTemplate = `{
         "misc.SimulateTransactionRequest": {
             "type": "object",
             "properties": {
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
-                },
-                "commitment": {
-                    "type": "string",
-                    "example": "confirmed"
-                },
-                "sig_verify": {
-                    "type": "boolean",
-                    "example": false
-                },
                 "transaction": {
                     "type": "string"
                 }
@@ -1572,14 +1744,6 @@ const docTemplate = `{
         "v1.BuildTransactionRequest": {
             "type": "object",
             "properties": {
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
-                },
                 "fee_payer": {
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
@@ -1662,54 +1826,16 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.Header": {
+        "v2.SystemTransferMaxRequest": {
             "type": "object",
             "properties": {
-                "num_readonly_signed_accounts": {
-                    "type": "integer"
-                },
-                "num_readonly_unsigned_accounts": {
-                    "type": "integer"
-                },
-                "num_required_signatures": {
-                    "type": "integer"
-                }
-            }
-        },
-        "v2.TransferRequest": {
-            "type": "object",
-            "properties": {
-                "allow_unfunded_recipient": {
-                    "description": "AllowUnfundedRecipient permits sending to an account that does not exist\nyet. It defaults to false because base58 carries no checksum: a single\nmistyped character decodes to a different valid address, and an account\nnobody has ever funded is the only signal that separates a typo from an\nintended new account. solana transfer guards the same way.",
-                    "type": "boolean",
-                    "example": false
-                },
-                "amount": {
-                    "description": "Amount is a decimal lamport count, or \"max\" to send everything the\nsender can. It is a string so that the two forms share one field and so\nthat a u64 survives a JSON round trip: JSON numbers are floats, and\nvalues past 2^53 would lose precision silently.",
-                    "type": "string",
-                    "example": "1000000"
-                },
-                "chain_name": {
-                    "type": "string",
-                    "example": "solana"
-                },
-                "chain_network": {
-                    "type": "string",
-                    "example": "testnet"
-                },
                 "fee_payer": {
-                    "description": "FeePayer defaults to the sender. Paying from a different account is\ncommon on Solana, and it changes what \"max\" means: the sender can send\nits whole balance when someone else covers the fee.",
                     "type": "string",
-                    "example": ""
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "from": {
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "recent_blockhash": {
-                    "description": "RecentBlockhash may be left empty, in which case it is fetched.",
-                    "type": "string",
-                    "example": ""
                 },
                 "to": {
                     "type": "string",
@@ -1717,7 +1843,63 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.TransferResponse": {
+        "v2.SystemTransferMaxResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "amount": {
+                    "type": "string"
+                },
+                "amount_sol": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SystemTransferRequest": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "1000000"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "from": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "to": {
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                }
+            }
+        },
+        "v2.SystemTransferResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -1736,9 +1918,6 @@ const docTemplate = `{
                 "fee": {
                     "type": "string"
                 },
-                "header": {
-                    "$ref": "#/definitions/v2.Header"
-                },
                 "message": {
                     "type": "string"
                 },
@@ -1750,9 +1929,6 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
-                },
-                "size": {
-                    "type": "integer"
                 },
                 "transaction": {
                     "type": "string"

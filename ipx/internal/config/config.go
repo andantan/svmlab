@@ -18,6 +18,11 @@ type Config struct {
 //
 // Unlike EVM utility contracts, these addresses are identical on every
 // Solana cluster, so they are declared once instead of per-chain.
+//
+// All of them are required, including ones no endpoint reaches yet. Because
+// none of them vary by cluster, an empty field is a truncated config rather
+// than a deliberate omission, and is better caught at startup than on the
+// first request that happens to need it.
 type Programs struct {
 	System          string `yaml:"system"`
 	ComputeBudget   string `yaml:"compute_budget"`
@@ -74,6 +79,27 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Programs.System == "" {
 		return nil, fmt.Errorf("config: programs.system is required")
+	}
+	if cfg.Programs.ComputeBudget == "" {
+		return nil, fmt.Errorf("config: programs.compute_budget is required")
+	}
+	if cfg.Programs.Token == "" {
+		return nil, fmt.Errorf("config: programs.token is required")
+	}
+	if cfg.Programs.Token2022 == "" {
+		return nil, fmt.Errorf("config: programs.token_2022 is required")
+	}
+	if cfg.Programs.AssociatedToken == "" {
+		return nil, fmt.Errorf("config: programs.associated_token is required")
+	}
+	if cfg.Programs.Memo == "" {
+		return nil, fmt.Errorf("config: programs.memo is required")
+	}
+	if cfg.Programs.Stake == "" {
+		return nil, fmt.Errorf("config: programs.stake is required")
+	}
+	if cfg.Programs.Vote == "" {
+		return nil, fmt.Errorf("config: programs.vote is required")
 	}
 	if len(cfg.Chains) == 0 {
 		return nil, fmt.Errorf("config: at least one chain is required")

@@ -13,26 +13,27 @@ import (
 )
 
 type TransactionHandler struct {
-	cfg     *config.Config
-	cluster *rpc.Cluster
+	cfg *config.Config
 }
 
-func NewTransactionHandler(cfg *config.Config, cluster *rpc.Cluster) *TransactionHandler {
-	return &TransactionHandler{cfg: cfg, cluster: cluster}
+func NewTransactionHandler(cfg *config.Config) *TransactionHandler {
+	return &TransactionHandler{cfg: cfg}
 }
 
-// Transfer godoc
+// SystemTransfer godoc
 // @Summary      Build a native SOL transfer
-// @Description  Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. Amount is a lamport count, or "max" to send everything the sender can. Sending to an account that does not exist is refused unless allow_unfunded_recipient is set, since base58 has no checksum and a mistyped address is otherwise indistinguishable from an intended new one.
+// @Description  Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. The recent blockhash is always fetched, and the recipient is not required to exist yet. To send the sender's entire balance, use transfer/max instead.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
-// @Param        body  body      TransferRequest  true  "Sender, recipient, and amount"
-// @Success      200   {object}  TransferResponse
+// @Param        body  body      SystemTransferRequest  true  "Sender, recipient, and amount"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemTransferResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/transfer [post]
-func (h *TransactionHandler) Transfer(w http.ResponseWriter, r *http.Request) {
-	req := new(TransferRequest)
+func (h *TransactionHandler) SystemTransfer(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemTransferRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
 		return
@@ -42,39 +43,148 @@ func (h *TransactionHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.Transfer(req.FromKey(), req.ToKey(), req.Lamports())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	if !req.AllowUnfundedRecipient {
-		exists, err := chain.Cli.Exists(r.Context(), req.ToKey(), rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	// A resulting balance below this must be zero, or the runtime rejects the
+	// transfer: an account cannot be left underfunded, only fully closed.
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance: %s", err))
+		return
+	}
+
+	spent := req.Lamports()
+	if req.FromKey().Equal(req.FeePayerKey()) {
+		spent += fee
+	}
+	if balance < spent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("amount: balance %d lamports does not cover %d lamports", balance, spent))
+		return
+	}
+	if remaining := balance - spent; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("amount: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FromKey(), remaining, minRent))
+		return
+	}
+
+	if !req.FromKey().Equal(req.FeePayerKey()) {
+		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
 		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to check recipient: %s", err))
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
 			return
 		}
-		if !exists {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"to: account %s does not exist. Check the address, then set allow_unfunded_recipient to create it",
-				req.ToKey()))
+		if feePayerBalance < fee {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+			return
+		}
+		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
 			return
 		}
 	}
 
-	blockhash := req.Blockhash()
-	if blockhash == nil {
-		if blockhash, _, err = chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized); err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
-			return
-		}
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemTransferResponse(tx, raw, messageBytes, req.Lamports(), fee))
+}
+
+// SystemTransferMax godoc
+// @Summary      Build a native SOL transfer of the sender's entire balance
+// @Description  Assembles a System Program transfer moving everything the sender can send. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemTransferMaxRequest  true  "Sender and recipient"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemTransferMaxResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/transfer/max [post]
+func (h *TransactionHandler) SystemTransferMax(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemTransferMaxRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
 	}
 
 	// The fee is priced from a message, and a message needs an amount, so a
 	// zero-amount probe stands in. Nothing is lost by it: a fee depends on the
 	// signature count and compute budget instructions, never on the lamports
 	// being moved, so the probe prices the real transfer exactly.
-	probe, err := h.buildMessage(req, blockhash, 0)
+	probeIx, err := core.System.Transfer(req.FromKey(), req.ToKey(), 0)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	probe, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(probeIx))
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -90,15 +200,31 @@ func (h *TransactionHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	amount := req.Lamports()
-	if req.IsMax() {
-		if amount, err = h.maxAmount(r, chain, req, fee); err != nil {
-			handler.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
+	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance: %s", err))
+		return
+	}
+	if balance == 0 {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("amount: %s has no balance", req.FromKey()))
+		return
 	}
 
-	message, err := h.buildMessage(req, blockhash, amount)
+	amount := balance
+	if req.FromKey().Equal(req.FeePayerKey()) {
+		if balance <= fee {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("amount: balance %d lamports does not cover the %d lamport fee", balance, fee))
+			return
+		}
+		amount = balance - fee
+	}
+
+	ix, err := core.System.Transfer(req.FromKey(), req.ToKey(), amount)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -122,39 +248,5 @@ func (h *TransactionHandler) Transfer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	handler.WriteOK(w, NewTransferResponse(tx, raw, messageBytes, amount, fee))
-}
-
-func (h *TransactionHandler) buildMessage(req *TransferRequest, blockhash *types.Hash, lamports uint64) (*types.Message, error) {
-	ix, err := core.SystemProgram.Transfer(req.FromKey(), req.ToKey(), lamports)
-	if err != nil {
-		return nil, err
-	}
-
-	return types.NewMessage(req.FeePayerKey(), blockhash, []*types.Instruction{ix})
-}
-
-// maxAmount is what the sender can move once the fee is accounted for.
-//
-// The fee only comes out of the sender's balance when the sender is also
-// paying it. With a separate fee payer the whole balance can go, which empties
-// the account and lets the runtime reclaim it.
-func (h *TransactionHandler) maxAmount(r *http.Request, chain *rpc.Chain, req *TransferRequest, fee uint64) (uint64, error) {
-	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		return 0, fmt.Errorf("failed to read balance: %w", err)
-	}
-	if balance == 0 {
-		return 0, fmt.Errorf("amount: %s has no balance", req.FromKey())
-	}
-
-	if !req.PaysOwnFee() {
-		return balance, nil
-	}
-
-	if balance <= fee {
-		return 0, fmt.Errorf("amount: balance %d lamports does not cover the %d lamport fee", balance, fee)
-	}
-
-	return balance - fee, nil
+	handler.WriteOK(w, NewSystemTransferMaxResponse(tx, raw, messageBytes, amount, fee))
 }

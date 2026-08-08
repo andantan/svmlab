@@ -1,27 +1,13 @@
 package rpc
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/andantan/svmlab/core/types"
 	"github.com/andantan/svmlab/internal/config"
 )
-
-// Programs holds the well-known program ids, parsed once at startup.
-//
-// This is where evmlab keeps an address book per chain. Here it hangs off the
-// cluster instead, since the ids are identical on every Solana cluster.
-type Programs struct {
-	System          *types.PublicKey
-	ComputeBudget   *types.PublicKey
-	Token           *types.PublicKey
-	Token2022       *types.PublicKey
-	AssociatedToken *types.PublicKey
-	Memo            *types.PublicKey
-	Stake           *types.PublicKey
-	Vote            *types.PublicKey
-}
 
 // Chain is one cluster endpoint.
 //
@@ -37,26 +23,13 @@ type Chain struct {
 	GenesisHash *types.Hash
 	Symbol      string
 	Decimals    uint8
-	Programs    *Programs
 }
 
 type Cluster struct {
-	clis     map[string]map[string]*Chain
-	programs *Programs
+	clis map[string]map[string]*Chain
 }
 
-func NewCluster(cs []config.Chain, ps config.Programs) *Cluster {
-	programs := &Programs{
-		System:          mustProgram("system", ps.System),
-		ComputeBudget:   mustProgram("compute_budget", ps.ComputeBudget),
-		Token:           mustProgram("token", ps.Token),
-		Token2022:       mustProgram("token_2022", ps.Token2022),
-		AssociatedToken: mustProgram("associated_token", ps.AssociatedToken),
-		Memo:            mustProgram("memo", ps.Memo),
-		Stake:           mustProgram("stake", ps.Stake),
-		Vote:            mustProgram("vote", ps.Vote),
-	}
-
+func NewCluster(cs []config.Chain) *Cluster {
 	clis := make(map[string]map[string]*Chain)
 	for _, c := range cs {
 		name := strings.ToLower(c.Name)
@@ -78,27 +51,12 @@ func NewCluster(cs []config.Chain, ps config.Programs) *Cluster {
 			GenesisHash: genesis,
 			Symbol:      c.NativeCurrency.Symbol,
 			Decimals:    c.NativeCurrency.Decimals,
-			Programs:    programs,
 		}
 	}
 
 	return &Cluster{
-		clis:     clis,
-		programs: programs,
+		clis: clis,
 	}
-}
-
-func mustProgram(field, id string) *types.PublicKey {
-	if id == "" {
-		return nil
-	}
-
-	k, err := types.NewPublicKeyFromBase58(id)
-	if err != nil {
-		panic(fmt.Sprintf("programs.%s: invalid program id: %s", field, err))
-	}
-
-	return k
 }
 
 func (c *Cluster) Get(name, network string) (*Chain, error) {
@@ -115,6 +73,24 @@ func (c *Cluster) Get(name, network string) (*Chain, error) {
 	return chain, nil
 }
 
-func (c *Cluster) Programs() *Programs {
-	return c.programs
+type chainCtxKey struct{}
+
+// WithChain returns a context carrying the chain a middleware resolved for
+// this request, so handlers read it instead of each resolving it themselves.
+func WithChain(ctx context.Context, c *Chain) context.Context {
+	return context.WithValue(ctx, chainCtxKey{}, c)
+}
+
+// ChainFromContext returns the chain WithChain stored.
+//
+// An error here means the route is missing the middleware that resolves the
+// chain, not a bad request, since that middleware is what makes the chain
+// selectable at all.
+func ChainFromContext(ctx context.Context) (*Chain, error) {
+	c, ok := ctx.Value(chainCtxKey{}).(*Chain)
+	if !ok {
+		return nil, fmt.Errorf("chain: not present in request context")
+	}
+
+	return c, nil
 }

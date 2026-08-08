@@ -6,15 +6,14 @@ import (
 	"net/http"
 
 	"github.com/andantan/svmlab/api/handler"
+	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/internal/rpc"
 )
 
-type RPCHandler struct {
-	cluster *rpc.Cluster
-}
+type RPCHandler struct{}
 
-func NewRPCHandler(cluster *rpc.Cluster) *RPCHandler {
-	return &RPCHandler{cluster: cluster}
+func NewRPCHandler() *RPCHandler {
+	return &RPCHandler{}
 }
 
 // SendTransaction godoc
@@ -24,6 +23,8 @@ func NewRPCHandler(cluster *rpc.Cluster) *RPCHandler {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SendTransactionRequest  true  "Signed transaction"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SendTransactionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/transaction/send [post]
@@ -38,18 +39,17 @@ func (h *RPCHandler) SendTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	sig, err := chain.Cli.SendTransaction(
-		r.Context(),
-		req.ToTransaction(),
-		req.SkipPreflight,
-		rpc.Commitment(req.Commitment.Commitment),
-	)
+	// skipPreflight is never true, and the preflight commitment is fixed:
+	// the node-side simulation that runs before broadcast is what catches a
+	// failure before it costs a signature, and there is no reason a caller
+	// of this endpoint would want to skip it or tune what it checks against.
+	sig, err := chain.Cli.SendTransaction(r.Context(), req.ToTransaction(), false, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -64,6 +64,8 @@ func (h *RPCHandler) SendTransaction(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      AccountRequest  true  "Account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  BalanceResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/balance [post]
@@ -77,13 +79,13 @@ func (h *RPCHandler) Balance(w http.ResponseWriter, r *http.Request) {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	lamports, err := chain.Cli.Balance(r.Context(), req.ToPublicKey(), rpc.Commitment(req.Commitment.Commitment))
+	lamports, err := chain.Cli.Balance(r.Context(), req.ToPublicKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -99,6 +101,8 @@ func (h *RPCHandler) Balance(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      AccountRequest  true  "Account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  AccountResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/account [post]
@@ -112,13 +116,13 @@ func (h *RPCHandler) Account(w http.ResponseWriter, r *http.Request) {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	info, err := chain.Cli.AccountInfo(r.Context(), req.ToPublicKey(), rpc.Commitment(req.Commitment.Commitment))
+	info, err := chain.Cli.AccountInfo(r.Context(), req.ToPublicKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -130,29 +134,20 @@ func (h *RPCHandler) Account(w http.ResponseWriter, r *http.Request) {
 // Slot godoc
 // @Summary      Read the current slot
 // @Tags         rpc
-// @Accept       json
 // @Produce      json
-// @Param        body  body      ClusterRequest  true  "Cluster"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SlotResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/slot [post]
 func (h *RPCHandler) Slot(w http.ResponseWriter, r *http.Request) {
-	req := new(ClusterRequest)
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
-		return
-	}
-	if err := req.ValidateRequest(); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	slot, err := chain.Cli.Slot(r.Context(), rpc.Commitment(req.Commitment.Commitment))
+	slot, err := chain.Cli.Slot(r.Context(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -164,25 +159,16 @@ func (h *RPCHandler) Slot(w http.ResponseWriter, r *http.Request) {
 // Health godoc
 // @Summary      Read the node's health
 // @Tags         rpc
-// @Accept       json
 // @Produce      json
-// @Param        body  body      ClusterRequest  true  "Cluster"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  HealthResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/health [post]
 func (h *RPCHandler) Health(w http.ResponseWriter, r *http.Request) {
-	req := new(ClusterRequest)
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
-		return
-	}
-	if err := req.ValidateRequest(); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -198,25 +184,16 @@ func (h *RPCHandler) Health(w http.ResponseWriter, r *http.Request) {
 // Version godoc
 // @Summary      Read the node's software version
 // @Tags         rpc
-// @Accept       json
 // @Produce      json
-// @Param        body  body      ClusterRequest  true  "Cluster"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  VersionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/version [post]
 func (h *RPCHandler) Version(w http.ResponseWriter, r *http.Request) {
-	req := new(ClusterRequest)
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
-		return
-	}
-	if err := req.ValidateRequest(); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -233,25 +210,16 @@ func (h *RPCHandler) Version(w http.ResponseWriter, r *http.Request) {
 // @Summary      Read the cluster's genesis hash and compare it to config
 // @Description  A genesis hash is not folded into a signature the way EIP-155 binds a chain id, so nothing on chain prevents a transaction from replaying on another cluster. Comparing what the endpoint reports against what config names is the substitute check.
 // @Tags         rpc
-// @Accept       json
 // @Produce      json
-// @Param        body  body      ClusterRequest  true  "Cluster"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  GenesisHashResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/genesis-hash [post]
 func (h *RPCHandler) GenesisHash(w http.ResponseWriter, r *http.Request) {
-	req := new(ClusterRequest)
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
-		return
-	}
-	if err := req.ValidateRequest(); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -270,31 +238,22 @@ func (h *RPCHandler) GenesisHash(w http.ResponseWriter, r *http.Request) {
 
 // Blockhash godoc
 // @Summary      Read a recent blockhash
-// @Description  Returns the blockhash to build against and the block height past which it is rejected, so expiry can be checked rather than guessed.
+// @Description  Returns the blockhash to build against and the block height past which it is rejected, so expiry can be checked rather than guessed. Fetched at finalized commitment, since a blockhash from a less settled view risks belonging to a fork.
 // @Tags         rpc
-// @Accept       json
 // @Produce      json
-// @Param        body  body      ClusterRequest  true  "Cluster"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  BlockhashResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/blockhash [post]
 func (h *RPCHandler) Blockhash(w http.ResponseWriter, r *http.Request) {
-	req := new(ClusterRequest)
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
-		return
-	}
-	if err := req.ValidateRequest(); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	hash, lastValid, err := chain.Cli.LatestBlockhash(r.Context(), rpc.Commitment(req.Commitment.Commitment))
+	hash, lastValid, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -308,11 +267,13 @@ func (h *RPCHandler) Blockhash(w http.ResponseWriter, r *http.Request) {
 
 // SimulateTransaction godoc
 // @Summary      Execute a transaction without submitting it
-// @Description  Runs the transaction against the node's state and returns the program logs either way. The logs are the only account of why execution stopped; nothing here corresponds to a revert string. With sig_verify off the transaction need not be signed, which is what makes this usable before deciding to sign.
+// @Description  Runs a fully signed transaction against the node's state without broadcasting it, and returns the program logs either way. The logs are the only account of why execution stopped; nothing here corresponds to a revert string.
 // @Tags         rpc
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SimulateTransactionRequest  true  "Transaction"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SimulateTransactionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/transaction/simulate [post]
@@ -326,13 +287,16 @@ func (h *RPCHandler) SimulateTransaction(w http.ResponseWriter, r *http.Request)
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	value, err := chain.Cli.SimulateTransaction(r.Context(), req.ToTransaction(), req.SigVerify, rpc.Commitment(req.Commitment.Commitment))
+	// Signatures are always verified, for the same reason the request
+	// requires a fully signed transaction: catching a bad signature here
+	// costs nothing, while skipping the check only defers the failure.
+	value, err := chain.Cli.SimulateTransaction(r.Context(), req.ToTransaction(), true, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -348,6 +312,8 @@ func (h *RPCHandler) SimulateTransaction(w http.ResponseWriter, r *http.Request)
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SignatureStatusRequest  true  "Signature"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SignatureStatusResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/transaction/status [post]
@@ -361,13 +327,15 @@ func (h *RPCHandler) SignatureStatus(w http.ResponseWriter, r *http.Request) {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	status, err := chain.Cli.SignatureStatus(r.Context(), req.ToSignature(), req.SearchHistory)
+	// The node's recent cache forgets a signature quickly, and a status
+	// query is pointless if it can't see past that.
+	status, err := chain.Cli.SignatureStatus(r.Context(), req.ToSignature(), true)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -383,6 +351,8 @@ func (h *RPCHandler) SignatureStatus(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      FeeRequest  true  "Message"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  FeeResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/fee [post]
@@ -396,13 +366,13 @@ func (h *RPCHandler) Fee(w http.ResponseWriter, r *http.Request) {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	fee, valid, err := chain.Cli.FeeForMessage(r.Context(), req.ToMessage(), rpc.Commitment(req.Commitment.Commitment))
+	fee, valid, err := chain.Cli.FeeForMessage(r.Context(), req.ToMessage(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -413,24 +383,18 @@ func (h *RPCHandler) Fee(w http.ResponseWriter, r *http.Request) {
 
 // rentExemption answers the minimum balance for a size, shared by the typed
 // endpoints below.
+//
+// Commitment is fixed rather than taken from a request: the answer is a
+// protocol constant derived from the requested size, not live account state,
+// so it does not vary with how settled the view of the cluster is.
 func (h *RPCHandler) rentExemption(w http.ResponseWriter, r *http.Request, accountType string, space uint64) {
-	req := new(ClusterRequest)
-	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
-		return
-	}
-	if err := req.ValidateRequest(); err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	lamports, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), space, rpc.Commitment(req.Commitment.Commitment))
+	lamports, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), space, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -443,67 +407,67 @@ func (h *RPCHandler) rentExemption(w http.ResponseWriter, r *http.Request, accou
 // @Summary      Minimum balance for a plain wallet
 // @Description  A wallet holds lamports and no data, so this is the floor any account must clear. It is also what a transfer to a previously unused address has to meet, since the transfer creates the account.
 // @Tags         rpc
-// @Accept       json
 // @Produce      json
-// @Param        body  body      ClusterRequest  true  "Cluster"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  RentExemptionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/system [post]
 func (h *RPCHandler) RentExemptionSystem(w http.ResponseWriter, r *http.Request) {
-	h.rentExemption(w, r, "system", SpaceSystemAccount)
+	h.rentExemption(w, r, "system", core.SystemAccountSpace)
 }
 
 // RentExemptionMint godoc
 // @Summary      Minimum balance for an SPL Token mint
 // @Tags         rpc
-// @Accept       json
 // @Produce      json
-// @Param        body  body      ClusterRequest  true  "Cluster"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  RentExemptionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/mint [post]
 func (h *RPCHandler) RentExemptionMint(w http.ResponseWriter, r *http.Request) {
-	h.rentExemption(w, r, "mint", SpaceMint)
+	h.rentExemption(w, r, "mint", core.MintSpace)
 }
 
 // RentExemptionToken godoc
 // @Summary      Minimum balance for an SPL Token account
 // @Description  Every token balance lives in an account of its own, so opening a position in a new token costs this much before any tokens move.
 // @Tags         rpc
-// @Accept       json
 // @Produce      json
-// @Param        body  body      ClusterRequest  true  "Cluster"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  RentExemptionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/token [post]
 func (h *RPCHandler) RentExemptionToken(w http.ResponseWriter, r *http.Request) {
-	h.rentExemption(w, r, "token", SpaceTokenAccount)
+	h.rentExemption(w, r, "token", core.TokenAccountSpace)
 }
 
 // RentExemptionStake godoc
 // @Summary      Minimum balance for a stake account
 // @Tags         rpc
-// @Accept       json
 // @Produce      json
-// @Param        body  body      ClusterRequest  true  "Cluster"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  RentExemptionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/stake [post]
 func (h *RPCHandler) RentExemptionStake(w http.ResponseWriter, r *http.Request) {
-	h.rentExemption(w, r, "stake", SpaceStakeAccount)
+	h.rentExemption(w, r, "stake", core.StakeAccountSpace)
 }
 
 // RentExemptionVote godoc
 // @Summary      Minimum balance for a validator vote account
 // @Tags         rpc
-// @Accept       json
 // @Produce      json
-// @Param        body  body      ClusterRequest  true  "Cluster"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  RentExemptionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/vote [post]
 func (h *RPCHandler) RentExemptionVote(w http.ResponseWriter, r *http.Request) {
-	h.rentExemption(w, r, "vote", SpaceVoteAccount)
+	h.rentExemption(w, r, "vote", core.VoteAccountSpace)
 }
 
 // RentExemptionPublicKey godoc
@@ -513,6 +477,8 @@ func (h *RPCHandler) RentExemptionVote(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      AccountRequest  true  "Account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  RentExemptionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/rent-exemption/public-key [post]
@@ -527,14 +493,13 @@ func (h *RPCHandler) RentExemptionPublicKey(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	commitment := rpc.Commitment(req.Commitment.Commitment)
-	info, err := chain.Cli.AccountInfo(r.Context(), req.ToPublicKey(), commitment)
+	info, err := chain.Cli.AccountInfo(r.Context(), req.ToPublicKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -544,7 +509,10 @@ func (h *RPCHandler) RentExemptionPublicKey(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	lamports, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), info.Space, commitment)
+	// The rent-exemption minimum is a protocol constant derived from the
+	// size, not live state, so it is priced at a fixed commitment regardless
+	// of the one the account lookup above used.
+	lamports, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), info.Space, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -559,6 +527,8 @@ func (h *RPCHandler) RentExemptionPublicKey(w http.ResponseWriter, r *http.Reque
 // @Accept       json
 // @Produce      json
 // @Param        body  body      AirdropRequest  true  "Account and amount"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  AirdropResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/airdrop [post]
@@ -572,13 +542,13 @@ func (h *RPCHandler) Airdrop(w http.ResponseWriter, r *http.Request) {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
-	sig, err := chain.Cli.RequestAirdrop(r.Context(), req.ToPublicKey(), req.Lamports(), rpc.Commitment(req.Commitment.Commitment))
+	sig, err := chain.Cli.RequestAirdrop(r.Context(), req.ToPublicKey(), req.Lamports(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, err.Error())
 		return
@@ -594,6 +564,8 @@ func (h *RPCHandler) Airdrop(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      RawRequest  true  "Method and params"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  map[string]interface{}
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/ [post]
@@ -607,9 +579,9 @@ func (h *RPCHandler) Raw(w http.ResponseWriter, r *http.Request) {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 
@@ -628,6 +600,8 @@ func (h *RPCHandler) Raw(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        body  body      BatchRequest  true  "Calls"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  map[string]interface{}
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/rpc/batch [post]
@@ -641,9 +615,9 @@ func (h *RPCHandler) Batch(w http.ResponseWriter, r *http.Request) {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 

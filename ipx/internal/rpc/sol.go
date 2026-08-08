@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/core/types"
 )
 
@@ -196,6 +197,26 @@ func (c *Client) MinimumBalanceForRentExemption(ctx context.Context, space uint6
 	err := c.Call(ctx, SOLGetMinimumBalanceForRentExemption(space, commitment, &result))
 
 	return result, err
+}
+
+func (c *Client) MinimumBalanceForRentExemptionSystem(ctx context.Context) (uint64, error) {
+	return c.MinimumBalanceForRentExemption(ctx, core.SystemAccountSpace, CommitmentConfirmed)
+}
+
+func (c *Client) MinimumBalanceForRentExemptionMint(ctx context.Context) (uint64, error) {
+	return c.MinimumBalanceForRentExemption(ctx, core.MintSpace, CommitmentConfirmed)
+}
+
+func (c *Client) MinimumBalanceForRentExemptionToken(ctx context.Context) (uint64, error) {
+	return c.MinimumBalanceForRentExemption(ctx, core.TokenAccountSpace, CommitmentConfirmed)
+}
+
+func (c *Client) MinimumBalanceForRentExemptionStake(ctx context.Context) (uint64, error) {
+	return c.MinimumBalanceForRentExemption(ctx, core.StakeAccountSpace, CommitmentConfirmed)
+}
+
+func (c *Client) MinimumBalanceForRentExemptionVote(ctx context.Context) (uint64, error) {
+	return c.MinimumBalanceForRentExemption(ctx, core.VoteAccountSpace, CommitmentConfirmed)
 }
 
 // FeeForMessage prices a message, or returns false if the blockhash it carries

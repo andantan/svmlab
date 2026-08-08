@@ -2,15 +2,6 @@ basePath: /
 definitions:
   misc.AccountRequest:
     properties:
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
-      commitment:
-        example: confirmed
-        type: string
       public_key:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
@@ -38,15 +29,6 @@ definitions:
     properties:
       amount:
         example: "1000000000"
-        type: string
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
-      commitment:
-        example: confirmed
         type: string
       public_key:
         type: string
@@ -77,12 +59,6 @@ definitions:
         items:
           $ref: '#/definitions/misc.BatchCall'
         type: array
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
     type: object
   misc.BlockhashResponse:
     properties:
@@ -91,29 +67,8 @@ definitions:
       last_valid_block_height:
         type: integer
     type: object
-  misc.ClusterRequest:
-    properties:
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
-      commitment:
-        example: confirmed
-        type: string
-    type: object
   misc.FeeRequest:
     properties:
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
-      commitment:
-        example: confirmed
-        type: string
       message:
         type: string
     type: object
@@ -142,12 +97,6 @@ definitions:
     type: object
   misc.RawRequest:
     properties:
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
       method:
         example: getEpochInfo
         type: string
@@ -166,22 +115,6 @@ definitions:
     type: object
   misc.SendTransactionRequest:
     properties:
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
-      commitment:
-        example: confirmed
-        type: string
-      skip_preflight:
-        description: |-
-          SkipPreflight disables the node-side simulation that runs before the
-          transaction is broadcast. Leaving it off surfaces most failures without
-          spending a signature, including an expired blockhash.
-        example: false
-        type: boolean
       transaction:
         type: string
     type: object
@@ -231,18 +164,6 @@ definitions:
     type: object
   misc.SignatureStatusRequest:
     properties:
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
-      search_history:
-        description: |-
-          SearchHistory looks beyond the node's recent cache. A signature the
-          cluster has already forgotten is reported as not found without it.
-        example: true
-        type: boolean
       signature:
         type: string
     type: object
@@ -265,18 +186,6 @@ definitions:
     type: object
   misc.SimulateTransactionRequest:
     properties:
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
-      commitment:
-        example: confirmed
-        type: string
-      sig_verify:
-        example: false
-        type: boolean
       transaction:
         type: string
     type: object
@@ -333,12 +242,6 @@ definitions:
     type: object
   v1.BuildTransactionRequest:
     properties:
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
       fee_payer:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
@@ -397,59 +300,57 @@ definitions:
         example: "11111111111111111111111111111111"
         type: string
     type: object
-  v2.Header:
+  v2.SystemTransferMaxRequest:
     properties:
-      num_readonly_signed_accounts:
-        type: integer
-      num_readonly_unsigned_accounts:
-        type: integer
-      num_required_signatures:
-        type: integer
-    type: object
-  v2.TransferRequest:
-    properties:
-      allow_unfunded_recipient:
-        description: |-
-          AllowUnfundedRecipient permits sending to an account that does not exist
-          yet. It defaults to false because base58 carries no checksum: a single
-          mistyped character decodes to a different valid address, and an account
-          nobody has ever funded is the only signal that separates a typo from an
-          intended new account. solana transfer guards the same way.
-        example: false
-        type: boolean
-      amount:
-        description: |-
-          Amount is a decimal lamport count, or "max" to send everything the
-          sender can. It is a string so that the two forms share one field and so
-          that a u64 survives a JSON round trip: JSON numbers are floats, and
-          values past 2^53 would lose precision silently.
-        example: "1000000"
-        type: string
-      chain_name:
-        example: solana
-        type: string
-      chain_network:
-        example: testnet
-        type: string
       fee_payer:
-        description: |-
-          FeePayer defaults to the sender. Paying from a different account is
-          common on Solana, and it changes what "max" means: the sender can send
-          its whole balance when someone else covers the fee.
-        example: ""
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       from:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-      recent_blockhash:
-        description: RecentBlockhash may be left empty, in which case it is fetched.
-        example: ""
         type: string
       to:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
-  v2.TransferResponse:
+  v2.SystemTransferMaxResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      amount_sol:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SystemTransferRequest:
+    properties:
+      amount:
+        example: "1000000"
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      from:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      to:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.SystemTransferResponse:
     properties:
       account_keys:
         items:
@@ -465,8 +366,6 @@ definitions:
         type: string
       fee:
         type: string
-      header:
-        $ref: '#/definitions/v2.Header'
       message:
         type: string
       recent_blockhash:
@@ -475,8 +374,6 @@ definitions:
         items:
           type: string
         type: array
-      size:
-        type: integer
       transaction:
         type: string
     type: object
@@ -500,6 +397,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.RawRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -531,6 +438,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.AccountRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -558,6 +475,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.AirdropRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -585,6 +512,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.AccountRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -612,6 +549,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.BatchRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -631,17 +578,21 @@ paths:
       - rpc
   /svm/rpc/blockhash:
     post:
-      consumes:
-      - application/json
       description: Returns the blockhash to build against and the block height past
-        which it is rejected, so expiry can be checked rather than guessed.
+        which it is rejected, so expiry can be checked rather than guessed. Fetched
+        at finalized commitment, since a blockhash from a less settled view risks
+        belonging to a fork.
       parameters:
-      - description: Cluster
-        in: body
-        name: body
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
         required: true
-        schema:
-          $ref: '#/definitions/misc.ClusterRequest'
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -672,6 +623,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.FeeRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -690,19 +651,21 @@ paths:
       - rpc
   /svm/rpc/genesis-hash:
     post:
-      consumes:
-      - application/json
       description: A genesis hash is not folded into a signature the way EIP-155 binds
         a chain id, so nothing on chain prevents a transaction from replaying on another
         cluster. Comparing what the endpoint reports against what config names is
         the substitute check.
       parameters:
-      - description: Cluster
-        in: body
-        name: body
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
         required: true
-        schema:
-          $ref: '#/definitions/misc.ClusterRequest'
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -721,15 +684,17 @@ paths:
       - rpc
   /svm/rpc/health:
     post:
-      consumes:
-      - application/json
       parameters:
-      - description: Cluster
-        in: body
-        name: body
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
         required: true
-        schema:
-          $ref: '#/definitions/misc.ClusterRequest'
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -748,15 +713,17 @@ paths:
       - rpc
   /svm/rpc/rent-exemption/mint:
     post:
-      consumes:
-      - application/json
       parameters:
-      - description: Cluster
-        in: body
-        name: body
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
         required: true
-        schema:
-          $ref: '#/definitions/misc.ClusterRequest'
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -787,6 +754,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.AccountRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -805,15 +782,17 @@ paths:
       - rpc
   /svm/rpc/rent-exemption/stake:
     post:
-      consumes:
-      - application/json
       parameters:
-      - description: Cluster
-        in: body
-        name: body
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
         required: true
-        schema:
-          $ref: '#/definitions/misc.ClusterRequest'
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -832,18 +811,20 @@ paths:
       - rpc
   /svm/rpc/rent-exemption/system:
     post:
-      consumes:
-      - application/json
       description: A wallet holds lamports and no data, so this is the floor any account
         must clear. It is also what a transfer to a previously unused address has
         to meet, since the transfer creates the account.
       parameters:
-      - description: Cluster
-        in: body
-        name: body
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
         required: true
-        schema:
-          $ref: '#/definitions/misc.ClusterRequest'
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -862,17 +843,19 @@ paths:
       - rpc
   /svm/rpc/rent-exemption/token:
     post:
-      consumes:
-      - application/json
       description: Every token balance lives in an account of its own, so opening
         a position in a new token costs this much before any tokens move.
       parameters:
-      - description: Cluster
-        in: body
-        name: body
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
         required: true
-        schema:
-          $ref: '#/definitions/misc.ClusterRequest'
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -891,15 +874,17 @@ paths:
       - rpc
   /svm/rpc/rent-exemption/vote:
     post:
-      consumes:
-      - application/json
       parameters:
-      - description: Cluster
-        in: body
-        name: body
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
         required: true
-        schema:
-          $ref: '#/definitions/misc.ClusterRequest'
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -918,15 +903,17 @@ paths:
       - rpc
   /svm/rpc/slot:
     post:
-      consumes:
-      - application/json
       parameters:
-      - description: Cluster
-        in: body
-        name: body
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
         required: true
-        schema:
-          $ref: '#/definitions/misc.ClusterRequest'
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -957,6 +944,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.SendTransactionRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -977,10 +974,10 @@ paths:
     post:
       consumes:
       - application/json
-      description: Runs the transaction against the node's state and returns the program
-        logs either way. The logs are the only account of why execution stopped; nothing
-        here corresponds to a revert string. With sig_verify off the transaction need
-        not be signed, which is what makes this usable before deciding to sign.
+      description: Runs a fully signed transaction against the node's state without
+        broadcasting it, and returns the program logs either way. The logs are the
+        only account of why execution stopped; nothing here corresponds to a revert
+        string.
       parameters:
       - description: Transaction
         in: body
@@ -988,6 +985,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.SimulateTransactionRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -1017,6 +1024,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.SignatureStatusRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -1035,15 +1052,17 @@ paths:
       - rpc
   /svm/rpc/version:
     post:
-      consumes:
-      - application/json
       parameters:
-      - description: Cluster
-        in: body
-        name: body
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
         required: true
-        schema:
-          $ref: '#/definitions/misc.ClusterRequest'
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -1076,6 +1095,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.SignRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -1108,6 +1137,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.SignTransactionRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -1138,6 +1177,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/misc.VerifyRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -1168,6 +1217,16 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/v1.BuildTransactionRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -1189,25 +1248,33 @@ paths:
       consumes:
       - application/json
       description: Assembles a System Program transfer and returns the same shape
-        as a v1 build, so sign and send accept it unchanged. Amount is a lamport count,
-        or "max" to send everything the sender can. Sending to an account that does
-        not exist is refused unless allow_unfunded_recipient is set, since base58
-        has no checksum and a mistyped address is otherwise indistinguishable from
-        an intended new one.
+        as a v1 build, so sign and send accept it unchanged. The recent blockhash
+        is always fetched, and the recipient is not required to exist yet. To send
+        the sender's entire balance, use transfer/max instead.
       parameters:
       - description: Sender, recipient, and amount
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/v2.TransferRequest'
+          $ref: '#/definitions/v2.SystemTransferRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/v2.TransferResponse'
+            $ref: '#/definitions/v2.SystemTransferResponse'
         "400":
           description: Bad Request
           schema:
@@ -1215,6 +1282,48 @@ paths:
               type: string
             type: object
       summary: Build a native SOL transfer
+      tags:
+      - transaction
+  /svm/v2/transaction/system/transfer/max:
+    post:
+      consumes:
+      - application/json
+      description: Assembles a System Program transfer moving everything the sender
+        can send. Resolving that amount needs the sender's balance and the fee, both
+        fetched from the chain. The fee only comes out of the sender's balance when
+        the sender is also the fee payer; with a separate fee payer the whole balance
+        can go, which empties the account and lets the runtime reclaim it.
+      parameters:
+      - description: Sender and recipient
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemTransferMaxRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemTransferMaxResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a native SOL transfer of the sender's entire balance
       tags:
       - transaction
 swagger: "2.0"

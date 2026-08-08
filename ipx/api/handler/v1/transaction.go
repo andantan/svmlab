@@ -12,12 +12,11 @@ import (
 )
 
 type TransactionHandler struct {
-	cfg     *config.Config
-	cluster *rpc.Cluster
+	cfg *config.Config
 }
 
-func NewTransactionHandler(cfg *config.Config, cluster *rpc.Cluster) *TransactionHandler {
-	return &TransactionHandler{cfg: cfg, cluster: cluster}
+func NewTransactionHandler(cfg *config.Config) *TransactionHandler {
+	return &TransactionHandler{cfg: cfg}
 }
 
 // BuildTransaction godoc
@@ -27,6 +26,8 @@ func NewTransactionHandler(cfg *config.Config, cluster *rpc.Cluster) *Transactio
 // @Accept       json
 // @Produce      json
 // @Param        body  body      BuildTransactionRequest  true  "Fee payer, blockhash, and instructions"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  BuildTransactionResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v1/transaction/build [post]
@@ -41,9 +42,9 @@ func (h *TransactionHandler) BuildTransaction(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	chain, err := h.cluster.Get(req.ChainName, req.ChainNetwork)
+	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 

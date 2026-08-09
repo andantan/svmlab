@@ -38,6 +38,19 @@ func LamportsToSol(lamports uint64) string {
 	return formatScaledUint(lamports, SolDecimals)
 }
 
+// BaseUnitsToUI renders a token amount against its mint's decimals.
+//
+// It is LamportsToSol with the scale supplied rather than fixed, because a
+// token's scale is a field on its mint instead of a property of the chain. That
+// is the whole difference: nine is true of every lamport everywhere, while
+// USDC's six and wSOL's nine are true only of those mints.
+//
+// The scale never changes what an instruction does. Every amount on the wire is
+// base units, and this exists to display them.
+func BaseUnitsToUI(amount uint64, decimals uint8) string {
+	return formatScaledUint(amount, int(decimals))
+}
+
 // SolToLamports parses a decimal SOL string into lamports.
 //
 // It rejects an amount with more than nine decimal places rather than

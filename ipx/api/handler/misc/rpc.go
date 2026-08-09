@@ -7,6 +7,7 @@ import (
 
 	"github.com/andantan/svmlab/api/handler"
 	"github.com/andantan/svmlab/core"
+	"github.com/andantan/svmlab/core/types"
 	"github.com/andantan/svmlab/internal/rpc"
 )
 
@@ -838,4 +839,219 @@ func (h *RPCHandler) Batch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handler.WriteJSON(w, http.StatusOK, map[string]any{"results": results})
+}
+
+// Mint godoc
+// @Summary      Read an SPL Token mint
+// @Description  Parses the 82 bytes a mint account holds. A mint is the closest thing Solana has to an ERC-20 contract, and what it lacks is the point: no balances and no allowances, since those live in separate token accounts owned by each holder. mint_authority and freeze_authority are omitted when absent, which is different from being the zero address; a mint whose mint authority was removed has a permanently fixed supply, and one initialized without a freeze authority can never gain one. Works for both classic Token and Token-2022, whose extensions sit past the base layout.
+// @Tags         rpc
+// @Accept       json
+// @Produce      json
+// @Param        body  body      MintRequest  true  "Mint account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  MintResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/rpc/token/mint [post]
+func (h *RPCHandler) Mint(w http.ResponseWriter, r *http.Request) {
+	req := new(MintRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.ToPublicKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if info == nil {
+		handler.WriteOK(w, &MintResponse{PublicKey: req.ToPublicKey().Base58()})
+		return
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+		return
+	}
+	owner, err := types.NewPublicKeyFromBase58(info.Owner)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	mint, err := core.DecodeMint(owner, data)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, "public_key: "+err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewMintResponse(req.ToPublicKey(), info.Owner, mint))
+}
+
+// TokenAccount godoc
+// @Summary      Read an SPL Token holder account
+// @Description  Parses the 165 bytes a token account holds. owner is not the runtime owner: that is the token program, which is what may write the data, while owner here is the wallet whose signature the program accepts. amount is base units with no scale of its own, so the mint is read as well to report amount_ui; when the mint cannot be read the base units are still returned and decimals is omitted rather than guessed. Works for both classic Token and Token-2022, whose extensions sit past the base layout.
+// @Tags         rpc
+// @Accept       json
+// @Produce      json
+// @Param        body  body      TokenAccountRequest  true  "Token account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  TokenAccountResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/rpc/token/account [post]
+func (h *RPCHandler) TokenAccount(w http.ResponseWriter, r *http.Request) {
+	req := new(TokenAccountRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.ToPublicKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if info == nil {
+		handler.WriteOK(w, &TokenAccountResponse{PublicKey: req.ToPublicKey().Base58()})
+		return
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+		return
+	}
+	owner, err := types.NewPublicKeyFromBase58(info.Owner)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	account, err := core.DecodeTokenAccount(owner, data)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, "public_key: "+err.Error())
+		return
+	}
+
+	// The mint is read for its decimals, which the account does not carry. A
+	// failure here narrows the response rather than failing it: the balance is
+	// still reported in base units, and a scale that could not be confirmed is
+	// left out rather than guessed, since a balance shown against the wrong
+	// decimals is wrong by orders of magnitude and reads as authoritative.
+	var decimals *uint8
+	if parsed, err := chain.Cli.Mint(r.Context(), account.Mint, rpc.CommitmentConfirmed); err == nil && parsed != nil {
+		decimals = &parsed.Decimals
+	}
+
+	handler.WriteOK(w, NewTokenAccountResponse(req.ToPublicKey(), info.Owner, account, decimals))
+}
+
+// TokenAccountsByOwner godoc
+// @Summary      List the token accounts a wallet owns
+// @Description  Lists every token account held by one wallet under one token program, optionally narrowed to a single mint. A wallet may hold several accounts for the same mint, since only the associated address is unique per wallet and mint, so this returns a list rather than an account. token_program defaults to classic Token and cannot default to both: Token and Token-2022 hold separate accounts and a wallet may have accounts under each, so a merged listing would report accounts no single instruction can touch together.
+// @Tags         rpc
+// @Accept       json
+// @Produce      json
+// @Param        body  body      TokenAccountsByOwnerRequest  true  "Wallet, optional mint, optional token program"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  TokenAccountsByOwnerResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/rpc/token/accounts-by-owner [post]
+func (h *RPCHandler) TokenAccountsByOwner(w http.ResponseWriter, r *http.Request) {
+	req := new(TokenAccountsByOwnerRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	var (
+		found    []rpc.KeyedAccount
+		mintName string
+	)
+	if req.MintKey().IsNil() {
+		found, err = chain.Cli.TokenAccountsByProgram(r.Context(), req.OwnerKey(), req.TokenProgramKey(), rpc.CommitmentConfirmed)
+	} else {
+		mintName = req.MintKey().Base58()
+		found, err = chain.Cli.TokenAccountsByMint(r.Context(), req.OwnerKey(), req.MintKey(), rpc.CommitmentConfirmed)
+	}
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	// Decimals are cached across the listing. A wallet's accounts cluster on a
+	// few mints, so reading each one per account would turn a single call into
+	// dozens for no new information.
+	decimals := make(map[string]*uint8)
+	accounts := make([]*TokenAccountResponse, 0, len(found))
+	for _, ka := range found {
+		key, err := types.NewPublicKeyFromBase58(ka.Pubkey)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("account %s: %s", ka.Pubkey, err))
+			return
+		}
+		data, err := ka.Account.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("account %s: %s", ka.Pubkey, err))
+			return
+		}
+		owner, err := types.NewPublicKeyFromBase58(ka.Account.Owner)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("account %s: %s", ka.Pubkey, err))
+			return
+		}
+		account, err := core.DecodeTokenAccount(owner, data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("account %s: %s", ka.Pubkey, err))
+			return
+		}
+
+		// Each mint is read once for its decimals and remembered. A wallet's
+		// accounts cluster on a few mints, so reading per account would turn
+		// one call into dozens for no new information. A mint that could not
+		// be read caches its nil too, so it is not retried per account either.
+		mint := account.Mint.Base58()
+		if _, ok := decimals[mint]; !ok {
+			if parsed, err := chain.Cli.Mint(r.Context(), account.Mint, rpc.CommitmentConfirmed); err == nil && parsed != nil {
+				decimals[mint] = &parsed.Decimals
+			} else {
+				decimals[mint] = nil
+			}
+		}
+
+		accounts = append(accounts, NewTokenAccountResponse(key, ka.Account.Owner, account, decimals[mint]))
+	}
+
+	handler.WriteOK(w, NewTokenAccountsByOwnerResponse(req.OwnerKey().Base58(), req.TokenProgramKey().Base58(), mintName, accounts))
 }

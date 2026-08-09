@@ -84,6 +84,22 @@ func SOLGetAccountInfo(pubkey string, c Commitment, result *Result[*AccountInfo]
 	}
 }
 
+// SOLGetTokenAccountsByOwner lists the token accounts a wallet owns, filtered
+// either to one mint or to one token program.
+//
+// The filter is required and accepts exactly one of the two keys, which is why
+// this takes a prepared map rather than two optional arguments. Filtering by
+// program is what answers "everything this wallet holds"; filtering by mint
+// answers "this wallet's accounts for one token", of which there may be more
+// than one, since only the associated account is unique per pair.
+func SOLGetTokenAccountsByOwner(owner string, filter map[string]any, c Commitment, result *Result[[]KeyedAccount]) Elem {
+	return Elem{
+		Method: "getTokenAccountsByOwner",
+		Params: []any{owner, filter, map[string]any{"commitment": c, "encoding": "base64"}},
+		Result: result,
+	}
+}
+
 func SOLGetLatestBlockhash(c Commitment, result *Result[LatestBlockhash]) Elem {
 	return Elem{Method: "getLatestBlockhash", Params: []any{options(c)}, Result: result}
 }

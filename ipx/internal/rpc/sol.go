@@ -60,6 +60,16 @@ func (a *AccountInfo) Bytes() ([]byte, error) {
 	return base64.StdEncoding.DecodeString(encoded)
 }
 
+// KeyedAccount is an account together with the address it was found at.
+//
+// getAccountInfo takes the address as an argument and so does not repeat it;
+// the listing methods return accounts nobody named in advance, which is the
+// whole point of asking, so the address travels with each one.
+type KeyedAccount struct {
+	Pubkey  string       `json:"pubkey"`
+	Account *AccountInfo `json:"account"`
+}
+
 // LatestBlockhash is a blockhash together with the last block height at which
 // a transaction using it is still accepted.
 //
@@ -187,6 +197,79 @@ func (c *Client) LatestBlockhash(ctx context.Context, commitment Commitment) (*t
 	return hash, result.Value.LastValidBlockHeight, nil
 }
 
+// Mint reads a mint account and parses it, returning nil when nothing lives at
+// the address.
+//
+// A missing account is not an error here, since asking whether a mint exists is
+// a legitimate question and the caller can tell nil from a failure to answer.
+func (c *Client) Mint(ctx context.Context, mint *types.PublicKey, commitment Commitment) (*core.Mint, error) {
+	info, err := c.AccountInfo(ctx, mint, commitment)
+	if err != nil || info == nil {
+		return nil, err
+	}
+
+	owner, err := types.NewPublicKeyFromBase58(info.Owner)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode account data: %w", err)
+	}
+
+	return core.DecodeMint(owner, data)
+}
+
+// TokenAccount reads a holder account and parses it, under the same rule as
+// Mint.
+func (c *Client) TokenAccount(ctx context.Context, key *types.PublicKey, commitment Commitment) (*core.TokenAccount, error) {
+	info, err := c.AccountInfo(ctx, key, commitment)
+	if err != nil || info == nil {
+		return nil, err
+	}
+
+	owner, err := types.NewPublicKeyFromBase58(info.Owner)
+	if err != nil {
+		return nil, err
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode account data: %w", err)
+	}
+
+	return core.DecodeTokenAccount(owner, data)
+}
+
+// TokenAccountsByMint lists a wallet's token accounts for one mint.
+//
+// There can be more than one. Only the associated address is unique per wallet
+// and mint; any number of keypair accounts may hold the same token for the same
+// owner, so this returns a list rather than an account.
+func (c *Client) TokenAccountsByMint(ctx context.Context, owner, mint *types.PublicKey, commitment Commitment) ([]KeyedAccount, error) {
+	return c.tokenAccountsByOwner(ctx, owner, map[string]any{"mint": mint.Base58()}, commitment)
+}
+
+// TokenAccountsByProgram lists every token account a wallet owns under one
+// token program.
+//
+// The program has to be named because classic Token and Token-2022 are separate
+// programs holding separate accounts, and a wallet may hold both. Asking for one
+// says nothing about the other.
+func (c *Client) TokenAccountsByProgram(ctx context.Context, owner, program *types.PublicKey, commitment Commitment) ([]KeyedAccount, error) {
+	return c.tokenAccountsByOwner(ctx, owner, map[string]any{"programId": program.Base58()}, commitment)
+}
+
+func (c *Client) tokenAccountsByOwner(ctx context.Context, owner *types.PublicKey, filter map[string]any, commitment Commitment) ([]KeyedAccount, error) {
+	var result Result[[]KeyedAccount]
+	if err := c.Call(ctx, SOLGetTokenAccountsByOwner(owner.Base58(), filter, commitment, &result)); err != nil {
+		return nil, err
+	}
+
+	return result.Value, nil
+}
+
 // MinimumBalanceForRentExemption is the balance an account of the given size
 // must hold to persist.
 //
@@ -217,6 +300,10 @@ func (c *Client) MinimumBalanceForRentExemptionStake(ctx context.Context) (uint6
 
 func (c *Client) MinimumBalanceForRentExemptionVote(ctx context.Context) (uint64, error) {
 	return c.MinimumBalanceForRentExemption(ctx, core.VoteAccountSpace, CommitmentConfirmed)
+}
+
+func (c *Client) MinimumBalanceForRentExemptionNonce(ctx context.Context) (uint64, error) {
+	return c.MinimumBalanceForRentExemption(ctx, core.NonceAccountSpace, CommitmentConfirmed)
 }
 
 // FeeForMessage prices a message, or returns false if the blockhash it carries
@@ -362,8 +449,4 @@ func confirmedAtLeast(status string, want Commitment) bool {
 	}
 
 	return rank[status] >= rank[string(want)]
-}
-
-func (c *Client) MinimumBalanceForRentExemptionNonce(ctx context.Context) (uint64, error) {
-	return c.MinimumBalanceForRentExemption(ctx, core.NonceAccountSpace, CommitmentConfirmed)
 }

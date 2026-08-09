@@ -1030,6 +1030,177 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/rpc/token/account": {
+            "post": {
+                "description": "Parses the 165 bytes a token account holds. owner is not the runtime owner: that is the token program, which is what may write the data, while owner here is the wallet whose signature the program accepts. amount is base units with no scale of its own, so the mint is read as well to report amount_ui; when the mint cannot be read the base units are still returned and decimals is omitted rather than guessed. Works for both classic Token and Token-2022, whose extensions sit past the base layout.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read an SPL Token holder account",
+                "parameters": [
+                    {
+                        "description": "Token account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.TokenAccountRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.TokenAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/token/accounts-by-owner": {
+            "post": {
+                "description": "Lists every token account held by one wallet under one token program, optionally narrowed to a single mint. A wallet may hold several accounts for the same mint, since only the associated address is unique per wallet and mint, so this returns a list rather than an account. token_program defaults to classic Token and cannot default to both: Token and Token-2022 hold separate accounts and a wallet may have accounts under each, so a merged listing would report accounts no single instruction can touch together.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "List the token accounts a wallet owns",
+                "parameters": [
+                    {
+                        "description": "Wallet, optional mint, optional token program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.TokenAccountsByOwnerRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.TokenAccountsByOwnerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/rpc/token/mint": {
+            "post": {
+                "description": "Parses the 82 bytes a mint account holds. A mint is the closest thing Solana has to an ERC-20 contract, and what it lacks is the point: no balances and no allowances, since those live in separate token accounts owned by each holder. mint_authority and freeze_authority are omitted when absent, which is different from being the zero address; a mint whose mint authority was removed has a permanently fixed supply, and one initialized without a freeze authority can never gain one. Works for both classic Token and Token-2022, whose extensions sit past the base layout.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read an SPL Token mint",
+                "parameters": [
+                    {
+                        "description": "Mint account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.MintRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.MintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/rpc/transaction/send": {
             "post": {
                 "description": "Submits a fully signed transaction to the cluster and returns its signature. Acceptance is not execution; the transaction still has to land in a block.",
@@ -2789,6 +2960,53 @@ const docTemplate = `{
                 }
             }
         },
+        "misc.MintRequest": {
+            "type": "object",
+            "properties": {
+                "public_key": {
+                    "type": "string",
+                    "example": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
+                }
+            }
+        },
+        "misc.MintResponse": {
+            "type": "object",
+            "properties": {
+                "decimals": {
+                    "type": "integer"
+                },
+                "exists": {
+                    "type": "boolean"
+                },
+                "freezable": {
+                    "type": "boolean"
+                },
+                "freeze_authority": {
+                    "type": "string"
+                },
+                "initialized": {
+                    "type": "boolean"
+                },
+                "mint_authority": {
+                    "type": "string"
+                },
+                "mintable": {
+                    "type": "boolean"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                },
+                "supply": {
+                    "type": "string"
+                },
+                "supply_ui": {
+                    "type": "string"
+                }
+            }
+        },
         "misc.NonceRequest": {
             "type": "object",
             "properties": {
@@ -3110,6 +3328,105 @@ const docTemplate = `{
             "properties": {
                 "slot": {
                     "type": "integer"
+                }
+            }
+        },
+        "misc.TokenAccountRequest": {
+            "type": "object",
+            "properties": {
+                "public_key": {
+                    "type": "string",
+                    "example": "4qRgcVrSqs43Jy9n8w7H5EJh8FnRiTFnABjE37Dd3Ae5"
+                }
+            }
+        },
+        "misc.TokenAccountResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "amount_ui": {
+                    "type": "string"
+                },
+                "close_authority": {
+                    "type": "string"
+                },
+                "decimals": {
+                    "type": "integer"
+                },
+                "delegate": {
+                    "type": "string"
+                },
+                "delegated_amount": {
+                    "type": "string"
+                },
+                "exists": {
+                    "type": "boolean"
+                },
+                "frozen": {
+                    "type": "boolean"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "native": {
+                    "type": "boolean"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                },
+                "rent_reserve": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.TokenAccountsByOwnerRequest": {
+            "type": "object",
+            "properties": {
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "token_program": {
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "misc.TokenAccountsByOwnerResponse": {
+            "type": "object",
+            "properties": {
+                "accounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/misc.TokenAccountResponse"
+                    }
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
                 }
             }
         },

@@ -645,3 +645,237 @@ func NewRentExemptionNonceResponse(lamports uint64) *RentExemptionNonceResponse 
 		SOL:      types.LamportsToSol(lamports),
 	}
 }
+
+// MintRequest names the mint to read.
+type MintRequest struct {
+	PublicKey string `json:"public_key" example:"EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"`
+
+	publicKey *types.PublicKey
+}
+
+func (r *MintRequest) ValidateRequest() error {
+	var err error
+	if r.publicKey, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.PublicKey)); err != nil {
+		return errors.New("public_key: " + err.Error())
+	}
+
+	return nil
+}
+
+func (r *MintRequest) ToPublicKey() *types.PublicKey {
+	return r.publicKey
+}
+
+// MintResponse reports what a mint account holds.
+//
+// This is the closest thing Solana has to an ERC-20 contract, and the fields it
+// does not have are the point: no balances and no allowances, because those
+// live in separate accounts owned by each holder. Supply is the only thing a
+// mint knows about who holds what.
+//
+// MintAuthority and FreezeAuthority are empty when absent, which is different
+// from being the zero address. Removing the mint authority is how a supply is
+// capped and cannot be undone; a mint that was initialized without a freeze
+// authority can never gain one.
+type MintResponse struct {
+	PublicKey       string `json:"public_key"`
+	Exists          bool   `json:"exists"`
+	Program         string `json:"program"`
+	Initialized     bool   `json:"initialized"`
+	Decimals        uint8  `json:"decimals"`
+	Supply          string `json:"supply"`
+	SupplyUI        string `json:"supply_ui"`
+	MintAuthority   string `json:"mint_authority,omitempty"`
+	FreezeAuthority string `json:"freeze_authority,omitempty"`
+	Mintable        bool   `json:"mintable"`
+	Freezable       bool   `json:"freezable"`
+}
+
+func NewMintResponse(k *types.PublicKey, program string, m *core.Mint) *MintResponse {
+	res := &MintResponse{
+		PublicKey:   k.Base58(),
+		Exists:      true,
+		Program:     program,
+		Initialized: m.IsInitialized,
+		Decimals:    m.Decimals,
+		Supply:      strconv.FormatUint(m.Supply, 10),
+		SupplyUI:    types.BaseUnitsToUI(m.Supply, m.Decimals),
+		Mintable:    m.Mintable(),
+		Freezable:   m.Freezable(),
+	}
+	if !m.MintAuthority.IsNil() {
+		res.MintAuthority = m.MintAuthority.Base58()
+	}
+	if !m.FreezeAuthority.IsNil() {
+		res.FreezeAuthority = m.FreezeAuthority.Base58()
+	}
+
+	return res
+}
+
+// TokenAccountRequest names the token account to read.
+type TokenAccountRequest struct {
+	PublicKey string `json:"public_key" example:"4qRgcVrSqs43Jy9n8w7H5EJh8FnRiTFnABjE37Dd3Ae5"`
+
+	publicKey *types.PublicKey
+}
+
+func (r *TokenAccountRequest) ValidateRequest() error {
+	var err error
+	if r.publicKey, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.PublicKey)); err != nil {
+		return errors.New("public_key: " + err.Error())
+	}
+
+	return nil
+}
+
+func (r *TokenAccountRequest) ToPublicKey() *types.PublicKey {
+	return r.publicKey
+}
+
+// TokenAccountResponse reports what a holder account holds.
+//
+// Owner is not the runtime owner. That is the token program, which is what may
+// write the data; Owner here is the wallet whose signature the program accepts.
+//
+// Amount has no decimals of its own. It is base units, and AmountUI is it
+// placed against the mint's decimals, which is why reading an account means
+// reading its mint too.
+type TokenAccountResponse struct {
+	PublicKey       string `json:"public_key"`
+	Exists          bool   `json:"exists"`
+	Program         string `json:"program"`
+	Mint            string `json:"mint"`
+	Owner           string `json:"owner"`
+	Amount          string `json:"amount"`
+	AmountUI        string `json:"amount_ui,omitempty"`
+	Decimals        *uint8 `json:"decimals,omitempty"`
+	State           string `json:"state"`
+	Frozen          bool   `json:"frozen"`
+	Native          bool   `json:"native"`
+	RentReserve     string `json:"rent_reserve,omitempty"`
+	Delegate        string `json:"delegate,omitempty"`
+	DelegatedAmount string `json:"delegated_amount,omitempty"`
+	CloseAuthority  string `json:"close_authority,omitempty"`
+}
+
+// tokenAccountStateName names the state rather than reporting the byte, since
+// frozen is the one a caller has to act on and 2 does not say so.
+func tokenAccountStateName(state uint8) string {
+	switch state {
+	case core.TokenAccountStateUninitialized:
+		return "uninitialized"
+	case core.TokenAccountStateInitialized:
+		return "initialized"
+	case core.TokenAccountStateFrozen:
+		return "frozen"
+	default:
+		return "unknown"
+	}
+}
+
+// NewTokenAccountResponse fills the UI amount only when the mint was read.
+//
+// decimals is nil when it could not be, which happens when the mint is on a
+// different program or has gone. Reporting the base units alone is honest;
+// guessing a scale would misstate a balance by orders of magnitude.
+func NewTokenAccountResponse(k *types.PublicKey, program string, a *core.TokenAccount, decimals *uint8) *TokenAccountResponse {
+	res := &TokenAccountResponse{
+		PublicKey: k.Base58(),
+		Exists:    true,
+		Program:   program,
+		Mint:      a.Mint.Base58(),
+		Owner:     a.Owner.Base58(),
+		Amount:    strconv.FormatUint(a.Amount, 10),
+		Decimals:  decimals,
+		State:     tokenAccountStateName(a.State),
+		Frozen:    a.Frozen(),
+		Native:    a.IsNative,
+	}
+	if decimals != nil {
+		res.AmountUI = types.BaseUnitsToUI(a.Amount, *decimals)
+	}
+	if a.IsNative {
+		res.RentReserve = strconv.FormatUint(a.RentReserve, 10)
+	}
+	if !a.Delegate.IsNil() {
+		res.Delegate = a.Delegate.Base58()
+		res.DelegatedAmount = strconv.FormatUint(a.Delegated(), 10)
+	}
+	if !a.CloseAuthority.IsNil() {
+		res.CloseAuthority = a.CloseAuthority.Base58()
+	}
+
+	return res
+}
+
+// TokenAccountsByOwnerRequest lists a wallet's token accounts.
+//
+// Mint is optional. Naming one narrows the listing to that token, of which a
+// wallet may still hold several accounts, since only the associated address is
+// unique per pair. Leaving it empty lists everything the wallet holds under the
+// chosen program.
+//
+// TokenProgram defaults to classic Token. It cannot default to both, because
+// the two programs hold separate accounts and a wallet may have accounts under
+// each; a listing that silently merged them would report accounts that no single
+// instruction can touch together.
+type TokenAccountsByOwnerRequest struct {
+	Owner        string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Mint         string `json:"mint" example:""`
+	TokenProgram string `json:"token_program" example:""`
+
+	owner        *types.PublicKey
+	mint         *types.PublicKey
+	tokenProgram *types.PublicKey
+}
+
+func (r *TokenAccountsByOwnerRequest) ValidateRequest() error {
+	var err error
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+
+	if m := strings.TrimSpace(r.Mint); m != "" {
+		if r.mint, err = types.NewPublicKeyFromBase58(m); err != nil {
+			return errors.New("mint: " + err.Error())
+		}
+	}
+
+	r.tokenProgram = core.TokenProgramID
+	if p := strings.TrimSpace(r.TokenProgram); p != "" {
+		if r.tokenProgram, err = types.NewPublicKeyFromBase58(p); err != nil {
+			return errors.New("token_program: " + err.Error())
+		}
+		if _, err = core.TokenProgram(r.tokenProgram); err != nil {
+			return errors.New("token_program: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *TokenAccountsByOwnerRequest) OwnerKey() *types.PublicKey { return r.owner }
+func (r *TokenAccountsByOwnerRequest) MintKey() *types.PublicKey  { return r.mint }
+func (r *TokenAccountsByOwnerRequest) TokenProgramKey() *types.PublicKey {
+	return r.tokenProgram
+}
+
+// TokenAccountsByOwnerResponse lists what the wallet holds.
+type TokenAccountsByOwnerResponse struct {
+	Owner    string                  `json:"owner"`
+	Program  string                  `json:"program"`
+	Mint     string                  `json:"mint,omitempty"`
+	Count    int                     `json:"count"`
+	Accounts []*TokenAccountResponse `json:"accounts"`
+}
+
+func NewTokenAccountsByOwnerResponse(owner, program, mint string, accounts []*TokenAccountResponse) *TokenAccountsByOwnerResponse {
+	return &TokenAccountsByOwnerResponse{
+		Owner:    owner,
+		Program:  program,
+		Mint:     mint,
+		Count:    len(accounts),
+		Accounts: accounts,
+	}
+}

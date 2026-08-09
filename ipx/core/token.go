@@ -456,6 +456,80 @@ func DeserializeMultisig(raw []byte) (*Multisig, error) {
 	}, nil
 }
 
+// TokenAccountTypeOffset is where an extended account records which layout
+// precedes it, and the values it holds.
+//
+// Classic Token needs no such byte because size alone identifies an account: 82
+// is a mint, 165 is a holder, 355 is a multisig. Token-2022 breaks that, since
+// extensions make both a mint and a holder longer than 165, so it pads a mint
+// out to the holder's length and writes a tag at the end of the padding. An
+// extended account is therefore never exactly 165 bytes, which is what keeps
+// the classic sizes unambiguous.
+const (
+	TokenAccountTypeOffset = TokenAccountSpace
+
+	TokenAccountTypeUninitialized uint8 = 0
+	TokenAccountTypeMint          uint8 = 1
+	TokenAccountTypeAccount       uint8 = 2
+)
+
+// DecodeMint parses account data as a mint, given the program that owns it.
+//
+// Ownership is checked here rather than left to the caller because a mint and a
+// holder account are both owned by a token program and both start with 32 bytes
+// that parse as a public key. Nothing in the bytes says which one this is, so
+// deciding it from the length and the type tag is the only thing standing
+// between a holder account and a supply figure invented from its owner field.
+func DecodeMint(owner *types.PublicKey, data []byte) (*Mint, error) {
+	if _, err := TokenProgram(owner); err != nil {
+		return nil, fmt.Errorf("mint: owned by %s, which is not a token program", owner)
+	}
+
+	base, err := tokenBaseData(data, MintSpace, TokenAccountTypeMint, "mint")
+	if err != nil {
+		return nil, err
+	}
+
+	return DeserializeMint(base)
+}
+
+// DecodeTokenAccount parses account data as a holder account, under the same
+// rule as DecodeMint.
+func DecodeTokenAccount(owner *types.PublicKey, data []byte) (*TokenAccount, error) {
+	if _, err := TokenProgram(owner); err != nil {
+		return nil, fmt.Errorf("token account: owned by %s, which is not a token program", owner)
+	}
+
+	base, err := tokenBaseData(data, TokenAccountSpace, TokenAccountTypeAccount, "token account")
+	if err != nil {
+		return nil, err
+	}
+
+	return DeserializeTokenAccount(base)
+}
+
+// tokenBaseData returns the fixed prefix a classic parser reads, rejecting data
+// whose length or type tag says it is something else.
+func tokenBaseData(data []byte, space uint64, want uint8, name string) ([]byte, error) {
+	size := uint64(len(data))
+
+	switch {
+	case size == space:
+		// A classic account, or an extended one that happens to carry no
+		// extensions. Either way the layout is exactly the base.
+		return data, nil
+
+	case size <= TokenAccountTypeOffset:
+		return nil, fmt.Errorf("%s: %d bytes, which is neither %d nor an extended account", name, size, space)
+
+	case data[TokenAccountTypeOffset] != want:
+		return nil, fmt.Errorf("%s: extended account is type %d, not %d", name, data[TokenAccountTypeOffset], want)
+
+	default:
+		return data[:space], nil
+	}
+}
+
 // token builds instructions for an SPL Token program.
 //
 // Unlike System, this one carries its program id, because there are two live at

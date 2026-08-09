@@ -363,3 +363,7 @@ func confirmedAtLeast(status string, want Commitment) bool {
 
 	return rank[status] >= rank[string(want)]
 }
+
+func (c *Client) MinimumBalanceForRentExemptionNonce(ctx context.Context) (uint64, error) {
+	return c.MinimumBalanceForRentExemption(ctx, core.NonceAccountSpace, CommitmentConfirmed)
+}

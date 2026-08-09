@@ -631,3 +631,17 @@ func NewNonceResponse(k *types.PublicKey, n *core.NonceAccount) *NonceResponse {
 		LamportsPerSignature: strconv.FormatUint(n.LamportsPerSignature, 10),
 	}
 }
+
+type RentExemptionNonceResponse struct {
+	Space    uint64 `json:"space"`
+	Lamports string `json:"lamports"`
+	SOL      string `json:"sol"`
+}
+
+func NewRentExemptionNonceResponse(lamports uint64) *RentExemptionNonceResponse {
+	return &RentExemptionNonceResponse{
+		Space:    core.NonceAccountSpace,
+		Lamports: strconv.FormatUint(lamports, 10),
+		SOL:      types.LamportsToSol(lamports),
+	}
+}

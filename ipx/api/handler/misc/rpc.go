@@ -610,6 +610,32 @@ func (h *RPCHandler) RentExemptionVote(w http.ResponseWriter, r *http.Request) {
 	handler.WriteOK(w, NewRentExemptionVoteResponse(lamports))
 }
 
+// RentExemptionNonce godoc
+// @Summary      Minimum balance for a durable nonce account
+// @Description  A nonce account has to stay rent exempt to keep holding its nonce, so this is what one must be funded with. It is also the floor a partial withdrawal has to leave behind.
+// @Tags         rpc
+// @Produce      json
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  RentExemptionNonceResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/rpc/rent-exemption/nonce [post]
+func (h *RPCHandler) RentExemptionNonce(w http.ResponseWriter, r *http.Request) {
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lamports, err := chain.Cli.MinimumBalanceForRentExemptionNonce(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewRentExemptionNonceResponse(lamports))
+}
+
 // RentExemptionSpace godoc
 // @Summary      Minimum balance for a size given directly
 // @Description  Takes a byte count rather than an account kind, which covers layouts none of the named endpoints describe and sizes no live account holds yet.

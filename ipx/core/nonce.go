@@ -102,3 +102,161 @@ func DeserializeNonceAccount(raw []byte) (*NonceAccount, error) {
 		LamportsPerSignature: fee,
 	}, nil
 }
+
+// Nonce instruction discriminants, which continue the System Program's list:
+// a nonce account is System-owned, so its instructions are System's.
+const (
+	SystemInstructionAdvanceNonceAccount    uint32 = 4
+	SystemInstructionWithdrawNonceAccount   uint32 = 5
+	SystemInstructionInitializeNonceAccount uint32 = 6
+	SystemInstructionAuthorizeNonceAccount  uint32 = 7
+	SystemInstructionUpgradeNonceAccount    uint32 = 12
+)
+
+// InitializeNonceAccount turns an existing System-owned account of the right
+// size into a durable nonce account, storing the current blockhash as its
+// first nonce.
+//
+// The nonce account is writable but does not sign. It has already been created
+// by then, and nothing about initializing it needs its authority: the account
+// simply gains the authority named here.
+func (s *system) InitializeNonceAccount(nonce, authority *types.PublicKey) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
+	if Sysvar.RecentBlockhashes().IsNil() || Sysvar.Rent().IsNil() {
+		return nil, fmt.Errorf("sysvar: not initialized")
+	}
+	if nonce.IsNil() {
+		return nil, fmt.Errorf("nonce initialize: nonce account is required")
+	}
+	if authority.IsNil() {
+		return nil, fmt.Errorf("nonce initialize: authority is required")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionInitializeNonceAccount)
+	data = codec.Binary.AppendBytes(data, authority.Bytes())
+
+	return types.NewInstruction(s.id, types.NewAccounts(
+		types.NewWritableAccount(nonce),
+		types.NewReadonlyAccount(Sysvar.RecentBlockhashes()),
+		types.NewReadonlyAccount(Sysvar.Rent()),
+	), data), nil
+}
+
+// AdvanceNonceAccount replaces the stored nonce with the current blockhash.
+//
+// This is what stops a durable nonce from being replayed: a transaction built
+// against a nonce is only valid while that value is stored, and advancing it
+// is the first instruction such a transaction runs, so it consumes the nonce
+// it was built for.
+func (s *system) AdvanceNonceAccount(nonce, authority *types.PublicKey) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
+	if Sysvar.RecentBlockhashes().IsNil() {
+		return nil, fmt.Errorf("sysvar: not initialized")
+	}
+	if nonce.IsNil() {
+		return nil, fmt.Errorf("nonce advance: nonce account is required")
+	}
+	if authority.IsNil() {
+		return nil, fmt.Errorf("nonce advance: authority is required")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionAdvanceNonceAccount)
+
+	return types.NewInstruction(s.id, types.NewAccounts(
+		types.NewWritableAccount(nonce),
+		types.NewReadonlyAccount(Sysvar.RecentBlockhashes()),
+		types.NewReadonlySignerAccount(authority),
+	), data), nil
+}
+
+// WithdrawNonceAccount moves lamports out of a nonce account.
+//
+// Taking the whole balance closes the account, and the runtime refuses that
+// while the stored nonce is still the current blockhash: a transaction built
+// against it could otherwise be left with nowhere to advance. Taking less
+// requires what remains to stay rent exempt.
+//
+// The authority signs, except on an account that was sized but never
+// initialized, where the account itself is the only thing that can authorize
+// the withdrawal.
+func (s *system) WithdrawNonceAccount(nonce, authority, to *types.PublicKey, lamports uint64) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
+	if Sysvar.RecentBlockhashes().IsNil() || Sysvar.Rent().IsNil() {
+		return nil, fmt.Errorf("sysvar: not initialized")
+	}
+	if nonce.IsNil() {
+		return nil, fmt.Errorf("nonce withdraw: nonce account is required")
+	}
+	if authority.IsNil() {
+		return nil, fmt.Errorf("nonce withdraw: authority is required")
+	}
+	if to.IsNil() {
+		return nil, fmt.Errorf("nonce withdraw: recipient is required")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionWithdrawNonceAccount)
+	data = codec.Binary.AppendU64(data, lamports)
+
+	return types.NewInstruction(s.id, types.NewAccounts(
+		types.NewWritableAccount(nonce),
+		types.NewWritableAccount(to),
+		types.NewReadonlyAccount(Sysvar.RecentBlockhashes()),
+		types.NewReadonlyAccount(Sysvar.Rent()),
+		types.NewReadonlySignerAccount(authority),
+	), data), nil
+}
+
+// AuthorizeNonceAccount hands the right to advance and withdraw to another
+// key.
+//
+// Only the current authority can do this, and nothing else about the account
+// changes: the stored nonce stays as it was, so transactions already built
+// against it remain valid.
+func (s *system) AuthorizeNonceAccount(nonce, authority, newAuthority *types.PublicKey) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
+	if nonce.IsNil() {
+		return nil, fmt.Errorf("nonce authorize: nonce account is required")
+	}
+	if authority.IsNil() {
+		return nil, fmt.Errorf("nonce authorize: authority is required")
+	}
+	if newAuthority.IsNil() {
+		return nil, fmt.Errorf("nonce authorize: new authority is required")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionAuthorizeNonceAccount)
+	data = codec.Binary.AppendBytes(data, newAuthority.Bytes())
+
+	return types.NewInstruction(s.id, types.NewAccounts(
+		types.NewWritableAccount(nonce),
+		types.NewReadonlySignerAccount(authority),
+	), data), nil
+}
+
+// UpgradeNonceAccount migrates a Legacy nonce account to the current version.
+//
+// Accounts created now are already current, so this exists for ones predating
+// the change. Nothing signs: the migration is not a privileged operation, only
+// a rewrite of how the same state is stored.
+func (s *system) UpgradeNonceAccount(nonce *types.PublicKey) (*types.Instruction, error) {
+	if s.id.IsNil() {
+		return nil, fmt.Errorf("system: not initialized")
+	}
+	if nonce.IsNil() {
+		return nil, fmt.Errorf("nonce upgrade: nonce account is required")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionUpgradeNonceAccount)
+
+	return types.NewInstruction(s.id, types.NewAccounts(
+		types.NewWritableAccount(nonce),
+	), data), nil
+}

@@ -12,6 +12,17 @@ programs:
   stake: "Stake11111111111111111111111111111111111111"
   vote: "Vote111111111111111111111111111111111111111"
 
+# Sysvars are accounts the runtime keeps cluster state in. They are addresses
+# like the program ids above and equally invariant, but nothing is invoked at
+# them: they are passed as ordinary read-only accounts to instructions that
+# need the state they hold, which is why the nonce instructions take them.
+#
+# The 1 in B1ockHashes is a digit. base58 has no lowercase L, and the
+# misspelling decodes to a valid but different address.
+sysvars:
+  recent_blockhashes: "SysvarRecentB1ockHashes11111111111111111111"
+  rent: "SysvarRent111111111111111111111111111111111"
+
 # Solana has no chain id. A cluster is identified by its genesis hash,
 # which can be verified at runtime via the getGenesisHash RPC method.
 chain:

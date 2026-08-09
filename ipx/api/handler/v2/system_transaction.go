@@ -12,12 +12,12 @@ import (
 	"github.com/andantan/svmlab/internal/rpc"
 )
 
-type TransactionHandler struct {
+type SystemTransactionHandler struct {
 	cfg *config.Config
 }
 
-func NewTransactionHandler(cfg *config.Config) *TransactionHandler {
-	return &TransactionHandler{cfg: cfg}
+func NewSystemTransactionHandler(cfg *config.Config) *SystemTransactionHandler {
+	return &SystemTransactionHandler{cfg: cfg}
 }
 
 // SystemTransfer godoc
@@ -32,7 +32,7 @@ func NewTransactionHandler(cfg *config.Config) *TransactionHandler {
 // @Success      200   {object}  SystemTransferResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/transfer [post]
-func (h *TransactionHandler) SystemTransfer(w http.ResponseWriter, r *http.Request) {
+func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http.Request) {
 	req := new(SystemTransferRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -152,7 +152,7 @@ func (h *TransactionHandler) SystemTransfer(w http.ResponseWriter, r *http.Reque
 // @Success      200   {object}  SystemTransferMaxResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/transfer/max [post]
-func (h *TransactionHandler) SystemTransferMax(w http.ResponseWriter, r *http.Request) {
+func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *http.Request) {
 	req := new(SystemTransferMaxRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -263,7 +263,7 @@ func (h *TransactionHandler) SystemTransferMax(w http.ResponseWriter, r *http.Re
 // @Success      200   {object}  SystemCreateAccountResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/create-account [post]
-func (h *TransactionHandler) SystemCreateAccount(w http.ResponseWriter, r *http.Request) {
+func (h *SystemTransactionHandler) SystemCreateAccount(w http.ResponseWriter, r *http.Request) {
 	req := new(SystemCreateAccountRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -423,7 +423,7 @@ func (h *TransactionHandler) SystemCreateAccount(w http.ResponseWriter, r *http.
 // @Success      200   {object}  SystemAllocateResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/allocate [post]
-func (h *TransactionHandler) SystemAllocate(w http.ResponseWriter, r *http.Request) {
+func (h *SystemTransactionHandler) SystemAllocate(w http.ResponseWriter, r *http.Request) {
 	req := new(SystemAllocateRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -558,7 +558,7 @@ func (h *TransactionHandler) SystemAllocate(w http.ResponseWriter, r *http.Reque
 // @Success      200   {object}  SystemAssignResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/assign [post]
-func (h *TransactionHandler) SystemAssign(w http.ResponseWriter, r *http.Request) {
+func (h *SystemTransactionHandler) SystemAssign(w http.ResponseWriter, r *http.Request) {
 	req := new(SystemAssignRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -689,7 +689,7 @@ func (h *TransactionHandler) SystemAssign(w http.ResponseWriter, r *http.Request
 // @Success      200   {object}  SystemSeedCreateAccountResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/seed/create-account [post]
-func (h *TransactionHandler) SystemSeedCreateAccount(w http.ResponseWriter, r *http.Request) {
+func (h *SystemTransactionHandler) SystemSeedCreateAccount(w http.ResponseWriter, r *http.Request) {
 	req := new(SystemSeedCreateAccountRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -852,7 +852,7 @@ func (h *TransactionHandler) SystemSeedCreateAccount(w http.ResponseWriter, r *h
 // @Success      200   {object}  SystemSeedTransferResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/seed/transfer [post]
-func (h *TransactionHandler) SystemSeedTransfer(w http.ResponseWriter, r *http.Request) {
+func (h *SystemTransactionHandler) SystemSeedTransfer(w http.ResponseWriter, r *http.Request) {
 	req := new(SystemSeedTransferRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -982,7 +982,7 @@ func (h *TransactionHandler) SystemSeedTransfer(w http.ResponseWriter, r *http.R
 // @Success      200   {object}  SystemSeedAllocateResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/seed/allocate [post]
-func (h *TransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *http.Request) {
+func (h *SystemTransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *http.Request) {
 	req := new(SystemSeedAllocateRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -1118,7 +1118,7 @@ func (h *TransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *http.R
 // @Success      200   {object}  SystemSeedAssignResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/seed/assign [post]
-func (h *TransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *http.Request) {
+func (h *SystemTransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *http.Request) {
 	req := new(SystemSeedAssignRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -1249,7 +1249,7 @@ func (h *TransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *http.Req
 // @Success      200   {object}  SystemSeedTransferMaxResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/v2/transaction/system/seed/transfer/max [post]
-func (h *TransactionHandler) SystemSeedTransferMax(w http.ResponseWriter, r *http.Request) {
+func (h *SystemTransactionHandler) SystemSeedTransferMax(w http.ResponseWriter, r *http.Request) {
 	req := new(SystemSeedTransferMaxRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -1362,4 +1362,1030 @@ func (h *TransactionHandler) SystemSeedTransferMax(w http.ResponseWriter, r *htt
 	}
 
 	handler.WriteOK(w, NewSystemSeedTransferMaxResponse(tx, raw, messageBytes, derived, amount, fee))
+}
+
+// SystemNonceCreate godoc
+// @Summary      Build a durable nonce account creation
+// @Description  Creates the account and initializes it as a durable nonce in one transaction, which is the first v2 endpoint to carry more than one instruction. The nonce account appears twice: it signs for the creation, since an address does not exist until its key authorizes it, and is only writable for the initialization, which needs no authority. Message compilation lists it once with the union of both, which is why it shows up among the signers. Size and funding are not fields, since a nonce account is always the same size and has to hold exactly the rent-exempt minimum for it.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemNonceCreateRequest  true  "Funder, nonce account, and authority"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemNonceCreateResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/nonce/create-account [post]
+func (h *SystemTransactionHandler) SystemNonceCreate(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemNonceCreateRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	// A nonce account has to stay rent exempt to keep holding the nonce, so
+	// the funding is the minimum for its size rather than anything chosen.
+	lamports, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), core.NonceAccountSpace, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	create, err := core.System.CreateAccount(req.FromKey(), req.NonceAccountKey(), core.System.ID(), lamports, core.NonceAccountSpace)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	initialize, err := core.System.InitializeNonceAccount(req.NonceAccountKey(), req.AuthorityKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(create, initialize))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	exists, err := chain.Cli.Exists(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to check nonce account: %s", err))
+		return
+	}
+	if exists {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s already exists", req.NonceAccountKey()))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance: %s", err))
+		return
+	}
+
+	spent := lamports
+	if req.FromKey().Equal(req.FeePayerKey()) {
+		spent += fee
+	}
+	if balance < spent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("from: balance %d lamports does not cover %d lamports", balance, spent))
+		return
+	}
+	if remaining := balance - spent; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("from: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FromKey(), remaining, minRent))
+		return
+	}
+
+	if !req.FromKey().Equal(req.FeePayerKey()) {
+		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+			return
+		}
+		if feePayerBalance < fee {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+			return
+		}
+		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+			return
+		}
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemNonceCreateResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), lamports, fee))
+}
+
+// SystemNonceInitialize godoc
+// @Summary      Build a durable nonce initialization on an existing account
+// @Description  Initializes an account that already exists and is already the right size. nonce/create-account does this and the creation together, so this is for an address that can no longer be created: CreateAccount refuses one that already holds lamports, which is what happens when someone funds the address first. The account is writable but does not sign, since initializing it needs no authority of its own; it gains the authority named here.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemNonceInitializeRequest  true  "Nonce account and authority"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemNonceInitializeResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/nonce/initialize [post]
+func (h *SystemTransactionHandler) SystemNonceInitialize(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemNonceInitializeRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.InitializeNonceAccount(req.NonceAccountKey(), req.AuthorityKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	// One lookup covers everything the instruction will check: the account
+	// exists, the System Program owns it, it is the right size, and it holds
+	// enough to stay rent exempt at that size.
+	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s does not exist, so create it with nonce/create-account instead", req.NonceAccountKey()))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.NonceAccountKey(), info.Owner))
+		return
+	}
+	if info.Space != core.NonceAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+		return
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+		return
+	}
+	nonce, err := core.DeserializeNonceAccount(data)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if nonce.Initialized() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is already initialized, with %s as its authority",
+			req.NonceAccountKey(), nonce.Authority))
+		return
+	}
+
+	nonceRent, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), core.NonceAccountSpace, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+	if info.Lamports < nonceRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s holds %d lamports, below the %d lamport rent-exemption minimum for %d bytes",
+			req.NonceAccountKey(), info.Lamports, nonceRent, core.NonceAccountSpace))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+		return
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemNonceInitializeResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), fee))
+}
+
+// SystemNonceAdvance godoc
+// @Summary      Build a durable nonce advance
+// @Description  Replaces the stored nonce with the current blockhash. Advancing is what consumes a nonce: a transaction built against one carries it in place of a recent blockhash and runs this as its first instruction, so the value it was built for is gone by the time it finishes and it cannot land twice. Run on its own, this simply invalidates anything already built against the account. The authority signs, and the stored authority is checked here rather than left to fail on chain.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemNonceAdvanceRequest  true  "Nonce account and authority"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemNonceAdvanceResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/nonce/advance [post]
+func (h *SystemTransactionHandler) SystemNonceAdvance(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemNonceAdvanceRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), req.AuthorityKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.NonceAccountKey(), info.Owner))
+		return
+	}
+	if info.Space != core.NonceAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+		return
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+		return
+	}
+	nonce, err := core.DeserializeNonceAccount(data)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !nonce.Initialized() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		return
+	}
+	if !nonce.Authority.Equal(req.AuthorityKey()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"authority: %s is not the authority of %s, which is %s",
+			req.AuthorityKey(), req.NonceAccountKey(), nonce.Authority))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+		return
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemNonceAdvanceResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), nonce.Nonce, fee))
+}
+
+// SystemNonceWithdraw godoc
+// @Summary      Build a partial withdrawal from a durable nonce account
+// @Description  Moves part of a nonce account's balance out. What stays has to keep the account rent exempt at its size, since an account below that floor is subject to removal while still holding a nonce something may have been built against. Taking the whole balance closes the account and carries a further rule, so that has its own endpoint. The authority signs, and the stored authority is checked here rather than left to fail on chain.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemNonceWithdrawRequest  true  "Nonce account, authority, recipient, and amount"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemNonceWithdrawResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/nonce/withdraw [post]
+func (h *SystemTransactionHandler) SystemNonceWithdraw(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemNonceWithdrawRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.WithdrawNonceAccount(req.NonceAccountKey(), req.AuthorityKey(), req.ToKey(), req.ToLamports())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.NonceAccountKey(), info.Owner))
+		return
+	}
+	if info.Space != core.NonceAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+		return
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+		return
+	}
+	nonce, err := core.DeserializeNonceAccount(data)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !nonce.Initialized() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		return
+	}
+	if !nonce.Authority.Equal(req.AuthorityKey()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"authority: %s is not the authority of %s, which is %s",
+			req.AuthorityKey(), req.NonceAccountKey(), nonce.Authority))
+		return
+	}
+
+	nonceRent, err := chain.Cli.MinimumBalanceForRentExemptionNonce(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+	if info.Lamports < req.ToLamports() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"amount: %s holds %d lamports, short of %d", req.NonceAccountKey(), info.Lamports, req.ToLamports()))
+		return
+	}
+
+	remaining := info.Lamports - req.ToLamports()
+	if remaining == 0 {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"amount: taking all %d lamports closes the account, which nonce/withdraw/max does", info.Lamports))
+		return
+	}
+	if remaining < nonceRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"amount: would leave %s with %d lamports, below the %d lamport rent-exemption minimum for %d bytes",
+			req.NonceAccountKey(), remaining, nonceRent, core.NonceAccountSpace))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+		return
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if remainingFee := feePayerBalance - fee; remainingFee != 0 && remainingFee < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remainingFee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemNonceWithdrawResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), req.ToLamports(), remaining, fee))
+}
+
+// SystemNonceWithdrawMax godoc
+// @Summary      Build a full withdrawal that closes a durable nonce account
+// @Description  Takes the whole balance, which closes the account. The rent-exempt floor that constrains a partial withdrawal does not apply, since nothing is left to keep exempt. One rule replaces it and is not checked here: the runtime refuses to close an account whose stored nonce is still the blockhash the transaction executes against, so closing in the same block the nonce was last advanced or initialized fails with NonceBlockhashNotExpired. That cannot be decided before submitting, because the blockhash it is compared against is the one at execution rather than any this build could see. Waiting a block and rebuilding is the fix.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemNonceWithdrawMaxRequest  true  "Nonce account, authority, and recipient"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemNonceWithdrawMaxResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/nonce/withdraw/max [post]
+func (h *SystemTransactionHandler) SystemNonceWithdrawMax(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemNonceWithdrawMaxRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.NonceAccountKey(), info.Owner))
+		return
+	}
+	if info.Space != core.NonceAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+		return
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+		return
+	}
+	nonce, err := core.DeserializeNonceAccount(data)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !nonce.Initialized() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		return
+	}
+	if !nonce.Authority.Equal(req.AuthorityKey()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"authority: %s is not the authority of %s, which is %s",
+			req.AuthorityKey(), req.NonceAccountKey(), nonce.Authority))
+		return
+	}
+	if info.Lamports == 0 {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s has no balance", req.NonceAccountKey()))
+		return
+	}
+
+	// The whole balance goes, so nothing is held back for rent: the account is
+	// being closed rather than left underfunded.
+	amount := info.Lamports
+
+	ix, err := core.System.WithdrawNonceAccount(req.NonceAccountKey(), req.AuthorityKey(), req.ToKey(), amount)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+		return
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemNonceWithdrawMaxResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), amount, fee))
+}
+
+// SystemNonceAuthorize godoc
+// @Summary      Build a durable nonce authority change
+// @Description  Hands control of a nonce account to another key. The stored nonce and the balance are untouched, so only who may advance and withdraw changes. That also invalidates anything the old authority signed but never submitted, since such a transaction advances the nonce as its first instruction and that now needs a signature the old authority cannot give. If the reason for changing is a leaked key, the old authority's pending transaction and this one race, so pair it with an advance.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemNonceAuthorizeRequest  true  "Nonce account, current authority, and new authority"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemNonceAuthorizeResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/nonce/authorize [post]
+func (h *SystemTransactionHandler) SystemNonceAuthorize(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemNonceAuthorizeRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.AuthorizeNonceAccount(req.NonceAccountKey(), req.AuthorityKey(), req.NewAuthorityKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.NonceAccountKey(), info.Owner))
+		return
+	}
+	if info.Space != core.NonceAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+		return
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+		return
+	}
+	nonce, err := core.DeserializeNonceAccount(data)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !nonce.Initialized() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		return
+	}
+	if !nonce.Authority.Equal(req.AuthorityKey()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"authority: %s is not the authority of %s, which is %s",
+			req.AuthorityKey(), req.NonceAccountKey(), nonce.Authority))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+		return
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemNonceAuthorizeResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), req.NewAuthorityKey(), fee))
+}
+
+// SystemNonceUpgrade godoc
+// @Summary      Build a Legacy nonce account migration
+// @Description  Rewrites a Legacy nonce account as the current version. Legacy accounts stored the blockhash itself, which could collide with a real one; the current version stores a value derived from it that cannot. Nothing signs, since this is not a privileged operation, so anyone willing to pay the fee may upgrade anyone's account. No account this project creates can be upgraded: initialize has written the current version for a long time, only accounts predating that change are Legacy, and no instruction can produce one now. The check below rejects a current account before it reaches the chain.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemNonceUpgradeRequest  true  "Nonce account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemNonceUpgradeResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/nonce/upgrade [post]
+func (h *SystemTransactionHandler) SystemNonceUpgrade(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemNonceUpgradeRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	ix, err := core.System.UpgradeNonceAccount(req.NonceAccountKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.NonceAccountKey(), info.Owner))
+		return
+	}
+	if info.Space != core.NonceAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+		return
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+		return
+	}
+	nonce, err := core.DeserializeNonceAccount(data)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !nonce.Initialized() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		return
+	}
+	if nonce.Version != core.NonceVersionLegacy {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is already at version %d, and only a Legacy account can be upgraded",
+			req.NonceAccountKey(), nonce.Version))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+		return
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewSystemNonceUpgradeResponse(tx, raw, messageBytes, req.NonceAccountKey(), nonce.Version, fee))
 }

@@ -161,6 +161,15 @@ definitions:
       space:
         type: integer
     type: object
+  misc.RentExemptionNonceResponse:
+    properties:
+      lamports:
+        type: string
+      sol:
+        type: string
+      space:
+        type: integer
+    type: object
   misc.RentExemptionPublicKeyResponse:
     properties:
       lamports:
@@ -538,6 +547,290 @@ definitions:
         type: array
       space:
         type: integer
+      transaction:
+        type: string
+    type: object
+  v2.SystemNonceAdvanceRequest:
+    properties:
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      nonce_account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.SystemNonceAdvanceResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      current_nonce:
+        description: |-
+          CurrentNonce is what the account holds now, before this transaction
+          lands. Any transaction already built against it stops being valid once
+          this one executes.
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      nonce_account:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SystemNonceAuthorizeRequest:
+    properties:
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      new_authority:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+      nonce_account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.SystemNonceAuthorizeResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      new_authority:
+        type: string
+      nonce_account:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SystemNonceCreateRequest:
+    properties:
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      from:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      nonce_account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.SystemNonceCreateResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        type: string
+      lamports:
+        type: string
+      lamports_sol:
+        type: string
+      message:
+        type: string
+      nonce_account:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.SystemNonceInitializeRequest:
+    properties:
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      nonce_account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.SystemNonceInitializeResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      nonce_account:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SystemNonceUpgradeRequest:
+    properties:
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      nonce_account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.SystemNonceUpgradeResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        type: string
+      message:
+        type: string
+      nonce_account:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+      version:
+        type: integer
+    type: object
+  v2.SystemNonceWithdrawMaxRequest:
+    properties:
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      nonce_account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+      to:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.SystemNonceWithdrawMaxResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      amount_sol:
+        type: string
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      nonce_account:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SystemNonceWithdrawRequest:
+    properties:
+      amount:
+        example: "1000000"
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      nonce_account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+      to:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.SystemNonceWithdrawResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      amount_sol:
+        type: string
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      nonce_account:
+        type: string
+      recent_blockhash:
+        type: string
+      remaining:
+        description: |-
+          Remaining is what the nonce account keeps, which has to stay at or above
+          the rent-exempt minimum for its size.
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
       transaction:
         type: string
     type: object
@@ -1297,6 +1590,38 @@ paths:
       summary: Minimum balance for an SPL Token mint
       tags:
       - rpc
+  /svm/rpc/rent-exemption/nonce:
+    post:
+      description: A nonce account has to stay rent exempt to keep holding its nonce,
+        so this is what one must be funded with. It is also the floor a partial withdrawal
+        has to leave behind.
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionNonceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for a durable nonce account
+      tags:
+      - rpc
   /svm/rpc/rent-exemption/public-key:
     post:
       consumes:
@@ -2005,6 +2330,316 @@ paths:
               type: string
             type: object
       summary: Build a System Program account creation
+      tags:
+      - transaction
+  /svm/v2/transaction/system/nonce/advance:
+    post:
+      consumes:
+      - application/json
+      description: 'Replaces the stored nonce with the current blockhash. Advancing
+        is what consumes a nonce: a transaction built against one carries it in place
+        of a recent blockhash and runs this as its first instruction, so the value
+        it was built for is gone by the time it finishes and it cannot land twice.
+        Run on its own, this simply invalidates anything already built against the
+        account. The authority signs, and the stored authority is checked here rather
+        than left to fail on chain.'
+      parameters:
+      - description: Nonce account and authority
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemNonceAdvanceRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemNonceAdvanceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a durable nonce advance
+      tags:
+      - transaction
+  /svm/v2/transaction/system/nonce/authorize:
+    post:
+      consumes:
+      - application/json
+      description: Hands control of a nonce account to another key. The stored nonce
+        and the balance are untouched, so only who may advance and withdraw changes.
+        That also invalidates anything the old authority signed but never submitted,
+        since such a transaction advances the nonce as its first instruction and that
+        now needs a signature the old authority cannot give. If the reason for changing
+        is a leaked key, the old authority's pending transaction and this one race,
+        so pair it with an advance.
+      parameters:
+      - description: Nonce account, current authority, and new authority
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemNonceAuthorizeRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemNonceAuthorizeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a durable nonce authority change
+      tags:
+      - transaction
+  /svm/v2/transaction/system/nonce/create-account:
+    post:
+      consumes:
+      - application/json
+      description: 'Creates the account and initializes it as a durable nonce in one
+        transaction, which is the first v2 endpoint to carry more than one instruction.
+        The nonce account appears twice: it signs for the creation, since an address
+        does not exist until its key authorizes it, and is only writable for the initialization,
+        which needs no authority. Message compilation lists it once with the union
+        of both, which is why it shows up among the signers. Size and funding are
+        not fields, since a nonce account is always the same size and has to hold
+        exactly the rent-exempt minimum for it.'
+      parameters:
+      - description: Funder, nonce account, and authority
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemNonceCreateRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemNonceCreateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a durable nonce account creation
+      tags:
+      - transaction
+  /svm/v2/transaction/system/nonce/initialize:
+    post:
+      consumes:
+      - application/json
+      description: 'Initializes an account that already exists and is already the
+        right size. nonce/create-account does this and the creation together, so this
+        is for an address that can no longer be created: CreateAccount refuses one
+        that already holds lamports, which is what happens when someone funds the
+        address first. The account is writable but does not sign, since initializing
+        it needs no authority of its own; it gains the authority named here.'
+      parameters:
+      - description: Nonce account and authority
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemNonceInitializeRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemNonceInitializeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a durable nonce initialization on an existing account
+      tags:
+      - transaction
+  /svm/v2/transaction/system/nonce/upgrade:
+    post:
+      consumes:
+      - application/json
+      description: 'Rewrites a Legacy nonce account as the current version. Legacy
+        accounts stored the blockhash itself, which could collide with a real one;
+        the current version stores a value derived from it that cannot. Nothing signs,
+        since this is not a privileged operation, so anyone willing to pay the fee
+        may upgrade anyone''s account. No account this project creates can be upgraded:
+        initialize has written the current version for a long time, only accounts
+        predating that change are Legacy, and no instruction can produce one now.
+        The check below rejects a current account before it reaches the chain.'
+      parameters:
+      - description: Nonce account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemNonceUpgradeRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemNonceUpgradeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a Legacy nonce account migration
+      tags:
+      - transaction
+  /svm/v2/transaction/system/nonce/withdraw:
+    post:
+      consumes:
+      - application/json
+      description: Moves part of a nonce account's balance out. What stays has to
+        keep the account rent exempt at its size, since an account below that floor
+        is subject to removal while still holding a nonce something may have been
+        built against. Taking the whole balance closes the account and carries a further
+        rule, so that has its own endpoint. The authority signs, and the stored authority
+        is checked here rather than left to fail on chain.
+      parameters:
+      - description: Nonce account, authority, recipient, and amount
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemNonceWithdrawRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemNonceWithdrawResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a partial withdrawal from a durable nonce account
+      tags:
+      - transaction
+  /svm/v2/transaction/system/nonce/withdraw/max:
+    post:
+      consumes:
+      - application/json
+      description: 'Takes the whole balance, which closes the account. The rent-exempt
+        floor that constrains a partial withdrawal does not apply, since nothing is
+        left to keep exempt. One rule replaces it and is not checked here: the runtime
+        refuses to close an account whose stored nonce is still the blockhash the
+        transaction executes against, so closing in the same block the nonce was last
+        advanced or initialized fails with NonceBlockhashNotExpired. That cannot be
+        decided before submitting, because the blockhash it is compared against is
+        the one at execution rather than any this build could see. Waiting a block
+        and rebuilding is the fix.'
+      parameters:
+      - description: Nonce account, authority, and recipient
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SystemNonceWithdrawMaxRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SystemNonceWithdrawMaxResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a full withdrawal that closes a durable nonce account
       tags:
       - transaction
   /svm/v2/transaction/system/seed/allocate:

@@ -50,6 +50,16 @@ func run() error {
 	}
 	core.System.Init(systemProgramID)
 
+	recentBlockhashesSysvar, err := types.NewPublicKeyFromBase58(cfg.Sysvars.RecentBlockhashes)
+	if err != nil {
+		return fmt.Errorf("config: sysvars.recent_blockhashes: %w", err)
+	}
+	rentSysvar, err := types.NewPublicKeyFromBase58(cfg.Sysvars.Rent)
+	if err != nil {
+		return fmt.Errorf("config: sysvars.rent: %w", err)
+	}
+	core.Sysvar.Init(recentBlockhashesSysvar, rentSysvar)
+
 	cluster := rpc.NewCluster(cfg.Chains)
 
 	r := chi.NewRouter()
@@ -79,6 +89,7 @@ func run() error {
 			r.Post("/token", rpcHandler.RentExemptionToken)
 			r.Post("/stake", rpcHandler.RentExemptionStake)
 			r.Post("/vote", rpcHandler.RentExemptionVote)
+			r.Post("/nonce", rpcHandler.RentExemptionNonce)
 			r.Post("/space", rpcHandler.RentExemptionSpace)
 			r.Post("/public-key", rpcHandler.RentExemptionPublicKey)
 		})
@@ -115,7 +126,7 @@ func run() error {
 	r.Route("/svm/v2", func(r chi.Router) {
 		r.Use(handler.RequireChain(cluster))
 
-		tx := v2.NewTransactionHandler(cfg)
+		tx := v2.NewSystemTransactionHandler(cfg)
 		r.Post("/transaction/system/transfer", tx.SystemTransfer)
 		r.Post("/transaction/system/transfer/max", tx.SystemTransferMax)
 		r.Post("/transaction/system/create-account", tx.SystemCreateAccount)
@@ -126,6 +137,13 @@ func run() error {
 		r.Post("/transaction/system/seed/transfer/max", tx.SystemSeedTransferMax)
 		r.Post("/transaction/system/seed/allocate", tx.SystemSeedAllocate)
 		r.Post("/transaction/system/seed/assign", tx.SystemSeedAssign)
+		r.Post("/transaction/system/nonce/create-account", tx.SystemNonceCreate)
+		r.Post("/transaction/system/nonce/initialize", tx.SystemNonceInitialize)
+		r.Post("/transaction/system/nonce/advance", tx.SystemNonceAdvance)
+		r.Post("/transaction/system/nonce/withdraw", tx.SystemNonceWithdraw)
+		r.Post("/transaction/system/nonce/withdraw/max", tx.SystemNonceWithdrawMax)
+		r.Post("/transaction/system/nonce/authorize", tx.SystemNonceAuthorize)
+		r.Post("/transaction/system/nonce/upgrade", tx.SystemNonceUpgrade)
 	})
 
 	fmt.Printf("listening on %s\n", cfg.ServerAddr)

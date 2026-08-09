@@ -10,6 +10,7 @@ import (
 type Config struct {
 	ServerAddr string   `yaml:"server_addr"`
 	Programs   Programs `yaml:"programs"`
+	Sysvars    Sysvars  `yaml:"sysvars"`
 	Chains     []Chain  `yaml:"chain"`
 	Keys       []Key    `yaml:"keys"`
 }
@@ -32,6 +33,17 @@ type Programs struct {
 	Memo            string `yaml:"memo"`
 	Stake           string `yaml:"stake"`
 	Vote            string `yaml:"vote"`
+}
+
+// Sysvars holds the accounts the runtime keeps cluster state in.
+//
+// They are addresses like the program ids above and are equally invariant, but
+// they are not programs: nothing is invoked at them. They are passed as
+// ordinary read-only accounts to instructions that need to see the state they
+// hold, which is why several nonce instructions take them.
+type Sysvars struct {
+	RecentBlockhashes string `yaml:"recent_blockhashes"`
+	Rent              string `yaml:"rent"`
 }
 
 // Chain describes a single Solana cluster.
@@ -100,6 +112,12 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Programs.Vote == "" {
 		return nil, fmt.Errorf("config: programs.vote is required")
+	}
+	if cfg.Sysvars.RecentBlockhashes == "" {
+		return nil, fmt.Errorf("config: sysvars.recent_blockhashes is required")
+	}
+	if cfg.Sysvars.Rent == "" {
+		return nil, fmt.Errorf("config: sysvars.rent is required")
 	}
 	if len(cfg.Chains) == 0 {
 		return nil, fmt.Errorf("config: at least one chain is required")

@@ -12,7 +12,9 @@ import (
 	"path/filepath"
 
 	"github.com/andantan/svmlab/api/handler"
+	"github.com/andantan/svmlab/api/handler/account"
 	"github.com/andantan/svmlab/api/handler/misc"
+	"github.com/andantan/svmlab/api/handler/token"
 	v1 "github.com/andantan/svmlab/api/handler/v1"
 	v2 "github.com/andantan/svmlab/api/handler/v2"
 	_ "github.com/andantan/svmlab/docs"
@@ -56,31 +58,55 @@ func run() error {
 		rpcHandler := misc.NewRPCHandler()
 		r.Post("/", rpcHandler.Raw)
 		r.Post("/batch", rpcHandler.Batch)
-		r.Post("/health", rpcHandler.Health)
-		r.Post("/version", rpcHandler.Version)
-		r.Post("/slot", rpcHandler.Slot)
-		r.Post("/genesis-hash", rpcHandler.GenesisHash)
-		r.Post("/blockhash", rpcHandler.BlockHash)
-		r.Post("/balance", rpcHandler.Balance)
-		r.Post("/account", rpcHandler.Account)
-		r.Post("/account/owner", rpcHandler.AccountOwner)
-		r.Post("/nonce", rpcHandler.Nonce)
-		r.Post("/rent-exemption/system", rpcHandler.RentExemptionSystem)
-		r.Post("/rent-exemption/mint", rpcHandler.RentExemptionMint)
-		r.Post("/rent-exemption/token", rpcHandler.RentExemptionToken)
-		r.Post("/rent-exemption/stake", rpcHandler.RentExemptionStake)
-		r.Post("/rent-exemption/vote", rpcHandler.RentExemptionVote)
-		r.Post("/rent-exemption/nonce", rpcHandler.RentExemptionNonce)
-		r.Post("/rent-exemption/space", rpcHandler.RentExemptionSpace)
-		r.Post("/rent-exemption/public-key", rpcHandler.RentExemptionPublicKey)
-		r.Post("/token/mint", rpcHandler.Mint)
-		r.Post("/token/account", rpcHandler.TokenAccount)
-		r.Post("/token/accounts-by-owner", rpcHandler.TokenAccountsByOwner)
-		r.Post("/fee", rpcHandler.Fee)
-		r.Post("/airdrop", rpcHandler.Airdrop)
-		r.Post("/transaction/send", rpcHandler.SendTransaction)
-		r.Post("/transaction/simulate", rpcHandler.SimulateTransaction)
-		r.Post("/transaction/status", rpcHandler.SignatureStatus)
+	})
+
+	r.Route("/svm/token", func(r chi.Router) {
+		r.Use(handler.RequireChain(cluster))
+
+		tokenHandler := token.NewHandler()
+		r.Post("/mint", tokenHandler.Mint)
+		r.Post("/account", tokenHandler.Account)
+	})
+
+	r.Route("/svm/cluster", func(r chi.Router) {
+		r.Use(handler.RequireChain(cluster))
+
+		clusterHandler := misc.NewRPCHandler()
+		r.Post("/blockhash", clusterHandler.BlockHash)
+		r.Post("/genesis-hash", clusterHandler.GenesisHash)
+		r.Post("/health", clusterHandler.Health)
+		r.Post("/slot", clusterHandler.Slot)
+		r.Post("/transaction/fee", clusterHandler.Fee)
+		r.Post("/transaction/send", clusterHandler.SendTransaction)
+		r.Post("/transaction/simulate", clusterHandler.SimulateTransaction)
+		r.Post("/transaction/status", clusterHandler.SignatureStatus)
+		r.Post("/version", clusterHandler.Version)
+	})
+
+	r.Route("/svm/protocol", func(r chi.Router) {
+		r.Use(handler.RequireChain(cluster))
+
+		protocolHandler := misc.NewRPCHandler()
+		r.Post("/rent-exemption/system", protocolHandler.RentExemptionSystem)
+		r.Post("/rent-exemption/mint", protocolHandler.RentExemptionMint)
+		r.Post("/rent-exemption/token", protocolHandler.RentExemptionToken)
+		r.Post("/rent-exemption/stake", protocolHandler.RentExemptionStake)
+		r.Post("/rent-exemption/vote", protocolHandler.RentExemptionVote)
+		r.Post("/rent-exemption/nonce", protocolHandler.RentExemptionNonce)
+		r.Post("/rent-exemption/space", protocolHandler.RentExemptionSpace)
+		r.Post("/rent-exemption/public-key", protocolHandler.RentExemptionPublicKey)
+	})
+
+	r.Route("/svm/account", func(r chi.Router) {
+		r.Use(handler.RequireChain(cluster))
+
+		accountHandler := account.NewHandler()
+		r.Post("/state", accountHandler.State)
+		r.Post("/owner", accountHandler.Owner)
+		r.Post("/balance", accountHandler.Balance)
+		r.Post("/airdrop", accountHandler.Airdrop)
+		r.Post("/nonce", accountHandler.Nonce)
+		r.Post("/tokens", accountHandler.Tokens)
 	})
 
 	r.Route("/svm/sign", func(r chi.Router) {

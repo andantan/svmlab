@@ -9,6 +9,1178 @@
     "host": "localhost:33153",
     "basePath": "/",
     "paths": {
+        "/svm/account/airdrop": {
+            "post": {
+                "description": "Requests a fixed half a SOL. The amount is not a field because the faucet enforces its own limit, and asking above it fails the call rather than handing out less.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "account"
+                ],
+                "summary": "Fund an account on devnet or testnet",
+                "parameters": [
+                    {
+                        "description": "Account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/account.AirdropRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/account.AirdropResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/account/balance": {
+            "post": {
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "account"
+                ],
+                "summary": "Read an account's balance",
+                "parameters": [
+                    {
+                        "description": "Account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/account.AccountRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/account.BalanceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/account/nonce": {
+            "post": {
+                "description": "Parses the 80 bytes a nonce account holds. The stored nonce is what a transaction may carry in place of a recent blockhash so that it never expires, which is the opposite of an EVM nonce: there a per-account counter prevents replay, here expiry is what is being removed. An account sized by create-account but never initialized is a normal intermediate state and reports initialized=false with all-zero fields.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "account"
+                ],
+                "summary": "Read a durable nonce account",
+                "parameters": [
+                    {
+                        "description": "Nonce account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/account.NonceRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/account.NonceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/account/owner": {
+            "post": {
+                "description": "Only the owning program may debit an account or write its data. An account owned by anything other than the System Program cannot be moved with a system transfer, and one owned by a non-executable address cannot be moved at all, so system_owned answers whether the balance is still reachable.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "account"
+                ],
+                "summary": "Read who owns an account",
+                "parameters": [
+                    {
+                        "description": "Account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/account.AccountOwnerRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/account.AccountOwnerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/account/state": {
+            "post": {
+                "description": "Returns the owner, executable flag, data size, balance, and data. An account that does not exist is reported with exists=false rather than as an error, since most 32-byte values name one nobody has created.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "account"
+                ],
+                "summary": "Read an account's on-chain state",
+                "parameters": [
+                    {
+                        "description": "Account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/account.AccountRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/account.AccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/account/tokens": {
+            "post": {
+                "description": "Lists token accounts owned by a wallet under both the classic Token Program and Token-2022. The response keeps the program on each account because the two programs own separate accounts and no single token instruction can touch both at once.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "account"
+                ],
+                "summary": "List the token accounts a wallet owns",
+                "parameters": [
+                    {
+                        "description": "Wallet",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/account.TokensRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/account.TokensResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/cluster/blockhash": {
+            "post": {
+                "description": "Returns the blockhash to build against and the block height past which it is rejected, so expiry can be checked rather than guessed. Fetched at finalized commitment, since a blockhash from a less settled view risks belonging to a fork.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Read a recent blockhash",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.BlockhashResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/cluster/genesis-hash": {
+            "post": {
+                "description": "A genesis hash is not folded into a signature the way EIP-155 binds a chain id, so nothing on chain prevents a transaction from replaying on another cluster. Comparing what the endpoint reports against what config names is the substitute check.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Read the cluster's genesis hash and compare it to config",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.GenesisHashResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/cluster/health": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Read the node's health",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.HealthResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/cluster/slot": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Read the current slot",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SlotResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/cluster/transaction/fee": {
+            "post": {
+                "description": "The fee follows from the signature count and any compute budget instructions, both of which live in the message, so it is known before signing and cannot be exceeded by execution the way a gas estimate can.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Price a message",
+                "parameters": [
+                    {
+                        "description": "Message",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.FeeRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.FeeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/cluster/transaction/send": {
+            "post": {
+                "description": "Submits a fully signed transaction to the cluster and returns its signature. Acceptance is not execution; the transaction still has to land in a block.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Broadcast a signed transaction",
+                "parameters": [
+                    {
+                        "description": "Signed transaction",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.SendTransactionRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SendTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/cluster/transaction/simulate": {
+            "post": {
+                "description": "Runs a fully signed transaction against the node's state without broadcasting it, and returns the program logs either way. The logs are the only account of why execution stopped; nothing here corresponds to a revert string.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Execute a transaction without submitting it",
+                "parameters": [
+                    {
+                        "description": "Transaction",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.SimulateTransactionRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SimulateTransactionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/cluster/transaction/status": {
+            "post": {
+                "description": "Stands in for an EVM receipt, but found can stay false forever: a transaction whose blockhash expired is forgotten and never lands.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Read a transaction's status",
+                "parameters": [
+                    {
+                        "description": "Signature",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.SignatureStatusRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SignatureStatusResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/cluster/version": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Read the node's software version",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.VersionResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/protocol/rent-exemption/mint": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "protocol"
+                ],
+                "summary": "Minimum balance for an SPL Token mint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionMintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/protocol/rent-exemption/nonce": {
+            "post": {
+                "description": "A nonce account has to stay rent exempt to keep holding its nonce, so this is what one must be funded with. It is also the floor a partial withdrawal has to leave behind.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "protocol"
+                ],
+                "summary": "Minimum balance for a durable nonce account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionNonceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/protocol/rent-exemption/public-key": {
+            "post": {
+                "description": "Reads the size from a live account, so the caller does not have to know the layout. Pass a byte count to the space endpoint instead when the account does not exist yet.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "protocol"
+                ],
+                "summary": "Minimum balance for an account of the same size as an existing one",
+                "parameters": [
+                    {
+                        "description": "Account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionPublicKeyRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionPublicKeyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/protocol/rent-exemption/space": {
+            "post": {
+                "description": "Takes a byte count rather than an account kind, which covers layouts none of the named endpoints describe and sizes no live account holds yet.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "protocol"
+                ],
+                "summary": "Minimum balance for a size given directly",
+                "parameters": [
+                    {
+                        "description": "Space",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionSpaceRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionSpaceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/protocol/rent-exemption/stake": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "protocol"
+                ],
+                "summary": "Minimum balance for a stake account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionStakeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/protocol/rent-exemption/system": {
+            "post": {
+                "description": "A wallet holds lamports and no data, so this is the floor any account must clear. It is also what a transfer to a previously unused address has to meet, since the transfer creates the account.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "protocol"
+                ],
+                "summary": "Minimum balance for a plain wallet",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionSystemResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/protocol/rent-exemption/token": {
+            "post": {
+                "description": "Every token balance lives in an account of its own, so opening a position in a new token costs this much before any tokens move.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "protocol"
+                ],
+                "summary": "Minimum balance for an SPL Token account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionTokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/protocol/rent-exemption/vote": {
+            "post": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "protocol"
+                ],
+                "summary": "Minimum balance for a validator vote account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RentExemptionVoteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/rpc/": {
             "post": {
                 "description": "Passes a method straight through, so anything this API has not wrapped stays reachable.",
@@ -67,233 +1239,6 @@
                 }
             }
         },
-        "/svm/rpc/account": {
-            "post": {
-                "description": "Returns the owner, executable flag, data size, and data. An account that does not exist is reported with exists=false rather than as an error, since most 32-byte values name one nobody has created.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read an account's on-chain state",
-                "parameters": [
-                    {
-                        "description": "Account",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.AccountRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.AccountResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/account/owner": {
-            "post": {
-                "description": "Only the owning program may debit an account or write its data. An account owned by anything other than the System Program cannot be moved with a system transfer, and one owned by a non-executable address cannot be moved at all, so system_owned answers whether the balance is still reachable.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read who owns an account",
-                "parameters": [
-                    {
-                        "description": "Account",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.AccountOwnerRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.AccountOwnerResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/airdrop": {
-            "post": {
-                "description": "Requests a fixed half a SOL. The amount is not a field because the faucet enforces its own limit, and asking above it fails the call rather than handing out less.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Fund an account on devnet or testnet",
-                "parameters": [
-                    {
-                        "description": "Account",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.AirdropRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.AirdropResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/balance": {
-            "post": {
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read an account's balance",
-                "parameters": [
-                    {
-                        "description": "Account",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.AccountRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.BalanceResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/svm/rpc/batch": {
             "post": {
                 "consumes": [
@@ -337,1065 +1282,6 @@
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/blockhash": {
-            "post": {
-                "description": "Returns the blockhash to build against and the block height past which it is rejected, so expiry can be checked rather than guessed. Fetched at finalized commitment, since a blockhash from a less settled view risks belonging to a fork.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read a recent blockhash",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.BlockhashResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/fee": {
-            "post": {
-                "description": "The fee follows from the signature count and any compute budget instructions, both of which live in the message, so it is known before signing and cannot be exceeded by execution the way a gas estimate can.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Price a message",
-                "parameters": [
-                    {
-                        "description": "Message",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.FeeRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.FeeResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/genesis-hash": {
-            "post": {
-                "description": "A genesis hash is not folded into a signature the way EIP-155 binds a chain id, so nothing on chain prevents a transaction from replaying on another cluster. Comparing what the endpoint reports against what config names is the substitute check.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read the cluster's genesis hash and compare it to config",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.GenesisHashResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/health": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read the node's health",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.HealthResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/nonce": {
-            "post": {
-                "description": "Parses the 80 bytes a nonce account holds. The stored nonce is what a transaction may carry in place of a recent blockhash so that it never expires, which is the opposite of an EVM nonce: there a per-account counter prevents replay, here expiry is what is being removed. An account sized by create-account but never initialized is a normal intermediate state and reports initialized=false with all-zero fields.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read a durable nonce account",
-                "parameters": [
-                    {
-                        "description": "Nonce account",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.NonceRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.NonceResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/rent-exemption/mint": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Minimum balance for an SPL Token mint",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionMintResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/rent-exemption/nonce": {
-            "post": {
-                "description": "A nonce account has to stay rent exempt to keep holding its nonce, so this is what one must be funded with. It is also the floor a partial withdrawal has to leave behind.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Minimum balance for a durable nonce account",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionNonceResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/rent-exemption/public-key": {
-            "post": {
-                "description": "Reads the size from a live account, so the caller does not have to know the layout. Pass a byte count to the space endpoint instead when the account does not exist yet.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Minimum balance for an account of the same size as an existing one",
-                "parameters": [
-                    {
-                        "description": "Account",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.AccountRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionPublicKeyResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/rent-exemption/space": {
-            "post": {
-                "description": "Takes a byte count rather than an account kind, which covers layouts none of the named endpoints describe and sizes no live account holds yet.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Minimum balance for a size given directly",
-                "parameters": [
-                    {
-                        "description": "Space",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionSpaceRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionSpaceResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/rent-exemption/stake": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Minimum balance for a stake account",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionStakeResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/rent-exemption/system": {
-            "post": {
-                "description": "A wallet holds lamports and no data, so this is the floor any account must clear. It is also what a transfer to a previously unused address has to meet, since the transfer creates the account.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Minimum balance for a plain wallet",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionSystemResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/rent-exemption/token": {
-            "post": {
-                "description": "Every token balance lives in an account of its own, so opening a position in a new token costs this much before any tokens move.",
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Minimum balance for an SPL Token account",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionTokenResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/rent-exemption/vote": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Minimum balance for a validator vote account",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.RentExemptionVoteResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/slot": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read the current slot",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.SlotResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/token/account": {
-            "post": {
-                "description": "Parses the 165 bytes a token account holds. owner is not the runtime owner: that is the token program, which is what may write the data, while owner here is the wallet whose signature the program accepts. amount is base units with no scale of its own, so the mint is read as well to report amount_ui; when the mint cannot be read the base units are still returned and decimals is omitted rather than guessed. Works for both classic Token and Token-2022, whose extensions sit past the base layout.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read an SPL Token holder account",
-                "parameters": [
-                    {
-                        "description": "Token account",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.TokenAccountRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.TokenAccountResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/token/accounts-by-owner": {
-            "post": {
-                "description": "Lists every token account held by one wallet under one token program, optionally narrowed to a single mint. A wallet may hold several accounts for the same mint, since only the associated address is unique per wallet and mint, so this returns a list rather than an account. token_program defaults to classic Token and cannot default to both: Token and Token-2022 hold separate accounts and a wallet may have accounts under each, so a merged listing would report accounts no single instruction can touch together.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "List the token accounts a wallet owns",
-                "parameters": [
-                    {
-                        "description": "Wallet, optional mint, optional token program",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.TokenAccountsByOwnerRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.TokenAccountsByOwnerResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/token/mint": {
-            "post": {
-                "description": "Parses the 82 bytes a mint account holds. A mint is the closest thing Solana has to an ERC-20 contract, and what it lacks is the point: no balances and no allowances, since those live in separate token accounts owned by each holder. mint_authority and freeze_authority are omitted when absent, which is different from being the zero address; a mint whose mint authority was removed has a permanently fixed supply, and one initialized without a freeze authority can never gain one. Works for both classic Token and Token-2022, whose extensions sit past the base layout.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read an SPL Token mint",
-                "parameters": [
-                    {
-                        "description": "Mint account",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.MintRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.MintResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/transaction/send": {
-            "post": {
-                "description": "Submits a fully signed transaction to the cluster and returns its signature. Acceptance is not execution; the transaction still has to land in a block.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Broadcast a signed transaction",
-                "parameters": [
-                    {
-                        "description": "Signed transaction",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.SendTransactionRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.SendTransactionResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/transaction/simulate": {
-            "post": {
-                "description": "Runs a fully signed transaction against the node's state without broadcasting it, and returns the program logs either way. The logs are the only account of why execution stopped; nothing here corresponds to a revert string.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Execute a transaction without submitting it",
-                "parameters": [
-                    {
-                        "description": "Transaction",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.SimulateTransactionRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.SimulateTransactionResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/transaction/status": {
-            "post": {
-                "description": "Stands in for an EVM receipt, but found can stay false forever: a transaction whose blockhash expired is forgotten and never lands.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read a transaction's status",
-                "parameters": [
-                    {
-                        "description": "Signature",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/misc.SignatureStatusRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.SignatureStatusResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/rpc/version": {
-            "post": {
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "rpc"
-                ],
-                "summary": "Read the node's software version",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/misc.VersionResponse"
                         }
                     },
                     "400": {
@@ -1567,6 +1453,120 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/misc.VerifyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/token/account": {
+            "post": {
+                "description": "Parses the 165 bytes a token account holds. owner is not the runtime owner: that is the token program, which is what may write the data, while owner here is the wallet whose signature the program accepts. amount is base units with no scale of its own, so the mint is read as well to report amount_ui; when the mint cannot be read the base units are still returned and decimals is omitted rather than guessed. Works for both classic Token and Token-2022, whose extensions sit past the base layout.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "token"
+                ],
+                "summary": "Read an SPL Token holder account",
+                "parameters": [
+                    {
+                        "description": "Token account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/token.AccountRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/token.AccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/token/mint": {
+            "post": {
+                "description": "Parses the 82 bytes a mint account holds. A mint is the closest thing Solana has to an ERC-20 contract, and what it lacks is the point: no balances and no allowances, since those live in separate token accounts owned by each holder. mint_authority and freeze_authority are omitted when absent, which is different from being the zero address; a mint whose mint authority was removed has a permanently fixed supply, and one initialized without a freeze authority can never gain one. Works for both classic Token and Token-2022, whose extensions sit past the base layout.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "token"
+                ],
+                "summary": "Read an SPL Token mint",
+                "parameters": [
+                    {
+                        "description": "Mint account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/token.MintRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/token.MintResponse"
                         }
                     },
                     "400": {
@@ -2768,7 +2768,7 @@
         }
     },
     "definitions": {
-        "misc.AccountOwnerRequest": {
+        "account.AccountOwnerRequest": {
             "type": "object",
             "properties": {
                 "public_key": {
@@ -2777,7 +2777,7 @@
                 }
             }
         },
-        "misc.AccountOwnerResponse": {
+        "account.AccountOwnerResponse": {
             "type": "object",
             "properties": {
                 "exists": {
@@ -2794,7 +2794,7 @@
                 }
             }
         },
-        "misc.AccountRequest": {
+        "account.AccountRequest": {
             "type": "object",
             "properties": {
                 "public_key": {
@@ -2803,7 +2803,7 @@
                 }
             }
         },
-        "misc.AccountResponse": {
+        "account.AccountResponse": {
             "type": "object",
             "properties": {
                 "data": {
@@ -2832,7 +2832,7 @@
                 }
             }
         },
-        "misc.AirdropRequest": {
+        "account.AirdropRequest": {
             "type": "object",
             "properties": {
                 "public_key": {
@@ -2840,7 +2840,7 @@
                 }
             }
         },
-        "misc.AirdropResponse": {
+        "account.AirdropResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -2854,7 +2854,7 @@
                 }
             }
         },
-        "misc.BalanceResponse": {
+        "account.BalanceResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -2864,6 +2864,114 @@
                     "type": "string"
                 },
                 "sol": {
+                    "type": "string"
+                }
+            }
+        },
+        "account.NonceRequest": {
+            "type": "object",
+            "properties": {
+                "public_key": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "account.NonceResponse": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "type": "string"
+                },
+                "exists": {
+                    "type": "boolean"
+                },
+                "initialized": {
+                    "type": "boolean"
+                },
+                "lamports_per_signature": {
+                    "type": "string"
+                },
+                "nonce": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "integer"
+                }
+            }
+        },
+        "account.TokenAccountResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "close_authority": {
+                    "type": "string"
+                },
+                "decimals": {
+                    "type": "integer"
+                },
+                "delegate": {
+                    "type": "string"
+                },
+                "delegated_amount": {
+                    "type": "string"
+                },
+                "exists": {
+                    "type": "boolean"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "native": {
+                    "type": "boolean"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                },
+                "rent_reserve": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "string"
+                }
+            }
+        },
+        "account.TokensRequest": {
+            "type": "object",
+            "properties": {
+                "public_key": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "account.TokensResponse": {
+            "type": "object",
+            "properties": {
+                "accounts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/account.TokenAccountResponse"
+                    }
+                },
+                "count": {
+                    "type": "integer"
+                },
+                "public_key": {
                     "type": "string"
                 }
             }
@@ -2954,91 +3062,6 @@
                 }
             }
         },
-        "misc.MintRequest": {
-            "type": "object",
-            "properties": {
-                "public_key": {
-                    "type": "string",
-                    "example": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
-                }
-            }
-        },
-        "misc.MintResponse": {
-            "type": "object",
-            "properties": {
-                "decimals": {
-                    "type": "integer"
-                },
-                "exists": {
-                    "type": "boolean"
-                },
-                "freezable": {
-                    "type": "boolean"
-                },
-                "freeze_authority": {
-                    "type": "string"
-                },
-                "initialized": {
-                    "type": "boolean"
-                },
-                "mint_authority": {
-                    "type": "string"
-                },
-                "mintable": {
-                    "type": "boolean"
-                },
-                "program": {
-                    "type": "string"
-                },
-                "public_key": {
-                    "type": "string"
-                },
-                "supply": {
-                    "type": "string"
-                },
-                "supply_ui": {
-                    "type": "string"
-                }
-            }
-        },
-        "misc.NonceRequest": {
-            "type": "object",
-            "properties": {
-                "public_key": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                }
-            }
-        },
-        "misc.NonceResponse": {
-            "type": "object",
-            "properties": {
-                "authority": {
-                    "type": "string"
-                },
-                "exists": {
-                    "type": "boolean"
-                },
-                "initialized": {
-                    "type": "boolean"
-                },
-                "lamports_per_signature": {
-                    "type": "string"
-                },
-                "nonce": {
-                    "type": "string"
-                },
-                "public_key": {
-                    "type": "string"
-                },
-                "state": {
-                    "type": "integer"
-                },
-                "version": {
-                    "type": "integer"
-                }
-            }
-        },
         "misc.RawRequest": {
             "type": "object",
             "properties": {
@@ -3074,6 +3097,15 @@
                 },
                 "space": {
                     "type": "integer"
+                }
+            }
+        },
+        "misc.RentExemptionPublicKeyRequest": {
+            "type": "object",
+            "properties": {
+                "public_key": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
@@ -3325,16 +3357,48 @@
                 }
             }
         },
-        "misc.TokenAccountRequest": {
+        "misc.VerifyRequest": {
             "type": "object",
             "properties": {
+                "message": {
+                    "type": "string"
+                },
                 "public_key": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "signature": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.VerifyResponse": {
+            "type": "object",
+            "properties": {
+                "valid": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "misc.VersionResponse": {
+            "type": "object",
+            "properties": {
+                "version": {
+                    "type": "object",
+                    "additionalProperties": {}
+                }
+            }
+        },
+        "token.AccountRequest": {
+            "type": "object",
+            "properties": {
+                "token_account": {
                     "type": "string",
                     "example": "4qRgcVrSqs43Jy9n8w7H5EJh8FnRiTFnABjE37Dd3Ae5"
                 }
             }
         },
-        "misc.TokenAccountResponse": {
+        "token.AccountResponse": {
             "type": "object",
             "properties": {
                 "amount": {
@@ -3384,75 +3448,50 @@
                 }
             }
         },
-        "misc.TokenAccountsByOwnerRequest": {
+        "token.MintRequest": {
             "type": "object",
             "properties": {
-                "mint": {
+                "mint_account": {
                     "type": "string",
-                    "example": ""
-                },
-                "owner": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "token_program": {
-                    "type": "string",
-                    "example": ""
+                    "example": "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v"
                 }
             }
         },
-        "misc.TokenAccountsByOwnerResponse": {
+        "token.MintResponse": {
             "type": "object",
             "properties": {
-                "accounts": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/misc.TokenAccountResponse"
-                    }
-                },
-                "count": {
+                "decimals": {
                     "type": "integer"
                 },
-                "mint": {
+                "exists": {
+                    "type": "boolean"
+                },
+                "freezable": {
+                    "type": "boolean"
+                },
+                "freeze_authority": {
                     "type": "string"
                 },
-                "owner": {
+                "initialized": {
+                    "type": "boolean"
+                },
+                "mint_authority": {
                     "type": "string"
+                },
+                "mintable": {
+                    "type": "boolean"
                 },
                 "program": {
                     "type": "string"
-                }
-            }
-        },
-        "misc.VerifyRequest": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
                 },
                 "public_key": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "signature": {
                     "type": "string"
-                }
-            }
-        },
-        "misc.VerifyResponse": {
-            "type": "object",
-            "properties": {
-                "valid": {
-                    "type": "boolean"
-                }
-            }
-        },
-        "misc.VersionResponse": {
-            "type": "object",
-            "properties": {
-                "version": {
-                    "type": "object",
-                    "additionalProperties": {}
+                },
+                "supply": {
+                    "type": "string"
+                },
+                "supply_ui": {
+                    "type": "string"
                 }
             }
         },

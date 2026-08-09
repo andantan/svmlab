@@ -1,12 +1,12 @@
 basePath: /
 definitions:
-  misc.AccountOwnerRequest:
+  account.AccountOwnerRequest:
     properties:
       public_key:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  misc.AccountOwnerResponse:
+  account.AccountOwnerResponse:
     properties:
       exists:
         type: boolean
@@ -17,13 +17,13 @@ definitions:
       system_owned:
         type: boolean
     type: object
-  misc.AccountRequest:
+  account.AccountRequest:
     properties:
       public_key:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  misc.AccountResponse:
+  account.AccountResponse:
     properties:
       data:
         type: string
@@ -42,12 +42,12 @@ definitions:
       space:
         type: integer
     type: object
-  misc.AirdropRequest:
+  account.AirdropRequest:
     properties:
       public_key:
         type: string
     type: object
-  misc.AirdropResponse:
+  account.AirdropResponse:
     properties:
       lamports:
         type: string
@@ -56,13 +56,84 @@ definitions:
       sol:
         type: string
     type: object
-  misc.BalanceResponse:
+  account.BalanceResponse:
     properties:
       lamports:
         type: string
       public_key:
         type: string
       sol:
+        type: string
+    type: object
+  account.NonceRequest:
+    properties:
+      public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  account.NonceResponse:
+    properties:
+      authority:
+        type: string
+      exists:
+        type: boolean
+      initialized:
+        type: boolean
+      lamports_per_signature:
+        type: string
+      nonce:
+        type: string
+      public_key:
+        type: string
+      state:
+        type: integer
+      version:
+        type: integer
+    type: object
+  account.TokenAccountResponse:
+    properties:
+      amount:
+        type: string
+      close_authority:
+        type: string
+      decimals:
+        type: integer
+      delegate:
+        type: string
+      delegated_amount:
+        type: string
+      exists:
+        type: boolean
+      mint:
+        type: string
+      native:
+        type: boolean
+      owner:
+        type: string
+      program:
+        type: string
+      public_key:
+        type: string
+      rent_reserve:
+        type: string
+      state:
+        type: string
+    type: object
+  account.TokensRequest:
+    properties:
+      public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  account.TokensResponse:
+    properties:
+      accounts:
+        items:
+          $ref: '#/definitions/account.TokenAccountResponse'
+        type: array
+      count:
+        type: integer
+      public_key:
         type: string
     type: object
   misc.BatchCall:
@@ -120,62 +191,6 @@ definitions:
       health:
         type: string
     type: object
-  misc.MintRequest:
-    properties:
-      public_key:
-        example: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
-        type: string
-    type: object
-  misc.MintResponse:
-    properties:
-      decimals:
-        type: integer
-      exists:
-        type: boolean
-      freezable:
-        type: boolean
-      freeze_authority:
-        type: string
-      initialized:
-        type: boolean
-      mint_authority:
-        type: string
-      mintable:
-        type: boolean
-      program:
-        type: string
-      public_key:
-        type: string
-      supply:
-        type: string
-      supply_ui:
-        type: string
-    type: object
-  misc.NonceRequest:
-    properties:
-      public_key:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-    type: object
-  misc.NonceResponse:
-    properties:
-      authority:
-        type: string
-      exists:
-        type: boolean
-      initialized:
-        type: boolean
-      lamports_per_signature:
-        type: string
-      nonce:
-        type: string
-      public_key:
-        type: string
-      state:
-        type: integer
-      version:
-        type: integer
-    type: object
   misc.RawRequest:
     properties:
       method:
@@ -200,6 +215,12 @@ definitions:
         type: string
       space:
         type: integer
+    type: object
+  misc.RentExemptionPublicKeyRequest:
+    properties:
+      public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
     type: object
   misc.RentExemptionPublicKeyResponse:
     properties:
@@ -361,13 +382,34 @@ definitions:
       slot:
         type: integer
     type: object
-  misc.TokenAccountRequest:
+  misc.VerifyRequest:
     properties:
+      message:
+        type: string
       public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      signature:
+        type: string
+    type: object
+  misc.VerifyResponse:
+    properties:
+      valid:
+        type: boolean
+    type: object
+  misc.VersionResponse:
+    properties:
+      version:
+        additionalProperties: {}
+        type: object
+    type: object
+  token.AccountRequest:
+    properties:
+      token_account:
         example: 4qRgcVrSqs43Jy9n8w7H5EJh8FnRiTFnABjE37Dd3Ae5
         type: string
     type: object
-  misc.TokenAccountResponse:
+  token.AccountResponse:
     properties:
       amount:
         type: string
@@ -400,53 +442,36 @@ definitions:
       state:
         type: string
     type: object
-  misc.TokenAccountsByOwnerRequest:
+  token.MintRequest:
     properties:
-      mint:
-        example: ""
-        type: string
-      owner:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-      token_program:
-        example: ""
+      mint_account:
+        example: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
         type: string
     type: object
-  misc.TokenAccountsByOwnerResponse:
+  token.MintResponse:
     properties:
-      accounts:
-        items:
-          $ref: '#/definitions/misc.TokenAccountResponse'
-        type: array
-      count:
+      decimals:
         type: integer
-      mint:
+      exists:
+        type: boolean
+      freezable:
+        type: boolean
+      freeze_authority:
         type: string
-      owner:
+      initialized:
+        type: boolean
+      mint_authority:
         type: string
+      mintable:
+        type: boolean
       program:
         type: string
-    type: object
-  misc.VerifyRequest:
-    properties:
-      message:
-        type: string
       public_key:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
-      signature:
+      supply:
         type: string
-    type: object
-  misc.VerifyResponse:
-    properties:
-      valid:
-        type: boolean
-    type: object
-  misc.VersionResponse:
-    properties:
-      version:
-        additionalProperties: {}
-        type: object
+      supply_ui:
+        type: string
     type: object
   v1.Account:
     properties:
@@ -1696,6 +1721,822 @@ info:
   title: SVMlab API
   version: "1.0"
 paths:
+  /svm/account/airdrop:
+    post:
+      consumes:
+      - application/json
+      description: Requests a fixed half a SOL. The amount is not a field because
+        the faucet enforces its own limit, and asking above it fails the call rather
+        than handing out less.
+      parameters:
+      - description: Account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/account.AirdropRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/account.AirdropResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund an account on devnet or testnet
+      tags:
+      - account
+  /svm/account/balance:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/account.AccountRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/account.BalanceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read an account's balance
+      tags:
+      - account
+  /svm/account/nonce:
+    post:
+      consumes:
+      - application/json
+      description: 'Parses the 80 bytes a nonce account holds. The stored nonce is
+        what a transaction may carry in place of a recent blockhash so that it never
+        expires, which is the opposite of an EVM nonce: there a per-account counter
+        prevents replay, here expiry is what is being removed. An account sized by
+        create-account but never initialized is a normal intermediate state and reports
+        initialized=false with all-zero fields.'
+      parameters:
+      - description: Nonce account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/account.NonceRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/account.NonceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read a durable nonce account
+      tags:
+      - account
+  /svm/account/owner:
+    post:
+      consumes:
+      - application/json
+      description: Only the owning program may debit an account or write its data.
+        An account owned by anything other than the System Program cannot be moved
+        with a system transfer, and one owned by a non-executable address cannot be
+        moved at all, so system_owned answers whether the balance is still reachable.
+      parameters:
+      - description: Account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/account.AccountOwnerRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/account.AccountOwnerResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read who owns an account
+      tags:
+      - account
+  /svm/account/state:
+    post:
+      consumes:
+      - application/json
+      description: Returns the owner, executable flag, data size, balance, and data.
+        An account that does not exist is reported with exists=false rather than as
+        an error, since most 32-byte values name one nobody has created.
+      parameters:
+      - description: Account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/account.AccountRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/account.AccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read an account's on-chain state
+      tags:
+      - account
+  /svm/account/tokens:
+    post:
+      consumes:
+      - application/json
+      description: Lists token accounts owned by a wallet under both the classic Token
+        Program and Token-2022. The response keeps the program on each account because
+        the two programs own separate accounts and no single token instruction can
+        touch both at once.
+      parameters:
+      - description: Wallet
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/account.TokensRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/account.TokensResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: List the token accounts a wallet owns
+      tags:
+      - account
+  /svm/cluster/blockhash:
+    post:
+      description: Returns the blockhash to build against and the block height past
+        which it is rejected, so expiry can be checked rather than guessed. Fetched
+        at finalized commitment, since a blockhash from a less settled view risks
+        belonging to a fork.
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.BlockhashResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read a recent blockhash
+      tags:
+      - cluster
+  /svm/cluster/genesis-hash:
+    post:
+      description: A genesis hash is not folded into a signature the way EIP-155 binds
+        a chain id, so nothing on chain prevents a transaction from replaying on another
+        cluster. Comparing what the endpoint reports against what config names is
+        the substitute check.
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.GenesisHashResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read the cluster's genesis hash and compare it to config
+      tags:
+      - cluster
+  /svm/cluster/health:
+    post:
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.HealthResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read the node's health
+      tags:
+      - cluster
+  /svm/cluster/slot:
+    post:
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.SlotResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read the current slot
+      tags:
+      - cluster
+  /svm/cluster/transaction/fee:
+    post:
+      consumes:
+      - application/json
+      description: The fee follows from the signature count and any compute budget
+        instructions, both of which live in the message, so it is known before signing
+        and cannot be exceeded by execution the way a gas estimate can.
+      parameters:
+      - description: Message
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.FeeRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.FeeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Price a message
+      tags:
+      - cluster
+  /svm/cluster/transaction/send:
+    post:
+      consumes:
+      - application/json
+      description: Submits a fully signed transaction to the cluster and returns its
+        signature. Acceptance is not execution; the transaction still has to land
+        in a block.
+      parameters:
+      - description: Signed transaction
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.SendTransactionRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.SendTransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Broadcast a signed transaction
+      tags:
+      - cluster
+  /svm/cluster/transaction/simulate:
+    post:
+      consumes:
+      - application/json
+      description: Runs a fully signed transaction against the node's state without
+        broadcasting it, and returns the program logs either way. The logs are the
+        only account of why execution stopped; nothing here corresponds to a revert
+        string.
+      parameters:
+      - description: Transaction
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.SimulateTransactionRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.SimulateTransactionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Execute a transaction without submitting it
+      tags:
+      - cluster
+  /svm/cluster/transaction/status:
+    post:
+      consumes:
+      - application/json
+      description: 'Stands in for an EVM receipt, but found can stay false forever:
+        a transaction whose blockhash expired is forgotten and never lands.'
+      parameters:
+      - description: Signature
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.SignatureStatusRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.SignatureStatusResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read a transaction's status
+      tags:
+      - cluster
+  /svm/cluster/version:
+    post:
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.VersionResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read the node's software version
+      tags:
+      - cluster
+  /svm/protocol/rent-exemption/mint:
+    post:
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionMintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for an SPL Token mint
+      tags:
+      - protocol
+  /svm/protocol/rent-exemption/nonce:
+    post:
+      description: A nonce account has to stay rent exempt to keep holding its nonce,
+        so this is what one must be funded with. It is also the floor a partial withdrawal
+        has to leave behind.
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionNonceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for a durable nonce account
+      tags:
+      - protocol
+  /svm/protocol/rent-exemption/public-key:
+    post:
+      consumes:
+      - application/json
+      description: Reads the size from a live account, so the caller does not have
+        to know the layout. Pass a byte count to the space endpoint instead when the
+        account does not exist yet.
+      parameters:
+      - description: Account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.RentExemptionPublicKeyRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionPublicKeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for an account of the same size as an existing one
+      tags:
+      - protocol
+  /svm/protocol/rent-exemption/space:
+    post:
+      consumes:
+      - application/json
+      description: Takes a byte count rather than an account kind, which covers layouts
+        none of the named endpoints describe and sizes no live account holds yet.
+      parameters:
+      - description: Space
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.RentExemptionSpaceRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionSpaceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for a size given directly
+      tags:
+      - protocol
+  /svm/protocol/rent-exemption/stake:
+    post:
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionStakeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for a stake account
+      tags:
+      - protocol
+  /svm/protocol/rent-exemption/system:
+    post:
+      description: A wallet holds lamports and no data, so this is the floor any account
+        must clear. It is also what a transfer to a previously unused address has
+        to meet, since the transfer creates the account.
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionSystemResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for a plain wallet
+      tags:
+      - protocol
+  /svm/protocol/rent-exemption/token:
+    post:
+      description: Every token balance lives in an account of its own, so opening
+        a position in a new token costs this much before any tokens move.
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionTokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for an SPL Token account
+      tags:
+      - protocol
+  /svm/protocol/rent-exemption/vote:
+    post:
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RentExemptionVoteResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Minimum balance for a validator vote account
+      tags:
+      - protocol
   /svm/rpc/:
     post:
       consumes:
@@ -1736,164 +2577,6 @@ paths:
       summary: Call any JSON-RPC method
       tags:
       - rpc
-  /svm/rpc/account:
-    post:
-      consumes:
-      - application/json
-      description: Returns the owner, executable flag, data size, and data. An account
-        that does not exist is reported with exists=false rather than as an error,
-        since most 32-byte values name one nobody has created.
-      parameters:
-      - description: Account
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.AccountRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.AccountResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read an account's on-chain state
-      tags:
-      - rpc
-  /svm/rpc/account/owner:
-    post:
-      consumes:
-      - application/json
-      description: Only the owning program may debit an account or write its data.
-        An account owned by anything other than the System Program cannot be moved
-        with a system transfer, and one owned by a non-executable address cannot be
-        moved at all, so system_owned answers whether the balance is still reachable.
-      parameters:
-      - description: Account
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.AccountOwnerRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.AccountOwnerResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read who owns an account
-      tags:
-      - rpc
-  /svm/rpc/airdrop:
-    post:
-      consumes:
-      - application/json
-      description: Requests a fixed half a SOL. The amount is not a field because
-        the faucet enforces its own limit, and asking above it fails the call rather
-        than handing out less.
-      parameters:
-      - description: Account
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.AirdropRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.AirdropResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Fund an account on devnet or testnet
-      tags:
-      - rpc
-  /svm/rpc/balance:
-    post:
-      consumes:
-      - application/json
-      parameters:
-      - description: Account
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.AccountRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.BalanceResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read an account's balance
-      tags:
-      - rpc
   /svm/rpc/batch:
     post:
       consumes:
@@ -1930,756 +2613,6 @@ paths:
               type: string
             type: object
       summary: Call several JSON-RPC methods in one round trip
-      tags:
-      - rpc
-  /svm/rpc/blockhash:
-    post:
-      description: Returns the blockhash to build against and the block height past
-        which it is rejected, so expiry can be checked rather than guessed. Fetched
-        at finalized commitment, since a blockhash from a less settled view risks
-        belonging to a fork.
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.BlockhashResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read a recent blockhash
-      tags:
-      - rpc
-  /svm/rpc/fee:
-    post:
-      consumes:
-      - application/json
-      description: The fee follows from the signature count and any compute budget
-        instructions, both of which live in the message, so it is known before signing
-        and cannot be exceeded by execution the way a gas estimate can.
-      parameters:
-      - description: Message
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.FeeRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.FeeResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Price a message
-      tags:
-      - rpc
-  /svm/rpc/genesis-hash:
-    post:
-      description: A genesis hash is not folded into a signature the way EIP-155 binds
-        a chain id, so nothing on chain prevents a transaction from replaying on another
-        cluster. Comparing what the endpoint reports against what config names is
-        the substitute check.
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.GenesisHashResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read the cluster's genesis hash and compare it to config
-      tags:
-      - rpc
-  /svm/rpc/health:
-    post:
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.HealthResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read the node's health
-      tags:
-      - rpc
-  /svm/rpc/nonce:
-    post:
-      consumes:
-      - application/json
-      description: 'Parses the 80 bytes a nonce account holds. The stored nonce is
-        what a transaction may carry in place of a recent blockhash so that it never
-        expires, which is the opposite of an EVM nonce: there a per-account counter
-        prevents replay, here expiry is what is being removed. An account sized by
-        create-account but never initialized is a normal intermediate state and reports
-        initialized=false with all-zero fields.'
-      parameters:
-      - description: Nonce account
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.NonceRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.NonceResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read a durable nonce account
-      tags:
-      - rpc
-  /svm/rpc/rent-exemption/mint:
-    post:
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.RentExemptionMintResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Minimum balance for an SPL Token mint
-      tags:
-      - rpc
-  /svm/rpc/rent-exemption/nonce:
-    post:
-      description: A nonce account has to stay rent exempt to keep holding its nonce,
-        so this is what one must be funded with. It is also the floor a partial withdrawal
-        has to leave behind.
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.RentExemptionNonceResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Minimum balance for a durable nonce account
-      tags:
-      - rpc
-  /svm/rpc/rent-exemption/public-key:
-    post:
-      consumes:
-      - application/json
-      description: Reads the size from a live account, so the caller does not have
-        to know the layout. Pass a byte count to the space endpoint instead when the
-        account does not exist yet.
-      parameters:
-      - description: Account
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.AccountRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.RentExemptionPublicKeyResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Minimum balance for an account of the same size as an existing one
-      tags:
-      - rpc
-  /svm/rpc/rent-exemption/space:
-    post:
-      consumes:
-      - application/json
-      description: Takes a byte count rather than an account kind, which covers layouts
-        none of the named endpoints describe and sizes no live account holds yet.
-      parameters:
-      - description: Space
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.RentExemptionSpaceRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.RentExemptionSpaceResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Minimum balance for a size given directly
-      tags:
-      - rpc
-  /svm/rpc/rent-exemption/stake:
-    post:
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.RentExemptionStakeResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Minimum balance for a stake account
-      tags:
-      - rpc
-  /svm/rpc/rent-exemption/system:
-    post:
-      description: A wallet holds lamports and no data, so this is the floor any account
-        must clear. It is also what a transfer to a previously unused address has
-        to meet, since the transfer creates the account.
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.RentExemptionSystemResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Minimum balance for a plain wallet
-      tags:
-      - rpc
-  /svm/rpc/rent-exemption/token:
-    post:
-      description: Every token balance lives in an account of its own, so opening
-        a position in a new token costs this much before any tokens move.
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.RentExemptionTokenResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Minimum balance for an SPL Token account
-      tags:
-      - rpc
-  /svm/rpc/rent-exemption/vote:
-    post:
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.RentExemptionVoteResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Minimum balance for a validator vote account
-      tags:
-      - rpc
-  /svm/rpc/slot:
-    post:
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.SlotResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read the current slot
-      tags:
-      - rpc
-  /svm/rpc/token/account:
-    post:
-      consumes:
-      - application/json
-      description: 'Parses the 165 bytes a token account holds. owner is not the runtime
-        owner: that is the token program, which is what may write the data, while
-        owner here is the wallet whose signature the program accepts. amount is base
-        units with no scale of its own, so the mint is read as well to report amount_ui;
-        when the mint cannot be read the base units are still returned and decimals
-        is omitted rather than guessed. Works for both classic Token and Token-2022,
-        whose extensions sit past the base layout.'
-      parameters:
-      - description: Token account
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.TokenAccountRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.TokenAccountResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read an SPL Token holder account
-      tags:
-      - rpc
-  /svm/rpc/token/accounts-by-owner:
-    post:
-      consumes:
-      - application/json
-      description: 'Lists every token account held by one wallet under one token program,
-        optionally narrowed to a single mint. A wallet may hold several accounts for
-        the same mint, since only the associated address is unique per wallet and
-        mint, so this returns a list rather than an account. token_program defaults
-        to classic Token and cannot default to both: Token and Token-2022 hold separate
-        accounts and a wallet may have accounts under each, so a merged listing would
-        report accounts no single instruction can touch together.'
-      parameters:
-      - description: Wallet, optional mint, optional token program
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.TokenAccountsByOwnerRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.TokenAccountsByOwnerResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: List the token accounts a wallet owns
-      tags:
-      - rpc
-  /svm/rpc/token/mint:
-    post:
-      consumes:
-      - application/json
-      description: 'Parses the 82 bytes a mint account holds. A mint is the closest
-        thing Solana has to an ERC-20 contract, and what it lacks is the point: no
-        balances and no allowances, since those live in separate token accounts owned
-        by each holder. mint_authority and freeze_authority are omitted when absent,
-        which is different from being the zero address; a mint whose mint authority
-        was removed has a permanently fixed supply, and one initialized without a
-        freeze authority can never gain one. Works for both classic Token and Token-2022,
-        whose extensions sit past the base layout.'
-      parameters:
-      - description: Mint account
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.MintRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.MintResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read an SPL Token mint
-      tags:
-      - rpc
-  /svm/rpc/transaction/send:
-    post:
-      consumes:
-      - application/json
-      description: Submits a fully signed transaction to the cluster and returns its
-        signature. Acceptance is not execution; the transaction still has to land
-        in a block.
-      parameters:
-      - description: Signed transaction
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.SendTransactionRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.SendTransactionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Broadcast a signed transaction
-      tags:
-      - rpc
-  /svm/rpc/transaction/simulate:
-    post:
-      consumes:
-      - application/json
-      description: Runs a fully signed transaction against the node's state without
-        broadcasting it, and returns the program logs either way. The logs are the
-        only account of why execution stopped; nothing here corresponds to a revert
-        string.
-      parameters:
-      - description: Transaction
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.SimulateTransactionRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.SimulateTransactionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Execute a transaction without submitting it
-      tags:
-      - rpc
-  /svm/rpc/transaction/status:
-    post:
-      consumes:
-      - application/json
-      description: 'Stands in for an EVM receipt, but found can stay false forever:
-        a transaction whose blockhash expired is forgotten and never lands.'
-      parameters:
-      - description: Signature
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/misc.SignatureStatusRequest'
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.SignatureStatusResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read a transaction's status
-      tags:
-      - rpc
-  /svm/rpc/version:
-    post:
-      parameters:
-      - description: Chain name, e.g. solana
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Chain network, e.g. testnet
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/misc.VersionResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Read the node's software version
       tags:
       - rpc
   /svm/sign:
@@ -2809,6 +2742,95 @@ paths:
       summary: Verify a signature
       tags:
       - sign
+  /svm/token/account:
+    post:
+      consumes:
+      - application/json
+      description: 'Parses the 165 bytes a token account holds. owner is not the runtime
+        owner: that is the token program, which is what may write the data, while
+        owner here is the wallet whose signature the program accepts. amount is base
+        units with no scale of its own, so the mint is read as well to report amount_ui;
+        when the mint cannot be read the base units are still returned and decimals
+        is omitted rather than guessed. Works for both classic Token and Token-2022,
+        whose extensions sit past the base layout.'
+      parameters:
+      - description: Token account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/token.AccountRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/token.AccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read an SPL Token holder account
+      tags:
+      - token
+  /svm/token/mint:
+    post:
+      consumes:
+      - application/json
+      description: 'Parses the 82 bytes a mint account holds. A mint is the closest
+        thing Solana has to an ERC-20 contract, and what it lacks is the point: no
+        balances and no allowances, since those live in separate token accounts owned
+        by each holder. mint_authority and freeze_authority are omitted when absent,
+        which is different from being the zero address; a mint whose mint authority
+        was removed has a permanently fixed supply, and one initialized without a
+        freeze authority can never gain one. Works for both classic Token and Token-2022,
+        whose extensions sit past the base layout.'
+      parameters:
+      - description: Mint account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/token.MintRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/token.MintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read an SPL Token mint
+      tags:
+      - token
   /svm/tool/generate/keypair:
     post:
       description: 'Returns a new key pair in the base58 form config.yaml expects,

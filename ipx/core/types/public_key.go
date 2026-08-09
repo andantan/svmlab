@@ -33,6 +33,10 @@ func NewPublicKey(k ed25519.PublicKey) *PublicKey {
 	}
 }
 
+func NewPublicKeys(keys ...*PublicKey) []*PublicKey {
+	return keys
+}
+
 func NewPublicKeyFromBytes(b []byte) (*PublicKey, error) {
 	if len(b) != PublicKeyLength {
 		return nil, fmt.Errorf("public key must be %d bytes but got: %d", PublicKeyLength, len(b))

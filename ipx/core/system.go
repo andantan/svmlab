@@ -13,14 +13,19 @@ import (
 // plays. It is an index into a fixed list rather than a hash of a signature,
 // so it carries no type information and cannot be recovered from a name.
 const (
-	SystemInstructionCreateAccount         uint32 = 0
-	SystemInstructionAssign                uint32 = 1
-	SystemInstructionTransfer              uint32 = 2
-	SystemInstructionCreateAccountWithSeed uint32 = 3
-	SystemInstructionAllocate              uint32 = 8
-	SystemInstructionAllocateWithSeed      uint32 = 9
-	SystemInstructionAssignWithSeed        uint32 = 10
-	SystemInstructionTransferWithSeed      uint32 = 11
+	SystemInstructionCreateAccount uint32 = iota
+	SystemInstructionAssign
+	SystemInstructionTransfer
+	SystemInstructionCreateAccountWithSeed
+	SystemInstructionAdvanceNonceAccount
+	SystemInstructionWithdrawNonceAccount
+	SystemInstructionInitializeNonceAccount
+	SystemInstructionAuthorizeNonceAccount
+	SystemInstructionAllocate
+	SystemInstructionAllocateWithSeed
+	SystemInstructionAssignWithSeed
+	SystemInstructionTransferWithSeed
+	SystemInstructionUpgradeNonceAccount
 )
 
 const (

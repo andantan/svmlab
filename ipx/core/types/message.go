@@ -66,7 +66,35 @@ type Message struct {
 //     it.
 //   - A program id is added as a read-only non-signer. It is invoked, not
 //     modified, and a program marked writable would be rejected.
+//
+// The message expires with the blockhash. NewNonceMessage builds one that does
+// not.
 func NewMessage(feePayer *PublicKey, recentBlockhash *Hash, instructions []*Instruction) (*Message, error) {
+	return newMessage(feePayer, recentBlockhash, instructions)
+}
+
+// NewNonceMessage compiles a message that never expires, built against the
+// value a durable nonce account stores.
+//
+// It exists as its own constructor because a message has one blockhash field
+// and nothing in it marks which kind of value is there. Passing a nonce to
+// NewMessage would work and read as a lie, so the two are named apart even
+// though the compiled bytes differ only in what that field holds.
+//
+// The advance is a separate parameter rather than the caller's first
+// instruction, because the runtime only accepts a nonce transaction whose
+// first instruction consumes the nonce. Taking it here puts that rule in the
+// signature. What the instruction actually is stays unknown to this layer,
+// which serializes what it is given and knows nothing about programs.
+func NewNonceMessage(feePayer *PublicKey, nonce *Hash, advance *Instruction, instructions []*Instruction) (*Message, error) {
+	if advance.IsNil() {
+		return nil, fmt.Errorf("message: the nonce advance instruction is required")
+	}
+
+	return newMessage(feePayer, nonce, append([]*Instruction{advance}, instructions...))
+}
+
+func newMessage(feePayer *PublicKey, recentBlockhash *Hash, instructions []*Instruction) (*Message, error) {
 	if feePayer.IsNil() {
 		return nil, fmt.Errorf("message: fee payer is required")
 	}

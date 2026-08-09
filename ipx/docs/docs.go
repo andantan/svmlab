@@ -1520,7 +1520,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/allocate": {
             "post": {
-                "description": "Reserves data space on an existing System-owned account. Only the owning program may size an account, so this works on an account the System Program still owns and not one already assigned elsewhere. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size rather than the old one.",
+                "description": "Reserves data space on an existing System-owned account. Only the owning program may size an account, so this works on an account the System Program still owns and not one already assigned elsewhere. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size rather than the old one. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1577,7 +1577,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/assign": {
             "post": {
-                "description": "Hands a System-owned account to another program, which is the step that puts an account under a program's control. Ownership is a field on the account rather than a mapping the program keeps, which is the inverse of an EVM contract holding balances for its users in its own storage. The owner must be executable: only the owning program may debit an account or write its data, so assigning to a plain address locks the account and its lamports permanently.",
+                "description": "Hands a System-owned account to another program, which is the step that puts an account under a program's control. Ownership is a field on the account rather than a mapping the program keeps, which is the inverse of an EVM contract holding balances for its users in its own storage. The owner must be executable: only the owning program may debit an account or write its data, so assigning to a plain address locks the account and its lamports permanently. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1634,7 +1634,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/create-account": {
             "post": {
-                "description": "Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account owned by a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning.",
+                "description": "Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account owned by a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1691,7 +1691,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/nonce/advance": {
             "post": {
-                "description": "Replaces the stored nonce with the current blockhash. Advancing is what consumes a nonce: a transaction built against one carries it in place of a recent blockhash and runs this as its first instruction, so the value it was built for is gone by the time it finishes and it cannot land twice. Run on its own, this simply invalidates anything already built against the account. The authority signs, and the stored authority is checked here rather than left to fail on chain.",
+                "description": "Replaces the stored nonce with the current blockhash. Advancing is what consumes a nonce: a transaction built against one carries it in place of a recent blockhash and runs this as its first instruction, so the value it was built for is gone by the time it finishes and it cannot land twice. Run on its own, this simply invalidates anything already built against the account. The authority signs, and the stored authority is checked here rather than left to fail on chain. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1704,7 +1704,7 @@ const docTemplate = `{
                 "summary": "Build a durable nonce advance",
                 "parameters": [
                     {
-                        "description": "Nonce account and authority",
+                        "description": "Target nonce account and authority",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1748,7 +1748,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/nonce/authorize": {
             "post": {
-                "description": "Hands control of a nonce account to another key. The stored nonce and the balance are untouched, so only who may advance and withdraw changes. That also invalidates anything the old authority signed but never submitted, since such a transaction advances the nonce as its first instruction and that now needs a signature the old authority cannot give. If the reason for changing is a leaked key, the old authority's pending transaction and this one race, so pair it with an advance.",
+                "description": "Hands control of a nonce account to another key. The stored nonce and the balance are untouched, so only who may advance and withdraw changes. That also invalidates anything the old authority signed but never submitted, since such a transaction advances the nonce as its first instruction and that now needs a signature the old authority cannot give. If the reason for changing is a leaked key, the old authority's pending transaction and this one race, so pair it with an advance. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1761,7 +1761,7 @@ const docTemplate = `{
                 "summary": "Build a durable nonce authority change",
                 "parameters": [
                     {
-                        "description": "Nonce account, current authority, and new authority",
+                        "description": "Target nonce account, current authority, and new authority",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1805,7 +1805,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/nonce/create-account": {
             "post": {
-                "description": "Creates the account and initializes it as a durable nonce in one transaction, which is the first v2 endpoint to carry more than one instruction. The nonce account appears twice: it signs for the creation, since an address does not exist until its key authorizes it, and is only writable for the initialization, which needs no authority. Message compilation lists it once with the union of both, which is why it shows up among the signers. Size and funding are not fields, since a nonce account is always the same size and has to hold exactly the rent-exempt minimum for it.",
+                "description": "Creates the account and initializes it as a durable nonce in one transaction, which is the first v2 endpoint to carry more than one instruction. The nonce account appears twice: it signs for the creation, since an address does not exist until its key authorizes it, and is only writable for the initialization, which needs no authority. Message compilation lists it once with the union of both, which is why it shows up among the signers. Size and funding are not fields, since a nonce account is always the same size and has to hold exactly the rent-exempt minimum for it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1818,7 +1818,7 @@ const docTemplate = `{
                 "summary": "Build a durable nonce account creation",
                 "parameters": [
                     {
-                        "description": "Funder, nonce account, and authority",
+                        "description": "Funder, new nonce account, and authority",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1862,7 +1862,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/nonce/initialize": {
             "post": {
-                "description": "Initializes an account that already exists and is already the right size. nonce/create-account does this and the creation together, so this is for an address that can no longer be created: CreateAccount refuses one that already holds lamports, which is what happens when someone funds the address first. The account is writable but does not sign, since initializing it needs no authority of its own; it gains the authority named here.",
+                "description": "Initializes an account that already exists and is already the right size. nonce/create-account does this and the creation together, so this is for an address that can no longer be created: CreateAccount refuses one that already holds lamports, which is what happens when someone funds the address first. The account is writable but does not sign, since initializing it needs no authority of its own; it gains the authority named here. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1875,7 +1875,7 @@ const docTemplate = `{
                 "summary": "Build a durable nonce initialization on an existing account",
                 "parameters": [
                     {
-                        "description": "Nonce account and authority",
+                        "description": "New nonce account and authority",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1919,7 +1919,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/nonce/upgrade": {
             "post": {
-                "description": "Rewrites a Legacy nonce account as the current version. Legacy accounts stored the blockhash itself, which could collide with a real one; the current version stores a value derived from it that cannot. Nothing signs, since this is not a privileged operation, so anyone willing to pay the fee may upgrade anyone's account. No account this project creates can be upgraded: initialize has written the current version for a long time, only accounts predating that change are Legacy, and no instruction can produce one now. The check below rejects a current account before it reaches the chain.",
+                "description": "Rewrites a Legacy nonce account as the current version. Legacy accounts stored the blockhash itself, which could collide with a real one; the current version stores a value derived from it that cannot. Nothing signs, since this is not a privileged operation, so anyone willing to pay the fee may upgrade anyone's account. No account this project creates can be upgraded: initialize has written the current version for a long time, only accounts predating that change are Legacy, and no instruction can produce one now. The check below rejects a current account before it reaches the chain. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1932,7 +1932,7 @@ const docTemplate = `{
                 "summary": "Build a Legacy nonce account migration",
                 "parameters": [
                     {
-                        "description": "Nonce account",
+                        "description": "Target nonce account",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1976,7 +1976,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/nonce/withdraw": {
             "post": {
-                "description": "Moves part of a nonce account's balance out. What stays has to keep the account rent exempt at its size, since an account below that floor is subject to removal while still holding a nonce something may have been built against. Taking the whole balance closes the account and carries a further rule, so that has its own endpoint. The authority signs, and the stored authority is checked here rather than left to fail on chain.",
+                "description": "Moves part of a nonce account's balance out. What stays has to keep the account rent exempt at its size, since an account below that floor is subject to removal while still holding a nonce something may have been built against. Taking the whole balance closes the account and carries a further rule, so that has its own endpoint. The authority signs, and the stored authority is checked here rather than left to fail on chain. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1989,7 +1989,7 @@ const docTemplate = `{
                 "summary": "Build a partial withdrawal from a durable nonce account",
                 "parameters": [
                     {
-                        "description": "Nonce account, authority, recipient, and amount",
+                        "description": "Target nonce account, authority, recipient, and amount",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2033,7 +2033,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/nonce/withdraw/max": {
             "post": {
-                "description": "Takes the whole balance, which closes the account. The rent-exempt floor that constrains a partial withdrawal does not apply, since nothing is left to keep exempt. One rule replaces it and is not checked here: the runtime refuses to close an account whose stored nonce is still the blockhash the transaction executes against, so closing in the same block the nonce was last advanced or initialized fails with NonceBlockhashNotExpired. That cannot be decided before submitting, because the blockhash it is compared against is the one at execution rather than any this build could see. Waiting a block and rebuilding is the fix.",
+                "description": "Takes the whole balance, which closes the account. The rent-exempt floor that constrains a partial withdrawal does not apply, since nothing is left to keep exempt. One rule replaces it and is not checked here: the runtime refuses to close an account whose stored nonce is still the blockhash the transaction executes against, so closing in the same block the nonce was last advanced or initialized fails with NonceBlockhashNotExpired. That cannot be decided before submitting, because the blockhash it is compared against is the one at execution rather than any this build could see. Waiting a block and rebuilding is the fix. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2046,7 +2046,7 @@ const docTemplate = `{
                 "summary": "Build a full withdrawal that closes a durable nonce account",
                 "parameters": [
                     {
-                        "description": "Nonce account, authority, and recipient",
+                        "description": "Target nonce account, authority, and recipient",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2090,7 +2090,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/seed/allocate": {
             "post": {
-                "description": "Reserves data space on SHA256(base || seed || owner) with base signing in the account's place. Allocation still requires the account to be System-owned, so this is the step taken before assigning it away, on an address derived for its eventual owner from the start. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size.",
+                "description": "Reserves data space on SHA256(base || seed || owner) with base signing in the account's place. Allocation still requires the account to be System-owned, so this is the step taken before assigning it away, on an address derived for its eventual owner from the start. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2147,7 +2147,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/seed/assign": {
             "post": {
-                "description": "Hands SHA256(base || seed || owner) to that same owner. There is no separate new-owner field, because one owner does both jobs: it is what the address is derived from and what the account is assigned to, so an account can only be handed to the program its own address already encodes. The owner must be executable, since assigning to a plain address locks the account permanently.",
+                "description": "Hands SHA256(base || seed || owner) to that same owner. There is no separate new-owner field, because one owner does both jobs: it is what the address is derived from and what the account is assigned to, so an account can only be handed to the program its own address already encodes. The owner must be executable, since assigning to a plain address locks the account permanently. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2204,7 +2204,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/seed/create-account": {
             "post": {
-                "description": "Creates an account at SHA256(base || seed || owner) and hands it to that owner in one instruction, so a program-owned account needs no separate allocate and assign. The owner must be executable, and it changes the address: the same base and seed derive somewhere else for a different owner. The derived account never signs, which is the difference from create-account: nobody holds a secret for it, so base signs in its place and whoever controls base controls every address derived from it. The address is derived rather than accepted, since the runtime recomputes it and rejects a mismatch.",
+                "description": "Creates an account at SHA256(base || seed || owner) and hands it to that owner in one instruction, so a program-owned account needs no separate allocate and assign. The owner must be executable, and it changes the address: the same base and seed derive somewhere else for a different owner. The derived account never signs, which is the difference from create-account: nobody holds a secret for it, so base signs in its place and whoever controls base controls every address derived from it. The address is derived rather than accepted, since the runtime recomputes it and rejects a mismatch. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2261,7 +2261,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/seed/transfer": {
             "post": {
-                "description": "Debits SHA256(base || seed || owner) without that account signing, since base signs for it. That is what makes a derived address usable as a holding account: anyone can fund it, and only the holder of base can spend it. The account must still be System-owned for a system transfer to debit it, which is checked before returning.",
+                "description": "Debits SHA256(base || seed || owner) without that account signing, since base signs for it. That is what makes a derived address usable as a holding account: anyone can fund it, and only the holder of base can spend it. The account must still be System-owned for a system transfer to debit it, which is checked before returning. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2318,7 +2318,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/seed/transfer/max": {
             "post": {
-                "description": "Sends everything SHA256(base || seed || owner) holds. The amount is the whole balance with nothing held back, because a derived address can never pay the fee: a fee payer has to sign, and this account cannot. That also means no probe is needed to price the message first, since the amount does not depend on the fee here the way it does for a plain transfer. Emptying the account lets the runtime reclaim it.",
+                "description": "Sends everything SHA256(base || seed || owner) holds. The amount is the whole balance with nothing held back, because a derived address can never pay the fee: a fee payer has to sign, and this account cannot. That also means no probe is needed to price the message first, since the amount does not depend on the fee here the way it does for a plain transfer. Emptying the account lets the runtime reclaim it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2375,7 +2375,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/transfer": {
             "post": {
-                "description": "Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. The recent blockhash is always fetched, and the recipient is not required to exist yet. To send the sender's entire balance, use transfer/max instead.",
+                "description": "Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. The recent blockhash is always fetched, and the recipient is not required to exist yet. To send the sender's entire balance, use transfer/max instead. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2432,7 +2432,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/transfer/max": {
             "post": {
-                "description": "Assembles a System Program transfer moving everything the sender can send. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it.",
+                "description": "Assembles a System Program transfer moving everything the sender can send. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3144,6 +3144,11 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                    "type": "string",
+                    "example": ""
+                },
                 "space": {
                     "type": "string",
                     "example": "128"
@@ -3163,6 +3168,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -3197,6 +3206,11 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                    "type": "string",
+                    "example": ""
+                },
                 "owner": {
                     "type": "string",
                     "example": "11111111111111111111111111111111"
@@ -3216,6 +3230,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
                     "type": "string"
                 },
                 "owner": {
@@ -3254,6 +3272,11 @@ const docTemplate = `{
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                    "type": "string",
+                    "example": ""
+                },
                 "owner": {
                     "type": "string",
                     "example": "11111111111111111111111111111111"
@@ -3283,6 +3306,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
                     "type": "string"
                 },
                 "owner": {
@@ -3321,6 +3348,12 @@ const docTemplate = `{
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.\nIt has to be an account other than the target: the runtime refuses a\ntransaction that advances the same nonce twice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "target_nonce_account": {
+                    "description": "TargetNonceAccount is the account whose stored value this rotates. It is\nnamed apart from NonceAccount because both are nonce accounts and only\ntheir roles differ: this one is what the instruction acts on, that one\nis what the transaction is built against.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
@@ -3339,7 +3372,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "current_nonce": {
-                    "description": "CurrentNonce is what the account holds now, before this transaction\nlands. Any transaction already built against it stops being valid once\nthis one executes.",
+                    "description": "CurrentNonce is what the target holds now, before this transaction\nlands. Any transaction already built against it stops being valid once\nthis one executes.",
                     "type": "string"
                 },
                 "fee": {
@@ -3348,7 +3381,8 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "nonce_account": {
+                "nonce_authority": {
+                    "description": "NonceAuthority belongs to the account named in the request's\nnonce_account, not to the target, and is present only when one was\nnamed. Authority above is the target's.",
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -3359,6 +3393,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "target_nonce_account": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -3381,6 +3418,12 @@ const docTemplate = `{
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
                 "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.\nIt has to be an account other than the target: the runtime refuses a\ntransaction that advances the same nonce twice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "target_nonce_account": {
+                    "description": "TargetNonceAccount is the account whose authority changes. It is named\napart from NonceAccount because both are nonce accounts and only their\nroles differ: this one is what the instruction acts on, that one is what\nthe transaction is built against.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
@@ -3407,7 +3450,8 @@ const docTemplate = `{
                 "new_authority": {
                     "type": "string"
                 },
-                "nonce_account": {
+                "nonce_authority": {
+                    "description": "NonceAuthority belongs to the account named in the request's\nnonce_account, not to the target, and is present only when one was\nnamed. Authority above is the target's.",
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -3418,6 +3462,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "target_nonce_account": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -3439,9 +3486,15 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "nonce_account": {
+                "new_nonce_account": {
+                    "description": "NewNonceAccount is the account being created. It is named apart from\nNonceAccount because both are nonce accounts and only their roles\ndiffer: this one is what the transaction produces, that one is what the\ntransaction is built against.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.\nIt has to be an account other than the one being created.",
+                    "type": "string",
+                    "example": ""
                 }
             }
         },
@@ -3469,7 +3522,11 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "nonce_account": {
+                "new_nonce_account": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority belongs to the account named in the request's\nnonce_account, not to the one being created, and is present only when\none was named. Authority above is what the new account gains.",
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -3500,9 +3557,15 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "nonce_account": {
+                "new_nonce_account": {
+                    "description": "NewNonceAccount already exists but is not a nonce account yet, which is\nwhat this makes it. It is named apart from NonceAccount because both are\nnonce accounts by the end and only their roles differ.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.\nIt has to be an account other than the one being initialized, which\nholds no nonce to build against yet.",
+                    "type": "string",
+                    "example": ""
                 }
             }
         },
@@ -3524,7 +3587,11 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "nonce_account": {
+                "new_nonce_account": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority belongs to the account named in the request's\nnonce_account, not to the one being initialized, and is present only\nwhen one was named. Authority above is what the new account gains.",
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -3549,6 +3616,12 @@ const docTemplate = `{
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.\nIt has to be an account other than the target, which is Legacy and so\nnot something to build against.",
+                    "type": "string",
+                    "example": ""
+                },
+                "target_nonce_account": {
+                    "description": "TargetNonceAccount is the Legacy account being migrated. It is named\napart from NonceAccount because both are nonce accounts and only their\nroles differ: this one is what the instruction acts on, that one is what\nthe transaction is built against.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
@@ -3569,7 +3642,8 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "nonce_account": {
+                "nonce_authority": {
+                    "description": "NonceAuthority belongs to the account named in the request's\nnonce_account, and is present only when one was named. The target has an\nauthority too, but nothing signs for an upgrade, so it is not reported.",
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -3580,6 +3654,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "target_nonce_account": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -3601,6 +3678,12 @@ const docTemplate = `{
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.\nIt has to be an account other than the target, which could not be closed\nanyway once this transaction has just advanced it.",
+                    "type": "string",
+                    "example": ""
+                },
+                "target_nonce_account": {
+                    "description": "TargetNonceAccount is the account being emptied and thereby closed. It\nis named apart from NonceAccount because both are nonce accounts and\nonly their roles differ: this one is what the instruction acts on, that\none is what the transaction is built against.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
@@ -3634,7 +3717,8 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "nonce_account": {
+                "nonce_authority": {
+                    "description": "NonceAuthority belongs to the account named in the request's\nnonce_account, not to the target, and is present only when one was\nnamed. Authority above is the target's.",
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -3645,6 +3729,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "target_nonce_account": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -3667,6 +3754,12 @@ const docTemplate = `{
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.\nIt has to be an account other than the target: the runtime refuses a\ntransaction that advances the same nonce twice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "target_nonce_account": {
+                    "description": "TargetNonceAccount is the account being withdrawn from. It is named\napart from NonceAccount because both are nonce accounts and only their\nroles differ: this one is what the instruction acts on, that one is what\nthe transaction is built against.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
@@ -3700,14 +3793,15 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "nonce_account": {
+                "nonce_authority": {
+                    "description": "NonceAuthority belongs to the account named in the request's\nnonce_account, not to the target, and is present only when one was\nnamed. Authority above is the target's.",
                     "type": "string"
                 },
                 "recent_blockhash": {
                     "type": "string"
                 },
                 "remaining": {
-                    "description": "Remaining is what the nonce account keeps, which has to stay at or above\nthe rent-exempt minimum for its size.",
+                    "description": "Remaining is what the target keeps, which has to stay at or above the\nrent-exempt minimum for its size.",
                     "type": "string"
                 },
                 "signers": {
@@ -3715,6 +3809,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "target_nonce_account": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -3731,6 +3828,11 @@ const docTemplate = `{
                 "fee_payer": {
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                    "type": "string",
+                    "example": ""
                 },
                 "owner": {
                     "type": "string",
@@ -3764,6 +3866,10 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
+                    "type": "string"
+                },
                 "recent_blockhash": {
                     "type": "string"
                 },
@@ -3795,6 +3901,11 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                    "type": "string",
+                    "example": ""
+                },
                 "owner": {
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
@@ -3821,6 +3932,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
                     "type": "string"
                 },
                 "owner": {
@@ -3858,6 +3973,11 @@ const docTemplate = `{
                 "lamports": {
                     "type": "string",
                     "example": "890880"
+                },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                    "type": "string",
+                    "example": ""
                 },
                 "owner": {
                     "type": "string",
@@ -3898,6 +4018,10 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
+                    "type": "string"
+                },
                 "owner": {
                     "type": "string"
                 },
@@ -3931,6 +4055,11 @@ const docTemplate = `{
                 "fee_payer": {
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                    "type": "string",
+                    "example": ""
                 },
                 "owner": {
                     "type": "string",
@@ -3970,6 +4099,10 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
+                    "type": "string"
+                },
                 "recent_blockhash": {
                     "type": "string"
                 },
@@ -3998,6 +4131,11 @@ const docTemplate = `{
                 "fee_payer": {
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                    "type": "string",
+                    "example": ""
                 },
                 "owner": {
                     "type": "string",
@@ -4037,6 +4175,10 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
+                    "type": "string"
+                },
                 "recent_blockhash": {
                     "type": "string"
                 },
@@ -4061,6 +4203,11 @@ const docTemplate = `{
                 "from": {
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                    "type": "string",
+                    "example": ""
                 },
                 "to": {
                     "type": "string",
@@ -4087,6 +4234,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -4118,6 +4269,11 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires,\nand prepends the advance that consumes it. The authority is not a field:\nit is read from the account, since it is a fact about it rather than a\nchoice.",
+                    "type": "string",
+                    "example": ""
+                },
                 "to": {
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
@@ -4144,6 +4300,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries\na stored value rather than a fetched blockhash and the transaction does\nnot expire. It is reported because the request never named it: advancing\nthe nonce is the first instruction and that key has to sign, and the\nserver read it off the account.",
                     "type": "string"
                 },
                 "recent_blockhash": {

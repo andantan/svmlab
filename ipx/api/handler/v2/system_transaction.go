@@ -22,7 +22,7 @@ func NewSystemTransactionHandler(cfg *config.Config) *SystemTransactionHandler {
 
 // SystemTransfer godoc
 // @Summary      Build a native SOL transfer
-// @Description  Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. The recent blockhash is always fetched, and the recipient is not required to exist yet. To send the sender's entire balance, use transfer/max instead.
+// @Description  Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. The recent blockhash is always fetched, and the recipient is not required to exist yet. To send the sender's entire balance, use transfer/max instead. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
@@ -60,13 +60,84 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -137,12 +208,13 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 		return
 	}
 
-	handler.WriteOK(w, NewSystemTransferResponse(tx, raw, messageBytes, req.Lamports(), fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemTransferResponse(tx, raw, messageBytes, nonceAuthority, req.Lamports(), fee))
 }
 
 // SystemTransferMax godoc
 // @Summary      Build a native SOL transfer of the sender's entire balance
-// @Description  Assembles a System Program transfer moving everything the sender can send. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it.
+// @Description  Assembles a System Program transfer moving everything the sender can send. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
@@ -175,16 +247,80 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 		return
 	}
 
+	// Resolving the nonce comes before pricing rather than after, unlike every
+	// endpoint that knows its amount up front. Advancing the nonce is an extra
+	// instruction whose authority signs, so leaving it out of the probe would
+	// price a transaction with one signature too few.
+	var (
+		advance        *types.Instruction
+		nonceState     *core.NonceAccount
+		nonceAuthority *types.PublicKey
+	)
+	if !req.NonceAccountKey().IsNil() {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonceState, err = core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonceState.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		if advance, err = core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonceState.Authority); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		nonceAuthority = nonceState.Authority
+	}
+
 	// The fee is priced from a message, and a message needs an amount, so a
 	// zero-amount probe stands in. Nothing is lost by it: a fee depends on the
 	// signature count and compute budget instructions, never on the lamports
 	// being moved, so the probe prices the real transfer exactly.
+	//
+	// The probe carries the live blockhash either way. A nonce is not among the
+	// cluster's recent blockhashes, so pricing against one comes back as
+	// expired.
 	probeIx, err := core.System.Transfer(req.FromKey(), req.ToKey(), 0)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	probe, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(probeIx))
+
+	var probe *types.Message
+	if advance.IsNil() {
+		probe, err = types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(probeIx))
+	} else {
+		probe, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, types.NewInstructions(probeIx))
+	}
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -224,7 +360,16 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+
+	// The real message is the one that carries the nonce, which is the whole
+	// point of naming one: it holds a value the cluster does not consider
+	// recent, so it never expires.
+	var message *types.Message
+	if advance.IsNil() {
+		message, err = types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	} else {
+		message, err = types.NewNonceMessage(req.FeePayerKey(), nonceState.Nonce, advance, types.NewInstructions(ix))
+	}
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -248,12 +393,13 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 		return
 	}
 
-	handler.WriteOK(w, NewSystemTransferMaxResponse(tx, raw, messageBytes, amount, fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemTransferMaxResponse(tx, raw, messageBytes, nonceAuthority, amount, fee))
 }
 
 // SystemCreateAccount godoc
 // @Summary      Build a System Program account creation
-// @Description  Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account owned by a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning.
+// @Description  Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account owned by a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
@@ -291,13 +437,84 @@ func (h *SystemTransactionHandler) SystemCreateAccount(w http.ResponseWriter, r 
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -408,12 +625,13 @@ func (h *SystemTransactionHandler) SystemCreateAccount(w http.ResponseWriter, r 
 		return
 	}
 
-	handler.WriteOK(w, NewSystemCreateAccountResponse(tx, raw, messageBytes, req.OwnerKey(), req.ToLamports(), newAccountRent, req.ToSpace(), fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemCreateAccountResponse(tx, raw, messageBytes, req.OwnerKey(), nonceAuthority, req.ToLamports(), newAccountRent, req.ToSpace(), fee))
 }
 
 // SystemAllocate godoc
 // @Summary      Build a System Program allocation
-// @Description  Reserves data space on an existing System-owned account. Only the owning program may size an account, so this works on an account the System Program still owns and not one already assigned elsewhere. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size rather than the old one.
+// @Description  Reserves data space on an existing System-owned account. Only the owning program may size an account, so this works on an account the System Program still owns and not one already assigned elsewhere. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size rather than the old one. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
@@ -451,13 +669,84 @@ func (h *SystemTransactionHandler) SystemAllocate(w http.ResponseWriter, r *http
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -543,12 +832,13 @@ func (h *SystemTransactionHandler) SystemAllocate(w http.ResponseWriter, r *http
 		return
 	}
 
-	handler.WriteOK(w, NewSystemAllocateResponse(tx, raw, messageBytes, req.ToSpace(), rentExempt, fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemAllocateResponse(tx, raw, messageBytes, nonceAuthority, req.ToSpace(), rentExempt, fee))
 }
 
 // SystemAssign godoc
 // @Summary      Build a System Program ownership assignment
-// @Description  Hands a System-owned account to another program, which is the step that puts an account under a program's control. Ownership is a field on the account rather than a mapping the program keeps, which is the inverse of an EVM contract holding balances for its users in its own storage. The owner must be executable: only the owning program may debit an account or write its data, so assigning to a plain address locks the account and its lamports permanently.
+// @Description  Hands a System-owned account to another program, which is the step that puts an account under a program's control. Ownership is a field on the account rather than a mapping the program keeps, which is the inverse of an EVM contract holding balances for its users in its own storage. The owner must be executable: only the owning program may debit an account or write its data, so assigning to a plain address locks the account and its lamports permanently. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
@@ -586,13 +876,84 @@ func (h *SystemTransactionHandler) SystemAssign(w http.ResponseWriter, r *http.R
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -674,12 +1035,13 @@ func (h *SystemTransactionHandler) SystemAssign(w http.ResponseWriter, r *http.R
 		return
 	}
 
-	handler.WriteOK(w, NewSystemAssignResponse(tx, raw, messageBytes, req.OwnerKey(), fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemAssignResponse(tx, raw, messageBytes, req.OwnerKey(), nonceAuthority, fee))
 }
 
 // SystemSeedCreateAccount godoc
 // @Summary      Build an account creation at a seed-derived address
-// @Description  Creates an account at SHA256(base || seed || owner) and hands it to that owner in one instruction, so a program-owned account needs no separate allocate and assign. The owner must be executable, and it changes the address: the same base and seed derive somewhere else for a different owner. The derived account never signs, which is the difference from create-account: nobody holds a secret for it, so base signs in its place and whoever controls base controls every address derived from it. The address is derived rather than accepted, since the runtime recomputes it and rejects a mismatch.
+// @Description  Creates an account at SHA256(base || seed || owner) and hands it to that owner in one instruction, so a program-owned account needs no separate allocate and assign. The owner must be executable, and it changes the address: the same base and seed derive somewhere else for a different owner. The derived account never signs, which is the difference from create-account: nobody holds a secret for it, so base signs in its place and whoever controls base controls every address derived from it. The address is derived rather than accepted, since the runtime recomputes it and rejects a mismatch. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
@@ -723,13 +1085,84 @@ func (h *SystemTransactionHandler) SystemSeedCreateAccount(w http.ResponseWriter
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -837,12 +1270,13 @@ func (h *SystemTransactionHandler) SystemSeedCreateAccount(w http.ResponseWriter
 		return
 	}
 
-	handler.WriteOK(w, NewSystemSeedCreateAccountResponse(tx, raw, messageBytes, derived, req.OwnerKey(), req.ToLamports(), newAccountRent, req.ToSpace(), fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemSeedCreateAccountResponse(tx, raw, messageBytes, derived, req.OwnerKey(), nonceAuthority, req.ToLamports(), newAccountRent, req.ToSpace(), fee))
 }
 
 // SystemSeedTransfer godoc
 // @Summary      Build a transfer out of a seed-derived address
-// @Description  Debits SHA256(base || seed || owner) without that account signing, since base signs for it. That is what makes a derived address usable as a holding account: anyone can fund it, and only the holder of base can spend it. The account must still be System-owned for a system transfer to debit it, which is checked before returning.
+// @Description  Debits SHA256(base || seed || owner) without that account signing, since base signs for it. That is what makes a derived address usable as a holding account: anyone can fund it, and only the holder of base can spend it. The account must still be System-owned for a system transfer to debit it, which is checked before returning. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
@@ -886,13 +1320,84 @@ func (h *SystemTransactionHandler) SystemSeedTransfer(w http.ResponseWriter, r *
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -967,12 +1472,13 @@ func (h *SystemTransactionHandler) SystemSeedTransfer(w http.ResponseWriter, r *
 		return
 	}
 
-	handler.WriteOK(w, NewSystemSeedTransferResponse(tx, raw, messageBytes, derived, req.ToLamports(), fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemSeedTransferResponse(tx, raw, messageBytes, derived, nonceAuthority, req.ToLamports(), fee))
 }
 
 // SystemSeedAllocate godoc
 // @Summary      Build an allocation on a seed-derived address
-// @Description  Reserves data space on SHA256(base || seed || owner) with base signing in the account's place. Allocation still requires the account to be System-owned, so this is the step taken before assigning it away, on an address derived for its eventual owner from the start. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size.
+// @Description  Reserves data space on SHA256(base || seed || owner) with base signing in the account's place. Allocation still requires the account to be System-owned, so this is the step taken before assigning it away, on an address derived for its eventual owner from the start. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
@@ -1016,13 +1522,84 @@ func (h *SystemTransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -1103,12 +1680,13 @@ func (h *SystemTransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *
 		return
 	}
 
-	handler.WriteOK(w, NewSystemSeedAllocateResponse(tx, raw, messageBytes, derived, req.ToSpace(), rentExempt, fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemSeedAllocateResponse(tx, raw, messageBytes, derived, nonceAuthority, req.ToSpace(), rentExempt, fee))
 }
 
 // SystemSeedAssign godoc
 // @Summary      Build an ownership assignment on a seed-derived address
-// @Description  Hands SHA256(base || seed || owner) to that same owner. There is no separate new-owner field, because one owner does both jobs: it is what the address is derived from and what the account is assigned to, so an account can only be handed to the program its own address already encodes. The owner must be executable, since assigning to a plain address locks the account permanently.
+// @Description  Hands SHA256(base || seed || owner) to that same owner. There is no separate new-owner field, because one owner does both jobs: it is what the address is derived from and what the account is assigned to, so an account can only be handed to the program its own address already encodes. The owner must be executable, since assigning to a plain address locks the account permanently. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
@@ -1152,13 +1730,84 @@ func (h *SystemTransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *ht
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -1234,12 +1883,13 @@ func (h *SystemTransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *ht
 		return
 	}
 
-	handler.WriteOK(w, NewSystemSeedAssignResponse(tx, raw, messageBytes, derived, req.OwnerKey(), fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemSeedAssignResponse(tx, raw, messageBytes, derived, req.OwnerKey(), nonceAuthority, fee))
 }
 
 // SystemSeedTransferMax godoc
 // @Summary      Build a transfer of a seed-derived address's entire balance
-// @Description  Sends everything SHA256(base || seed || owner) holds. The amount is the whole balance with nothing held back, because a derived address can never pay the fee: a fee payer has to sign, and this account cannot. That also means no probe is needed to price the message first, since the amount does not depend on the fee here the way it does for a plain transfer. Emptying the account lets the runtime reclaim it.
+// @Description  Sends everything SHA256(base || seed || owner) holds. The amount is the whole balance with nothing held back, because a derived address can never pay the fee: a fee payer has to sign, and this account cannot. That also means no probe is needed to price the message first, since the amount does not depend on the fee here the way it does for a plain transfer. Emptying the account lets the runtime reclaim it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
@@ -1307,13 +1957,89 @@ func (h *SystemTransactionHandler) SystemSeedTransferMax(w http.ResponseWriter, 
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two.
+	//
+	// Unlike the other max endpoints this needs no probe. The amount is the
+	// derived account's whole balance with nothing subtracted, since that
+	// account cannot sign and the fee comes from elsewhere, so it does not
+	// depend on the fee and the real message can be priced directly.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonceInfo, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if nonceInfo == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if nonceInfo.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), nonceInfo.Owner))
+			return
+		}
+		if nonceInfo.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), nonceInfo.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := nonceInfo.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -1361,16 +2087,17 @@ func (h *SystemTransactionHandler) SystemSeedTransferMax(w http.ResponseWriter, 
 		return
 	}
 
-	handler.WriteOK(w, NewSystemSeedTransferMaxResponse(tx, raw, messageBytes, derived, amount, fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemSeedTransferMaxResponse(tx, raw, messageBytes, derived, nonceAuthority, amount, fee))
 }
 
 // SystemNonceCreate godoc
 // @Summary      Build a durable nonce account creation
-// @Description  Creates the account and initializes it as a durable nonce in one transaction, which is the first v2 endpoint to carry more than one instruction. The nonce account appears twice: it signs for the creation, since an address does not exist until its key authorizes it, and is only writable for the initialization, which needs no authority. Message compilation lists it once with the union of both, which is why it shows up among the signers. Size and funding are not fields, since a nonce account is always the same size and has to hold exactly the rent-exempt minimum for it.
+// @Description  Creates the account and initializes it as a durable nonce in one transaction, which is the first v2 endpoint to carry more than one instruction. The nonce account appears twice: it signs for the creation, since an address does not exist until its key authorizes it, and is only writable for the initialization, which needs no authority. Message compilation lists it once with the union of both, which is why it shows up among the signers. Size and funding are not fields, since a nonce account is always the same size and has to hold exactly the rent-exempt minimum for it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemNonceCreateRequest  true  "Funder, nonce account, and authority"
+// @Param        body  body      SystemNonceCreateRequest  true  "Funder, new nonce account, and authority"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemNonceCreateResponse
@@ -1407,24 +2134,96 @@ func (h *SystemTransactionHandler) SystemNonceCreate(w http.ResponseWriter, r *h
 		return
 	}
 
-	create, err := core.System.CreateAccount(req.FromKey(), req.NonceAccountKey(), core.System.ID(), lamports, core.NonceAccountSpace)
+	create, err := core.System.CreateAccount(req.FromKey(), req.NewNonceAccountKey(), core.System.ID(), lamports, core.NonceAccountSpace)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	initialize, err := core.System.InitializeNonceAccount(req.NonceAccountKey(), req.AuthorityKey())
+	initialize, err := core.System.InitializeNonceAccount(req.NewNonceAccountKey(), req.AuthorityKey())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
+	}
+	instructions := types.NewInstructions(create, initialize)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two. The nonce being borrowed here is a different
+	// account from the one being created, which is what the request refuses to
+	// let coincide.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
 	}
 
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(create, initialize))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -1434,13 +2233,13 @@ func (h *SystemTransactionHandler) SystemNonceCreate(w http.ResponseWriter, r *h
 		return
 	}
 
-	exists, err := chain.Cli.Exists(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	exists, err := chain.Cli.Exists(r.Context(), req.NewNonceAccountKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to check nonce account: %s", err))
 		return
 	}
 	if exists {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s already exists", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("new_nonce_account: %s already exists", req.NewNonceAccountKey()))
 		return
 	}
 
@@ -1503,16 +2302,17 @@ func (h *SystemTransactionHandler) SystemNonceCreate(w http.ResponseWriter, r *h
 		return
 	}
 
-	handler.WriteOK(w, NewSystemNonceCreateResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), lamports, fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemNonceCreateResponse(tx, raw, messageBytes, req.NewNonceAccountKey(), req.AuthorityKey(), nonceAuthority, lamports, fee))
 }
 
 // SystemNonceInitialize godoc
 // @Summary      Build a durable nonce initialization on an existing account
-// @Description  Initializes an account that already exists and is already the right size. nonce/create-account does this and the creation together, so this is for an address that can no longer be created: CreateAccount refuses one that already holds lamports, which is what happens when someone funds the address first. The account is writable but does not sign, since initializing it needs no authority of its own; it gains the authority named here.
+// @Description  Initializes an account that already exists and is already the right size. nonce/create-account does this and the creation together, so this is for an address that can no longer be created: CreateAccount refuses one that already holds lamports, which is what happens when someone funds the address first. The account is writable but does not sign, since initializing it needs no authority of its own; it gains the authority named here. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemNonceInitializeRequest  true  "Nonce account and authority"
+// @Param        body  body      SystemNonceInitializeRequest  true  "New nonce account and authority"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemNonceInitializeResponse
@@ -1541,18 +2341,91 @@ func (h *SystemTransactionHandler) SystemNonceInitialize(w http.ResponseWriter, 
 		return
 	}
 
-	ix, err := core.System.InitializeNonceAccount(req.NonceAccountKey(), req.AuthorityKey())
+	ix, err := core.System.InitializeNonceAccount(req.NewNonceAccountKey(), req.AuthorityKey())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two. Both accounts here are nonce accounts, so
+	// the names say which is which: buildNonce is the one being borrowed, and
+	// the one being initialized is read further down.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonceInfo, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if nonceInfo == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if nonceInfo.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), nonceInfo.Owner))
+			return
+		}
+		if nonceInfo.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), nonceInfo.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := nonceInfo.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		buildNonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !buildNonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), buildNonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), buildNonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = buildNonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -1565,26 +2438,26 @@ func (h *SystemTransactionHandler) SystemNonceInitialize(w http.ResponseWriter, 
 	// One lookup covers everything the instruction will check: the account
 	// exists, the System Program owns it, it is the right size, and it holds
 	// enough to stay rent exempt at that size.
-	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	info, err := chain.Cli.AccountInfo(r.Context(), req.NewNonceAccountKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
 		return
 	}
 	if info == nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s does not exist, so create it with nonce/create-account instead", req.NonceAccountKey()))
+			"new_nonce_account: %s does not exist, so create it with nonce/create-account instead", req.NewNonceAccountKey()))
 		return
 	}
 	if info.Owner != core.System.ID().Base58() {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-			req.NonceAccountKey(), info.Owner))
+			"new_nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.NewNonceAccountKey(), info.Owner))
 		return
 	}
 	if info.Space != core.NonceAccountSpace {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is %d bytes, and a nonce account is %d",
-			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			"new_nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.NewNonceAccountKey(), info.Space, core.NonceAccountSpace))
 		return
 	}
 
@@ -1600,8 +2473,8 @@ func (h *SystemTransactionHandler) SystemNonceInitialize(w http.ResponseWriter, 
 	}
 	if nonce.Initialized() {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is already initialized, with %s as its authority",
-			req.NonceAccountKey(), nonce.Authority))
+			"new_nonce_account: %s is already initialized, with %s as its authority",
+			req.NewNonceAccountKey(), nonce.Authority))
 		return
 	}
 
@@ -1612,8 +2485,8 @@ func (h *SystemTransactionHandler) SystemNonceInitialize(w http.ResponseWriter, 
 	}
 	if info.Lamports < nonceRent {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s holds %d lamports, below the %d lamport rent-exemption minimum for %d bytes",
-			req.NonceAccountKey(), info.Lamports, nonceRent, core.NonceAccountSpace))
+			"new_nonce_account: %s holds %d lamports, below the %d lamport rent-exemption minimum for %d bytes",
+			req.NewNonceAccountKey(), info.Lamports, nonceRent, core.NonceAccountSpace))
 		return
 	}
 
@@ -1655,16 +2528,17 @@ func (h *SystemTransactionHandler) SystemNonceInitialize(w http.ResponseWriter, 
 		return
 	}
 
-	handler.WriteOK(w, NewSystemNonceInitializeResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemNonceInitializeResponse(tx, raw, messageBytes, req.NewNonceAccountKey(), req.AuthorityKey(), nonceAuthority, fee))
 }
 
 // SystemNonceAdvance godoc
 // @Summary      Build a durable nonce advance
-// @Description  Replaces the stored nonce with the current blockhash. Advancing is what consumes a nonce: a transaction built against one carries it in place of a recent blockhash and runs this as its first instruction, so the value it was built for is gone by the time it finishes and it cannot land twice. Run on its own, this simply invalidates anything already built against the account. The authority signs, and the stored authority is checked here rather than left to fail on chain.
+// @Description  Replaces the stored nonce with the current blockhash. Advancing is what consumes a nonce: a transaction built against one carries it in place of a recent blockhash and runs this as its first instruction, so the value it was built for is gone by the time it finishes and it cannot land twice. Run on its own, this simply invalidates anything already built against the account. The authority signs, and the stored authority is checked here rather than left to fail on chain. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemNonceAdvanceRequest  true  "Nonce account and authority"
+// @Param        body  body      SystemNonceAdvanceRequest  true  "Target nonce account and authority"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemNonceAdvanceResponse
@@ -1693,18 +2567,91 @@ func (h *SystemTransactionHandler) SystemNonceAdvance(w http.ResponseWriter, r *
 		return
 	}
 
-	ix, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), req.AuthorityKey())
+	ix, err := core.System.AdvanceNonceAccount(req.TargetNonceAccountKey(), req.AuthorityKey())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two. Both accounts here are nonce accounts and
+	// both get advanced, which is exactly why the request refuses to let them
+	// coincide: a transaction may advance a nonce only once.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonceInfo, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if nonceInfo == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if nonceInfo.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), nonceInfo.Owner))
+			return
+		}
+		if nonceInfo.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), nonceInfo.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := nonceInfo.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		buildNonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !buildNonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), buildNonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), buildNonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = buildNonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -1714,25 +2661,25 @@ func (h *SystemTransactionHandler) SystemNonceAdvance(w http.ResponseWriter, r *
 		return
 	}
 
-	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	info, err := chain.Cli.AccountInfo(r.Context(), req.TargetNonceAccountKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
 		return
 	}
 	if info == nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s does not exist", req.TargetNonceAccountKey()))
 		return
 	}
 	if info.Owner != core.System.ID().Base58() {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-			req.NonceAccountKey(), info.Owner))
+			"target_nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.TargetNonceAccountKey(), info.Owner))
 		return
 	}
 	if info.Space != core.NonceAccountSpace {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is %d bytes, and a nonce account is %d",
-			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			"target_nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.TargetNonceAccountKey(), info.Space, core.NonceAccountSpace))
 		return
 	}
 
@@ -1747,13 +2694,13 @@ func (h *SystemTransactionHandler) SystemNonceAdvance(w http.ResponseWriter, r *
 		return
 	}
 	if !nonce.Initialized() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s is not initialized", req.TargetNonceAccountKey()))
 		return
 	}
 	if !nonce.Authority.Equal(req.AuthorityKey()) {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
 			"authority: %s is not the authority of %s, which is %s",
-			req.AuthorityKey(), req.NonceAccountKey(), nonce.Authority))
+			req.AuthorityKey(), req.TargetNonceAccountKey(), nonce.Authority))
 		return
 	}
 
@@ -1795,16 +2742,17 @@ func (h *SystemTransactionHandler) SystemNonceAdvance(w http.ResponseWriter, r *
 		return
 	}
 
-	handler.WriteOK(w, NewSystemNonceAdvanceResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), nonce.Nonce, fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemNonceAdvanceResponse(tx, raw, messageBytes, req.TargetNonceAccountKey(), req.AuthorityKey(), nonceAuthority, nonce.Nonce, fee))
 }
 
 // SystemNonceWithdraw godoc
 // @Summary      Build a partial withdrawal from a durable nonce account
-// @Description  Moves part of a nonce account's balance out. What stays has to keep the account rent exempt at its size, since an account below that floor is subject to removal while still holding a nonce something may have been built against. Taking the whole balance closes the account and carries a further rule, so that has its own endpoint. The authority signs, and the stored authority is checked here rather than left to fail on chain.
+// @Description  Moves part of a nonce account's balance out. What stays has to keep the account rent exempt at its size, since an account below that floor is subject to removal while still holding a nonce something may have been built against. Taking the whole balance closes the account and carries a further rule, so that has its own endpoint. The authority signs, and the stored authority is checked here rather than left to fail on chain. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemNonceWithdrawRequest  true  "Nonce account, authority, recipient, and amount"
+// @Param        body  body      SystemNonceWithdrawRequest  true  "Target nonce account, authority, recipient, and amount"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemNonceWithdrawResponse
@@ -1833,18 +2781,91 @@ func (h *SystemTransactionHandler) SystemNonceWithdraw(w http.ResponseWriter, r 
 		return
 	}
 
-	ix, err := core.System.WithdrawNonceAccount(req.NonceAccountKey(), req.AuthorityKey(), req.ToKey(), req.ToLamports())
+	ix, err := core.System.WithdrawNonceAccount(req.TargetNonceAccountKey(), req.AuthorityKey(), req.ToKey(), req.ToLamports())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two. Both accounts here are nonce accounts, so
+	// the names say which is which: buildNonce is the one being borrowed, and
+	// the one being withdrawn from is read further down.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonceInfo, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if nonceInfo == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if nonceInfo.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), nonceInfo.Owner))
+			return
+		}
+		if nonceInfo.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), nonceInfo.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := nonceInfo.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		buildNonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !buildNonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), buildNonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), buildNonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = buildNonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -1854,25 +2875,25 @@ func (h *SystemTransactionHandler) SystemNonceWithdraw(w http.ResponseWriter, r 
 		return
 	}
 
-	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	info, err := chain.Cli.AccountInfo(r.Context(), req.TargetNonceAccountKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
 		return
 	}
 	if info == nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s does not exist", req.TargetNonceAccountKey()))
 		return
 	}
 	if info.Owner != core.System.ID().Base58() {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-			req.NonceAccountKey(), info.Owner))
+			"target_nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.TargetNonceAccountKey(), info.Owner))
 		return
 	}
 	if info.Space != core.NonceAccountSpace {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is %d bytes, and a nonce account is %d",
-			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			"target_nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.TargetNonceAccountKey(), info.Space, core.NonceAccountSpace))
 		return
 	}
 
@@ -1887,13 +2908,13 @@ func (h *SystemTransactionHandler) SystemNonceWithdraw(w http.ResponseWriter, r 
 		return
 	}
 	if !nonce.Initialized() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s is not initialized", req.TargetNonceAccountKey()))
 		return
 	}
 	if !nonce.Authority.Equal(req.AuthorityKey()) {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
 			"authority: %s is not the authority of %s, which is %s",
-			req.AuthorityKey(), req.NonceAccountKey(), nonce.Authority))
+			req.AuthorityKey(), req.TargetNonceAccountKey(), nonce.Authority))
 		return
 	}
 
@@ -1904,7 +2925,7 @@ func (h *SystemTransactionHandler) SystemNonceWithdraw(w http.ResponseWriter, r 
 	}
 	if info.Lamports < req.ToLamports() {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"amount: %s holds %d lamports, short of %d", req.NonceAccountKey(), info.Lamports, req.ToLamports()))
+			"amount: %s holds %d lamports, short of %d", req.TargetNonceAccountKey(), info.Lamports, req.ToLamports()))
 		return
 	}
 
@@ -1917,7 +2938,7 @@ func (h *SystemTransactionHandler) SystemNonceWithdraw(w http.ResponseWriter, r 
 	if remaining < nonceRent {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
 			"amount: would leave %s with %d lamports, below the %d lamport rent-exemption minimum for %d bytes",
-			req.NonceAccountKey(), remaining, nonceRent, core.NonceAccountSpace))
+			req.TargetNonceAccountKey(), remaining, nonceRent, core.NonceAccountSpace))
 		return
 	}
 
@@ -1959,16 +2980,17 @@ func (h *SystemTransactionHandler) SystemNonceWithdraw(w http.ResponseWriter, r 
 		return
 	}
 
-	handler.WriteOK(w, NewSystemNonceWithdrawResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), req.ToLamports(), remaining, fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemNonceWithdrawResponse(tx, raw, messageBytes, req.TargetNonceAccountKey(), req.AuthorityKey(), nonceAuthority, req.ToLamports(), remaining, fee))
 }
 
 // SystemNonceWithdrawMax godoc
 // @Summary      Build a full withdrawal that closes a durable nonce account
-// @Description  Takes the whole balance, which closes the account. The rent-exempt floor that constrains a partial withdrawal does not apply, since nothing is left to keep exempt. One rule replaces it and is not checked here: the runtime refuses to close an account whose stored nonce is still the blockhash the transaction executes against, so closing in the same block the nonce was last advanced or initialized fails with NonceBlockhashNotExpired. That cannot be decided before submitting, because the blockhash it is compared against is the one at execution rather than any this build could see. Waiting a block and rebuilding is the fix.
+// @Description  Takes the whole balance, which closes the account. The rent-exempt floor that constrains a partial withdrawal does not apply, since nothing is left to keep exempt. One rule replaces it and is not checked here: the runtime refuses to close an account whose stored nonce is still the blockhash the transaction executes against, so closing in the same block the nonce was last advanced or initialized fails with NonceBlockhashNotExpired. That cannot be decided before submitting, because the blockhash it is compared against is the one at execution rather than any this build could see. Waiting a block and rebuilding is the fix. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemNonceWithdrawMaxRequest  true  "Nonce account, authority, and recipient"
+// @Param        body  body      SystemNonceWithdrawMaxRequest  true  "Target nonce account, authority, and recipient"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemNonceWithdrawMaxResponse
@@ -1997,25 +3019,25 @@ func (h *SystemTransactionHandler) SystemNonceWithdrawMax(w http.ResponseWriter,
 		return
 	}
 
-	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	info, err := chain.Cli.AccountInfo(r.Context(), req.TargetNonceAccountKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
 		return
 	}
 	if info == nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s does not exist", req.TargetNonceAccountKey()))
 		return
 	}
 	if info.Owner != core.System.ID().Base58() {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-			req.NonceAccountKey(), info.Owner))
+			"target_nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.TargetNonceAccountKey(), info.Owner))
 		return
 	}
 	if info.Space != core.NonceAccountSpace {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is %d bytes, and a nonce account is %d",
-			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			"target_nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.TargetNonceAccountKey(), info.Space, core.NonceAccountSpace))
 		return
 	}
 
@@ -2030,17 +3052,17 @@ func (h *SystemTransactionHandler) SystemNonceWithdrawMax(w http.ResponseWriter,
 		return
 	}
 	if !nonce.Initialized() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s is not initialized", req.TargetNonceAccountKey()))
 		return
 	}
 	if !nonce.Authority.Equal(req.AuthorityKey()) {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
 			"authority: %s is not the authority of %s, which is %s",
-			req.AuthorityKey(), req.NonceAccountKey(), nonce.Authority))
+			req.AuthorityKey(), req.TargetNonceAccountKey(), nonce.Authority))
 		return
 	}
 	if info.Lamports == 0 {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s has no balance", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s has no balance", req.TargetNonceAccountKey()))
 		return
 	}
 
@@ -2048,18 +3070,96 @@ func (h *SystemTransactionHandler) SystemNonceWithdrawMax(w http.ResponseWriter,
 	// being closed rather than left underfunded.
 	amount := info.Lamports
 
-	ix, err := core.System.WithdrawNonceAccount(req.NonceAccountKey(), req.AuthorityKey(), req.ToKey(), amount)
+	ix, err := core.System.WithdrawNonceAccount(req.TargetNonceAccountKey(), req.AuthorityKey(), req.ToKey(), amount)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two. Both accounts here are nonce accounts, so
+	// the names say which is which: buildNonce is the one being borrowed, and
+	// the one being closed was read above.
+	//
+	// Unlike the other max endpoints this needs no probe. The amount is the
+	// target's whole balance with nothing subtracted, since the fee payer
+	// cannot be the target, so it does not depend on the fee and the real
+	// message can be priced directly.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonceInfo, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if nonceInfo == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if nonceInfo.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), nonceInfo.Owner))
+			return
+		}
+		if nonceInfo.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), nonceInfo.Space, core.NonceAccountSpace))
+			return
+		}
+
+		nonceData, err := nonceInfo.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		buildNonce, err := core.DeserializeNonceAccount(nonceData)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !buildNonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), buildNonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), buildNonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = buildNonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -2107,16 +3207,17 @@ func (h *SystemTransactionHandler) SystemNonceWithdrawMax(w http.ResponseWriter,
 		return
 	}
 
-	handler.WriteOK(w, NewSystemNonceWithdrawMaxResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), amount, fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemNonceWithdrawMaxResponse(tx, raw, messageBytes, req.TargetNonceAccountKey(), req.AuthorityKey(), nonceAuthority, amount, fee))
 }
 
 // SystemNonceAuthorize godoc
 // @Summary      Build a durable nonce authority change
-// @Description  Hands control of a nonce account to another key. The stored nonce and the balance are untouched, so only who may advance and withdraw changes. That also invalidates anything the old authority signed but never submitted, since such a transaction advances the nonce as its first instruction and that now needs a signature the old authority cannot give. If the reason for changing is a leaked key, the old authority's pending transaction and this one race, so pair it with an advance.
+// @Description  Hands control of a nonce account to another key. The stored nonce and the balance are untouched, so only who may advance and withdraw changes. That also invalidates anything the old authority signed but never submitted, since such a transaction advances the nonce as its first instruction and that now needs a signature the old authority cannot give. If the reason for changing is a leaked key, the old authority's pending transaction and this one race, so pair it with an advance. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemNonceAuthorizeRequest  true  "Nonce account, current authority, and new authority"
+// @Param        body  body      SystemNonceAuthorizeRequest  true  "Target nonce account, current authority, and new authority"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemNonceAuthorizeResponse
@@ -2145,18 +3246,91 @@ func (h *SystemTransactionHandler) SystemNonceAuthorize(w http.ResponseWriter, r
 		return
 	}
 
-	ix, err := core.System.AuthorizeNonceAccount(req.NonceAccountKey(), req.AuthorityKey(), req.NewAuthorityKey())
+	ix, err := core.System.AuthorizeNonceAccount(req.TargetNonceAccountKey(), req.AuthorityKey(), req.NewAuthorityKey())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two. Both accounts here are nonce accounts, so
+	// the names say which is which: buildNonce is the one being borrowed, and
+	// the one changing hands is read further down.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonceInfo, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if nonceInfo == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if nonceInfo.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), nonceInfo.Owner))
+			return
+		}
+		if nonceInfo.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), nonceInfo.Space, core.NonceAccountSpace))
+			return
+		}
+
+		nonceData, err := nonceInfo.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		buildNonce, err := core.DeserializeNonceAccount(nonceData)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !buildNonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), buildNonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), buildNonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = buildNonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -2166,25 +3340,25 @@ func (h *SystemTransactionHandler) SystemNonceAuthorize(w http.ResponseWriter, r
 		return
 	}
 
-	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	info, err := chain.Cli.AccountInfo(r.Context(), req.TargetNonceAccountKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
 		return
 	}
 	if info == nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s does not exist", req.TargetNonceAccountKey()))
 		return
 	}
 	if info.Owner != core.System.ID().Base58() {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-			req.NonceAccountKey(), info.Owner))
+			"target_nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.TargetNonceAccountKey(), info.Owner))
 		return
 	}
 	if info.Space != core.NonceAccountSpace {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is %d bytes, and a nonce account is %d",
-			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			"target_nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.TargetNonceAccountKey(), info.Space, core.NonceAccountSpace))
 		return
 	}
 
@@ -2199,13 +3373,13 @@ func (h *SystemTransactionHandler) SystemNonceAuthorize(w http.ResponseWriter, r
 		return
 	}
 	if !nonce.Initialized() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s is not initialized", req.TargetNonceAccountKey()))
 		return
 	}
 	if !nonce.Authority.Equal(req.AuthorityKey()) {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
 			"authority: %s is not the authority of %s, which is %s",
-			req.AuthorityKey(), req.NonceAccountKey(), nonce.Authority))
+			req.AuthorityKey(), req.TargetNonceAccountKey(), nonce.Authority))
 		return
 	}
 
@@ -2247,16 +3421,17 @@ func (h *SystemTransactionHandler) SystemNonceAuthorize(w http.ResponseWriter, r
 		return
 	}
 
-	handler.WriteOK(w, NewSystemNonceAuthorizeResponse(tx, raw, messageBytes, req.NonceAccountKey(), req.AuthorityKey(), req.NewAuthorityKey(), fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemNonceAuthorizeResponse(tx, raw, messageBytes, req.TargetNonceAccountKey(), req.AuthorityKey(), req.NewAuthorityKey(), nonceAuthority, fee))
 }
 
 // SystemNonceUpgrade godoc
 // @Summary      Build a Legacy nonce account migration
-// @Description  Rewrites a Legacy nonce account as the current version. Legacy accounts stored the blockhash itself, which could collide with a real one; the current version stores a value derived from it that cannot. Nothing signs, since this is not a privileged operation, so anyone willing to pay the fee may upgrade anyone's account. No account this project creates can be upgraded: initialize has written the current version for a long time, only accounts predating that change are Legacy, and no instruction can produce one now. The check below rejects a current account before it reaches the chain.
+// @Description  Rewrites a Legacy nonce account as the current version. Legacy accounts stored the blockhash itself, which could collide with a real one; the current version stores a value derived from it that cannot. Nothing signs, since this is not a privileged operation, so anyone willing to pay the fee may upgrade anyone's account. No account this project creates can be upgraded: initialize has written the current version for a long time, only accounts predating that change are Legacy, and no instruction can produce one now. The check below rejects a current account before it reaches the chain. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
 // @Tags         transaction
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemNonceUpgradeRequest  true  "Nonce account"
+// @Param        body  body      SystemNonceUpgradeRequest  true  "Target nonce account"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemNonceUpgradeResponse
@@ -2285,18 +3460,91 @@ func (h *SystemTransactionHandler) SystemNonceUpgrade(w http.ResponseWriter, r *
 		return
 	}
 
-	ix, err := core.System.UpgradeNonceAccount(req.NonceAccountKey())
+	ix, err := core.System.UpgradeNonceAccount(req.TargetNonceAccountKey())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	message, err := types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two. Both accounts here are nonce accounts, so
+	// the names say which is which: buildNonce is the one being borrowed, and
+	// the Legacy one being migrated is read further down.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonceInfo, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if nonceInfo == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if nonceInfo.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), nonceInfo.Owner))
+			return
+		}
+		if nonceInfo.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), nonceInfo.Space, core.NonceAccountSpace))
+			return
+		}
+
+		nonceData, err := nonceInfo.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		buildNonce, err := core.DeserializeNonceAccount(nonceData)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !buildNonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), buildNonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), buildNonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = buildNonce.Authority
 	}
 
-	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), message, rpc.CommitmentConfirmed)
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
 		return
@@ -2306,25 +3554,25 @@ func (h *SystemTransactionHandler) SystemNonceUpgrade(w http.ResponseWriter, r *
 		return
 	}
 
-	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	info, err := chain.Cli.AccountInfo(r.Context(), req.TargetNonceAccountKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
 		return
 	}
 	if info == nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s does not exist", req.TargetNonceAccountKey()))
 		return
 	}
 	if info.Owner != core.System.ID().Base58() {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-			req.NonceAccountKey(), info.Owner))
+			"target_nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.TargetNonceAccountKey(), info.Owner))
 		return
 	}
 	if info.Space != core.NonceAccountSpace {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is %d bytes, and a nonce account is %d",
-			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			"target_nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.TargetNonceAccountKey(), info.Space, core.NonceAccountSpace))
 		return
 	}
 
@@ -2339,13 +3587,13 @@ func (h *SystemTransactionHandler) SystemNonceUpgrade(w http.ResponseWriter, r *
 		return
 	}
 	if !nonce.Initialized() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("target_nonce_account: %s is not initialized", req.TargetNonceAccountKey()))
 		return
 	}
 	if nonce.Version != core.NonceVersionLegacy {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"nonce_account: %s is already at version %d, and only a Legacy account can be upgraded",
-			req.NonceAccountKey(), nonce.Version))
+			"target_nonce_account: %s is already at version %d, and only a Legacy account can be upgraded",
+			req.TargetNonceAccountKey(), nonce.Version))
 		return
 	}
 
@@ -2387,5 +3635,6 @@ func (h *SystemTransactionHandler) SystemNonceUpgrade(w http.ResponseWriter, r *
 		return
 	}
 
-	handler.WriteOK(w, NewSystemNonceUpgradeResponse(tx, raw, messageBytes, req.NonceAccountKey(), nonce.Version, fee))
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemNonceUpgradeResponse(tx, raw, messageBytes, req.TargetNonceAccountKey(), nonceAuthority, nonce.Version, fee))
 }

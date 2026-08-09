@@ -103,16 +103,6 @@ func DeserializeNonceAccount(raw []byte) (*NonceAccount, error) {
 	}, nil
 }
 
-// Nonce instruction discriminants, which continue the System Program's list:
-// a nonce account is System-owned, so its instructions are System's.
-const (
-	SystemInstructionAdvanceNonceAccount    uint32 = 4
-	SystemInstructionWithdrawNonceAccount   uint32 = 5
-	SystemInstructionInitializeNonceAccount uint32 = 6
-	SystemInstructionAuthorizeNonceAccount  uint32 = 7
-	SystemInstructionUpgradeNonceAccount    uint32 = 12
-)
-
 // InitializeNonceAccount turns an existing System-owned account of the right
 // size into a durable nonce account, storing the current blockhash as its
 // first nonce.

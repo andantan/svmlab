@@ -56,6 +56,59 @@ func (_ *binaryCodec) AppendBytes(dst []byte, b []byte) []byte {
 	return append(dst, b...)
 }
 
+// COption tag values.
+//
+// This is not Rust's Option. Borsh writes a single tag byte and omits the
+// payload when absent; a COption writes a u32 tag and the payload follows
+// either way. That fixed width is why an SPL Token mint is 82 bytes whether or
+// not it has a freeze authority, and why every account layout that uses one is
+// a constant rather than something measured.
+const (
+	COptionNone uint32 = 0
+	COptionSome uint32 = 1
+)
+
+// AppendCOption appends a COption whose payload is size bytes.
+//
+// An absent value still writes its payload, zero-filled, because a reader
+// advances by a fixed width and would otherwise fall out of step with every
+// field after it.
+func (c *binaryCodec) AppendCOption(dst []byte, b []byte, size int) []byte {
+	if b == nil {
+		dst = c.AppendU32(dst, COptionNone)
+		return c.AppendBytes(dst, make([]byte, size))
+	}
+
+	dst = c.AppendU32(dst, COptionSome)
+	return c.AppendBytes(dst, b)
+}
+
+// ReadCOption reads a COption whose payload is size bytes, returning nil when
+// the tag says none.
+//
+// The payload is consumed either way. It is usually zero when absent, but
+// nothing guarantees that, so the tag is the only thing that decides.
+func (c *binaryCodec) ReadCOption(src []byte, size int) ([]byte, []byte, error) {
+	tag, src, err := c.ReadU32(src)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	b, src, err := c.ReadBytes(src, size)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	switch tag {
+	case COptionNone:
+		return nil, src, nil
+	case COptionSome:
+		return b, src, nil
+	default:
+		return nil, nil, fmt.Errorf("COption tag is %d, expected %d or %d", tag, COptionNone, COptionSome)
+	}
+}
+
 // AppendString appends a bincode string: a u64 length followed by raw UTF-8
 // bytes.
 //

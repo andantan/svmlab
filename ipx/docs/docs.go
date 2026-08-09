@@ -2430,6 +2430,120 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/system/transfer/batch": {
+            "post": {
+                "description": "Assembles one Transfer instruction per entry, each with its own sender, in a single transaction. Every distinct sender signs, and a signature costs 64 bytes beside its 32 byte account key, so senders are three times as expensive as recipients and this fits far fewer transfers than transfer/many does. Naming a sender as the fee payer costs nothing, since it already signs; naming anyone else adds another 96 bytes. An entry may set max instead of amount to send whatever its sender still holds once its other entries and, if it is also the fee payer, the fee are taken out, which is a figure the request cannot state because the fee is not known until the transaction is priced. One max per sender, since everything an account holds cannot go to two places. Collecting a signature from every sender takes longer than a blockhash lasts, so naming nonce_account builds the transaction against the value that durable nonce account stores instead, and it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Build one transaction paying from several accounts",
+                "parameters": [
+                    {
+                        "description": "Transfers with their own senders, and a fee payer",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemTransferBatchRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemTransferBatchResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/system/transfer/many": {
+            "post": {
+                "description": "Assembles one Transfer instruction per recipient, all leaving the same account, in a single transaction. This is the first endpoint to carry an arbitrary number of instructions, so it is the first bounded by transaction size rather than by anything it checks: a transaction travels in one 1232-byte packet and cannot be split, which caps the list somewhere around twenty and is reported as size and size_limit. The account keys show fewer entries than instructions, since the sender and the System Program appear in every one and a compiled message lists each key once. There is no max variant, because sending everything one account holds does not say how to divide it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Build one transaction paying several recipients",
+                "parameters": [
+                    {
+                        "description": "Sender, recipients with amounts, and fee payer",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemTransferManyRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemTransferManyResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/system/transfer/max": {
             "post": {
                 "description": "Assembles a System Program transfer moving everything the sender can send. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
@@ -4189,6 +4303,223 @@ const docTemplate = `{
                     }
                 },
                 "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SystemTransferBatchRequest": {
+            "type": "object",
+            "properties": {
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.\nCollecting a signature from every sender takes longer than a blockhash\nlasts, so this is the endpoint a durable nonce exists for.",
+                    "type": "string",
+                    "example": ""
+                },
+                "transfers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.SystemTransferBatchTransfer"
+                    }
+                }
+            }
+        },
+        "v2.SystemTransferBatchResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "description": "AccountKeys is shorter than the transfers imply, since a sender paying\ntwo addresses and the System Program in every instruction are each one\nkey here. Signers holds every distinct sender, and the fee payer beside\nthem when it is not one of them.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "size": {
+                    "description": "Size and SizeLimit bind harder here than anywhere else. Each sender\ncosts a 64 byte signature beside its 32 byte account key, so a batch\nruns out of room after far fewer transfers than transfer/many does.",
+                    "type": "integer"
+                },
+                "size_limit": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "string"
+                },
+                "total_sol": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "transfers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.SystemTransferBatchTransferResponse"
+                    }
+                }
+            }
+        },
+        "v2.SystemTransferBatchTransfer": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "100000000"
+                },
+                "from": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "max": {
+                    "type": "boolean"
+                },
+                "to": {
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                }
+            }
+        },
+        "v2.SystemTransferBatchTransferResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "amount_sol": {
+                    "type": "string"
+                },
+                "from": {
+                    "type": "string"
+                },
+                "max": {
+                    "type": "boolean"
+                },
+                "to": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SystemTransferManyRequest": {
+            "type": "object",
+            "properties": {
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "from": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "nonce_account": {
+                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                    "type": "string",
+                    "example": ""
+                },
+                "transfers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.SystemTransferManyTarget"
+                    }
+                }
+            }
+        },
+        "v2.SystemTransferManyResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "description": "AccountKeys is shorter than the transfer list plus two. The sender\nappears in every instruction and the System Program in all of them, yet\neach is one key here: compiling a message deduplicates account keys and\nthe instructions address them by index. This is the first endpoint whose\nresponse shows that.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "size": {
+                    "description": "Size and SizeLimit are what bounds this endpoint. A transaction travels\nin one packet and cannot be split, so the recipient count is really a\nbyte count, and reporting both lets a caller work out how many more\nwould fit rather than discovering it by being refused.",
+                    "type": "integer"
+                },
+                "size_limit": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "string"
+                },
+                "total_sol": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "transfers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/v2.SystemTransferManyTargetResponse"
+                    }
+                }
+            }
+        },
+        "v2.SystemTransferManyTarget": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "100000000"
+                },
+                "to": {
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                }
+            }
+        },
+        "v2.SystemTransferManyTargetResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "amount_sol": {
+                    "type": "string"
+                },
+                "to": {
                     "type": "string"
                 }
             }

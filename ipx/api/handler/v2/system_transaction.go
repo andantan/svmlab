@@ -314,16 +314,19 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	probeInstructions := types.NewInstructions(probeIx)
 
 	var probe *types.Message
-	if advance.IsNil() {
-		probe, err = types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(probeIx))
+	if req.NonceAccountKey().IsNil() {
+		if probe, err = types.NewMessage(req.FeePayerKey(), blockhash, probeInstructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	} else {
-		probe, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, types.NewInstructions(probeIx))
-	}
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+		if probe, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, probeInstructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 
 	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), probe, rpc.CommitmentConfirmed)
@@ -360,19 +363,22 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	instructions := types.NewInstructions(ix)
 
 	// The real message is the one that carries the nonce, which is the whole
 	// point of naming one: it holds a value the cluster does not consider
 	// recent, so it never expires.
 	var message *types.Message
-	if advance.IsNil() {
-		message, err = types.NewMessage(req.FeePayerKey(), blockhash, types.NewInstructions(ix))
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	} else {
-		message, err = types.NewNonceMessage(req.FeePayerKey(), nonceState.Nonce, advance, types.NewInstructions(ix))
-	}
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonceState.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
 	}
 
 	tx, err := types.NewTransaction(message)
@@ -395,6 +401,513 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
 	handler.WriteOK(w, NewSystemTransferMaxResponse(tx, raw, messageBytes, nonceAuthority, amount, fee))
+}
+
+// SystemTransferMany godoc
+// @Summary      Build one transaction paying several recipients
+// @Description  Assembles one Transfer instruction per recipient, all leaving the same account, in a single transaction. This is the first endpoint to carry an arbitrary number of instructions, so it is the first bounded by transaction size rather than by anything it checks: a transaction travels in one 1232-byte packet and cannot be split, which caps the list somewhere around twenty and is reported as size and size_limit. The account keys show fewer entries than instructions, since the sender and the System Program appear in every one and a compiled message lists each key once. There is no max variant, because sending everything one account holds does not say how to divide it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemTransferManyRequest  true  "Sender, recipients with amounts, and fee payer"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemTransferManyResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/transfer/many [post]
+func (h *SystemTransactionHandler) SystemTransferMany(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemTransferManyRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	// One instruction per recipient, in the order they were given. The order
+	// is kept rather than sorted because it is what the caller will read back
+	// in the response, and the runtime executes them in it.
+	targets := req.Targets()
+	ixs := make([]*types.Instruction, 0, len(targets))
+	for i := range targets {
+		ix, err := core.System.Transfer(req.FromKey(), targets[i].ToKey(), targets[i].Lamports())
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("transfers[%d]: %s", i, err))
+			return
+		}
+		ixs = append(ixs, ix)
+	}
+	instructions := types.NewInstructions(ixs...)
+
+	// Without a nonce the message is built against the blockhash just fetched
+	// and expires with it. With one it is built against the value that account
+	// stores and never expires, so which constructor runs is the whole
+	// difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonce.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Serializing here rather than at the end, which is where every other
+	// endpoint does it, because this is where the size limit is enforced and
+	// this is the only endpoint that can reach it. A request naming too many
+	// recipients is refused before it costs a fee lookup and three balance
+	// reads, and the error names the byte count rather than a recipient count
+	// that would only ever be an estimate.
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	// A resulting balance below this must be zero, or the runtime rejects the
+	// transfer: an account cannot be left underfunded, only fully closed.
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance: %s", err))
+		return
+	}
+
+	spent := req.Total()
+	if req.FromKey().Equal(req.FeePayerKey()) {
+		// The total was already checked for overflow, but adding the fee to a
+		// total near the top of a u64 could still wrap, and a wrapped figure
+		// would read as affordable.
+		if spent+fee < spent {
+			handler.WriteError(w, http.StatusBadRequest, "transfers: the total plus the fee exceeds what a u64 can hold")
+			return
+		}
+		spent += fee
+	}
+	if balance < spent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("transfers: balance %d lamports does not cover %d lamports", balance, spent))
+		return
+	}
+	if remaining := balance - spent; remaining != 0 && remaining < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("transfers: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FromKey(), remaining, minRent))
+		return
+	}
+
+	if !req.FromKey().Equal(req.FeePayerKey()) {
+		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+			return
+		}
+		if feePayerBalance < fee {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+			return
+		}
+		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+			return
+		}
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemTransferManyResponse(tx, raw, messageBytes, nonceAuthority, targets, req.Total(), fee))
+}
+
+// SystemTransferBatch godoc
+// @Summary      Build one transaction paying from several accounts
+// @Description  Assembles one Transfer instruction per entry, each with its own sender, in a single transaction. Every distinct sender signs, and a signature costs 64 bytes beside its 32 byte account key, so senders are three times as expensive as recipients and this fits far fewer transfers than transfer/many does. Naming a sender as the fee payer costs nothing, since it already signs; naming anyone else adds another 96 bytes. An entry may set max instead of amount to send whatever its sender still holds once its other entries and, if it is also the fee payer, the fee are taken out, which is a figure the request cannot state because the fee is not known until the transaction is priced. One max per sender, since everything an account holds cannot go to two places. Collecting a signature from every sender takes longer than a blockhash lasts, so naming nonce_account builds the transaction against the value that durable nonce account stores instead, and it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
+// @Tags         transaction
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SystemTransferBatchRequest  true  "Transfers with their own senders, and a fee payer"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SystemTransferBatchResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/v2/transaction/system/transfer/batch [post]
+func (h *SystemTransactionHandler) SystemTransferBatch(w http.ResponseWriter, r *http.Request) {
+	req := new(SystemTransferBatchRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+		return
+	}
+
+	// Resolving the nonce comes before pricing, as it does in transfer/max and
+	// for the same reason: advancing the nonce is an extra instruction whose
+	// authority signs, so leaving it out of the probe would price a
+	// transaction with one signature too few.
+	var (
+		advance        *types.Instruction
+		nonceState     *core.NonceAccount
+		nonceAuthority *types.PublicKey
+	)
+	if !req.NonceAccountKey().IsNil() {
+		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+			return
+		}
+		if info == nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+			return
+		}
+		if info.Owner != core.System.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+				req.NonceAccountKey(), info.Owner))
+			return
+		}
+		if info.Space != core.NonceAccountSpace {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"nonce_account: %s is %d bytes, and a nonce account is %d",
+				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			return
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+			return
+		}
+		nonceState, err = core.DeserializeNonceAccount(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if !nonceState.Initialized() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			return
+		}
+
+		if advance, err = core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonceState.Authority); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		nonceAuthority = nonceState.Authority
+	}
+
+	// A max entry has no amount yet, so it stands in at zero while the fee is
+	// worked out. Nothing is lost by that: a fee depends on the signature
+	// count and compute budget instructions, never on the lamports being
+	// moved, so the probe prices the real batch exactly.
+	//
+	// The probe carries the live blockhash either way. A nonce is not among
+	// the cluster's recent blockhashes, so pricing against one comes back as
+	// expired.
+	targets := req.Targets()
+	probeIxs := make([]*types.Instruction, 0, len(targets))
+	for i := range targets {
+		ix, err := core.System.Transfer(targets[i].FromKey(), targets[i].ToKey(), targets[i].Lamports())
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("transfers[%d]: %s", i, err))
+			return
+		}
+		probeIxs = append(probeIxs, ix)
+	}
+	probeInstructions := types.NewInstructions(probeIxs...)
+
+	var probe *types.Message
+	if req.NonceAccountKey().IsNil() {
+		if probe, err = types.NewMessage(req.FeePayerKey(), blockhash, probeInstructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	} else {
+		if probe, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, probeInstructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
+	probeTx, err := types.NewTransaction(probe)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// The probe is the same length as the real transaction: a lamport count is
+	// a fixed-width u64 whatever its value, and a stored nonce is the same
+	// thirty-two bytes as a blockhash. So serializing it settles the size
+	// limit here, before a batch that cannot be sent costs a balance lookup
+	// per sender.
+	if _, err = probeTx.Serialize(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), probe, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	// A resulting balance below this must be zero, or the runtime rejects the
+	// transfer: an account cannot be left underfunded, only fully closed.
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	// What each sender can afford is a question about the account rather than
+	// about any one of its transfers, so this runs once per distinct sender
+	// and settles that sender's max entry along the way.
+	var (
+		total             uint64
+		feePayerIsSpender bool
+	)
+	for _, sender := range req.Senders() {
+		balance, err := chain.Cli.Balance(r.Context(), sender.Key(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance of %s: %s", sender.Key(), err))
+			return
+		}
+
+		// The fee leaves the fee payer before any instruction runs, so it is
+		// gone before this sender's transfers are counted.
+		available := balance
+		if sender.Key().Equal(req.FeePayerKey()) {
+			feePayerIsSpender = true
+			if available < fee {
+				handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+					"fee_payer: balance %d lamports does not cover the %d lamport fee", balance, fee))
+				return
+			}
+			available -= fee
+		}
+
+		if available < sender.Fixed() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"transfers: %s has %d lamports to send and its transfers come to %d",
+				sender.Key(), available, sender.Fixed()))
+			return
+		}
+		remaining := available - sender.Fixed()
+
+		spent := sender.Fixed()
+		if sender.HasMax() {
+			// Nothing left to send has three causes and they call for
+			// different fixes, so the message says which one it was rather
+			// than blaming the other transfers in every case.
+			switch {
+			case balance == 0:
+				handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+					"transfers[%d]: %s has no balance", sender.MaxIndex(), sender.Key()))
+				return
+			case available == 0:
+				handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+					"transfers[%d]: %s holds %d lamports and the %d lamport fee takes all of it",
+					sender.MaxIndex(), sender.Key(), balance, fee))
+				return
+			case remaining == 0:
+				handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+					"transfers[%d]: %s has %d lamports to send and its other transfers come to exactly that",
+					sender.MaxIndex(), sender.Key(), available))
+				return
+			}
+			targets[sender.MaxIndex()].SetLamports(remaining)
+			spent += remaining
+			remaining = 0
+		}
+		if remaining != 0 && remaining < minRent {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"transfers: would leave %s with %d lamports, below the %d lamport rent-exemption minimum",
+				sender.Key(), remaining, minRent))
+			return
+		}
+
+		// No overflow guard here, unlike the per-sender sums. Every spend was
+		// just checked against a real balance, so the total cannot exceed what
+		// the cluster holds.
+		total += spent
+	}
+
+	if !feePayerIsSpender {
+		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+			return
+		}
+		if feePayerBalance < fee {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+			return
+		}
+		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+			return
+		}
+	}
+
+	ixs := make([]*types.Instruction, 0, len(targets))
+	for i := range targets {
+		ix, err := core.System.Transfer(targets[i].FromKey(), targets[i].ToKey(), targets[i].Lamports())
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("transfers[%d]: %s", i, err))
+			return
+		}
+		ixs = append(ixs, ix)
+	}
+	instructions := types.NewInstructions(ixs...)
+
+	// The real message is the one that carries the nonce, which is the whole
+	// point of naming one: it holds a value the cluster does not consider
+	// recent, so it never expires.
+	var message *types.Message
+	if req.NonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	} else {
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonceState.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewSystemTransferBatchResponse(tx, raw, messageBytes, nonceAuthority, targets, total, fee))
 }
 
 // SystemCreateAccount godoc

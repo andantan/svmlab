@@ -129,6 +129,8 @@ func run() error {
 		tx := v2.NewSystemTransactionHandler(cfg)
 		r.Post("/transaction/system/transfer", tx.SystemTransfer)
 		r.Post("/transaction/system/transfer/max", tx.SystemTransferMax)
+		r.Post("/transaction/system/transfer/many", tx.SystemTransferMany)
+		r.Post("/transaction/system/transfer/batch", tx.SystemTransferBatch)
 		r.Post("/transaction/system/create-account", tx.SystemCreateAccount)
 		r.Post("/transaction/system/allocate", tx.SystemAllocate)
 		r.Post("/transaction/system/assign", tx.SystemAssign)

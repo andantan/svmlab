@@ -68,6 +68,22 @@ func NewPublicKeyFromBase58(s string) (*PublicKey, error) {
 	return k, nil
 }
 
+// MustPublicKeyFromBase58 parses an address that is known good at compile time
+// and panics if it is not.
+//
+// This exists for the protocol addresses in core, which are fixed by the
+// runtime rather than supplied by anyone. A malformed one there is a typo in
+// the source, not a bad input, and a program that has one should refuse to
+// start rather than build transactions against an address nothing lives at.
+func MustPublicKeyFromBase58(s string) *PublicKey {
+	k, err := NewPublicKeyFromBase58(s)
+	if err != nil {
+		panic(err)
+	}
+
+	return k
+}
+
 // CreateWithSeed derives an address from a base key, a seed, and an owner.
 //
 //	address = SHA256(base || seed || owner)
@@ -93,9 +109,9 @@ func CreateWithSeed(base *PublicKey, seed string, owner *PublicKey) (*PublicKey,
 	}
 
 	ownerBytes := owner.Bytes()
-	if len(ownerBytes) >= len(pdaMarker) &&
-		string(ownerBytes[len(ownerBytes)-len(pdaMarker):]) == pdaMarker {
-		return nil, fmt.Errorf("create with seed: owner ends with %q, which is reserved for program derived addresses", pdaMarker)
+	if len(ownerBytes) >= len(PDAMarker) &&
+		string(ownerBytes[len(ownerBytes)-len(PDAMarker):]) == PDAMarker {
+		return nil, fmt.Errorf("create with seed: owner ends with %q, which is reserved for program derived addresses", PDAMarker)
 	}
 
 	h := sha256.New()

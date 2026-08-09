@@ -7,43 +7,16 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
+// Config is what actually varies between deployments.
+//
+// Program ids and sysvar addresses were once here and are not any more. They
+// are the same on every cluster, so configuring them added no reach and one
+// failure mode: a typo in a base58 address parses cleanly and only surfaces as
+// a rejected transaction. They now live in core as constants.
 type Config struct {
-	ServerAddr string   `yaml:"server_addr"`
-	Programs   Programs `yaml:"programs"`
-	Sysvars    Sysvars  `yaml:"sysvars"`
-	Chains     []Chain  `yaml:"chain"`
-	Keys       []Key    `yaml:"keys"`
-}
-
-// Programs holds the well-known native and SPL program IDs.
-//
-// Unlike EVM utility contracts, these addresses are identical on every
-// Solana cluster, so they are declared once instead of per-chain.
-//
-// All of them are required, including ones no endpoint reaches yet. Because
-// none of them vary by cluster, an empty field is a truncated config rather
-// than a deliberate omission, and is better caught at startup than on the
-// first request that happens to need it.
-type Programs struct {
-	System          string `yaml:"system"`
-	ComputeBudget   string `yaml:"compute_budget"`
-	Token           string `yaml:"token"`
-	Token2022       string `yaml:"token_2022"`
-	AssociatedToken string `yaml:"associated_token"`
-	Memo            string `yaml:"memo"`
-	Stake           string `yaml:"stake"`
-	Vote            string `yaml:"vote"`
-}
-
-// Sysvars holds the accounts the runtime keeps cluster state in.
-//
-// They are addresses like the program ids above and are equally invariant, but
-// they are not programs: nothing is invoked at them. They are passed as
-// ordinary read-only accounts to instructions that need to see the state they
-// hold, which is why several nonce instructions take them.
-type Sysvars struct {
-	RecentBlockhashes string `yaml:"recent_blockhashes"`
-	Rent              string `yaml:"rent"`
+	ServerAddr string  `yaml:"server_addr"`
+	Chains     []Chain `yaml:"chain"`
+	Keys       []Key   `yaml:"keys"`
 }
 
 // Chain describes a single Solana cluster.
@@ -88,36 +61,6 @@ func Load(path string) (*Config, error) {
 
 	if cfg.ServerAddr == "" {
 		return nil, fmt.Errorf("config: server_addr is required")
-	}
-	if cfg.Programs.System == "" {
-		return nil, fmt.Errorf("config: programs.system is required")
-	}
-	if cfg.Programs.ComputeBudget == "" {
-		return nil, fmt.Errorf("config: programs.compute_budget is required")
-	}
-	if cfg.Programs.Token == "" {
-		return nil, fmt.Errorf("config: programs.token is required")
-	}
-	if cfg.Programs.Token2022 == "" {
-		return nil, fmt.Errorf("config: programs.token_2022 is required")
-	}
-	if cfg.Programs.AssociatedToken == "" {
-		return nil, fmt.Errorf("config: programs.associated_token is required")
-	}
-	if cfg.Programs.Memo == "" {
-		return nil, fmt.Errorf("config: programs.memo is required")
-	}
-	if cfg.Programs.Stake == "" {
-		return nil, fmt.Errorf("config: programs.stake is required")
-	}
-	if cfg.Programs.Vote == "" {
-		return nil, fmt.Errorf("config: programs.vote is required")
-	}
-	if cfg.Sysvars.RecentBlockhashes == "" {
-		return nil, fmt.Errorf("config: sysvars.recent_blockhashes is required")
-	}
-	if cfg.Sysvars.Rent == "" {
-		return nil, fmt.Errorf("config: sysvars.rent is required")
 	}
 	if len(cfg.Chains) == 0 {
 		return nil, fmt.Errorf("config: at least one chain is required")

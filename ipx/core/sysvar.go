@@ -4,29 +4,36 @@ import (
 	"github.com/andantan/svmlab/core/types"
 )
 
-// sysvar holds the accounts the runtime keeps cluster state in.
+// The sysvar addresses, kept apart from the program ids because a sysvar is
+// not a program.
 //
-// These are not programs. Nothing is invoked at them, and no instruction names
-// one as its program id: they are passed as ordinary read-only accounts to
-// instructions that need to read the state they hold. Sealevel is the reason
-// they have to be passed at all, since an instruction can only touch accounts
-// it declared in advance, so even the current rent parameters have to be
-// listed like any other account.
+// Nothing is invoked at one, and no instruction names one as its program id:
+// they are passed as ordinary read-only accounts to instructions that need the
+// state they hold. Sealevel is why they have to be passed at all, since an
+// instruction can only touch accounts it declared in advance, so even the
+// current rent parameters have to be listed like any other account.
 //
 // The EVM has no equivalent because a contract reads block state through
 // opcodes such as BLOCKHASH and TIMESTAMP, with nothing to declare.
-type sysvar struct {
-	recentBlockhashes *types.PublicKey
-	rent              *types.PublicKey
-}
+//
+// The 1 in B1ockHashes is a digit. base58 has no lowercase L, so the
+// misspelling decodes to a perfectly valid different address, which is the
+// kind of mistake this being a constant rather than a config line prevents.
+const (
+	RecentBlockhashesSysvarAddress = "SysvarRecentB1ockHashes11111111111111111111"
+	RentSysvarAddress              = "SysvarRent111111111111111111111111111111111"
+)
+
+var (
+	RecentBlockhashesSysvarID = types.MustPublicKeyFromBase58(RecentBlockhashesSysvarAddress)
+	RentSysvarID              = types.MustPublicKeyFromBase58(RentSysvarAddress)
+)
+
+// sysvar is a namespace rather than state, since the addresses it hands back
+// are fixed by the runtime and there is nothing to initialize.
+type sysvar struct{}
 
 var Sysvar = new(sysvar)
-
-// Init records the sysvar addresses, read from config at startup.
-func (s *sysvar) Init(recentBlockhashes, rent *types.PublicKey) {
-	s.recentBlockhashes = recentBlockhashes
-	s.rent = rent
-}
 
 // RecentBlockhashes is the account holding the cluster's recent blockhashes.
 //
@@ -38,14 +45,12 @@ func (s *sysvar) Init(recentBlockhashes, rent *types.PublicKey) {
 // The runtime only checks that the account at that position is this exact
 // address and then reads the blockhash from the processing context rather than
 // from the account data. So a wrong address fails the instruction even though
-// nothing would have been read out of it, which matters here because the 1 in
-// B1ockHashes is a digit: base58 has no lowercase L, and the misspelling
-// decodes to a perfectly valid different address.
-func (s *sysvar) RecentBlockhashes() *types.PublicKey {
-	return s.recentBlockhashes
+// nothing would have been read out of it.
+func (_ *sysvar) RecentBlockhashes() *types.PublicKey {
+	return RecentBlockhashesSysvarID
 }
 
 // Rent is the account holding the current rent parameters.
-func (s *sysvar) Rent() *types.PublicKey {
-	return s.rent
+func (_ *sysvar) Rent() *types.PublicKey {
+	return RentSysvarID
 }

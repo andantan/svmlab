@@ -46,24 +46,17 @@ const (
 // side effect of being sent funds. Here both are ordinary instructions to an
 // ordinary program, which is why a transfer is a call rather than a value.
 //
-// The program id is the same on every Solana cluster, so it is captured once
-// via Init rather than threaded through every call the way a per-chain address
-// would be.
-type system struct {
-	id *types.PublicKey
-}
+// The program id is fixed by the runtime, so this is a namespace rather than
+// state: there is nothing to configure and nothing to initialize, and a call
+// can never arrive before whatever would have done it.
+type system struct{}
 
 var System = new(system)
 
-// Init records the System Program id, read from config at startup.
-func (s *system) Init(id *types.PublicKey) {
-	s.id = id
-}
-
 // ID is the System Program id, which callers need when it is not the program
 // being invoked but the value being passed, as the owner of a new account is.
-func (s *system) ID() *types.PublicKey {
-	return s.id
+func (_ *system) ID() *types.PublicKey {
+	return SystemProgramID
 }
 
 // Transfer moves lamports from one account to another.
@@ -75,10 +68,7 @@ func (s *system) ID() *types.PublicKey {
 // requires the resulting balance to reach the rent-exempt minimum, currently
 // 890880 lamports for an empty account. A smaller amount to a new address fails
 // rather than creating a dust account.
-func (s *system) Transfer(from, to *types.PublicKey, lamports uint64) (*types.Instruction, error) {
-	if s.id.IsNil() {
-		return nil, fmt.Errorf("system: not initialized")
-	}
+func (_ *system) Transfer(from, to *types.PublicKey, lamports uint64) (*types.Instruction, error) {
 	if from.IsNil() {
 		return nil, fmt.Errorf("system transfer: sender is required")
 	}
@@ -92,7 +82,7 @@ func (s *system) Transfer(from, to *types.PublicKey, lamports uint64) (*types.In
 	data := codec.Binary.AppendU32(nil, SystemInstructionTransfer)
 	data = codec.Binary.AppendU64(data, lamports)
 
-	return types.NewInstruction(s.id, types.NewAccounts(
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
 		types.NewWritableSignerAccount(from),
 		types.NewWritableAccount(to),
 	), data), nil
@@ -108,10 +98,7 @@ func (s *system) Transfer(from, to *types.PublicKey, lamports uint64) (*types.In
 //
 // Lamports must cover the rent-exempt minimum for the requested space, or the
 // runtime rejects the instruction.
-func (s *system) CreateAccount(from, newAccount, owner *types.PublicKey, lamports, space uint64) (*types.Instruction, error) {
-	if s.id.IsNil() {
-		return nil, fmt.Errorf("system: not initialized")
-	}
+func (_ *system) CreateAccount(from, newAccount, owner *types.PublicKey, lamports, space uint64) (*types.Instruction, error) {
 	if from.IsNil() {
 		return nil, fmt.Errorf("system create account: funder is required")
 	}
@@ -130,7 +117,7 @@ func (s *system) CreateAccount(from, newAccount, owner *types.PublicKey, lamport
 	data = codec.Binary.AppendU64(data, space)
 	data = codec.Binary.AppendBytes(data, owner.Bytes())
 
-	return types.NewInstruction(s.id, types.NewAccounts(
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
 		types.NewWritableSignerAccount(from),
 		types.NewWritableSignerAccount(newAccount),
 	), data), nil
@@ -138,10 +125,7 @@ func (s *system) CreateAccount(from, newAccount, owner *types.PublicKey, lamport
 
 // Allocate reserves data space on an existing account owned by the System
 // Program.
-func (s *system) Allocate(account *types.PublicKey, space uint64) (*types.Instruction, error) {
-	if s.id.IsNil() {
-		return nil, fmt.Errorf("system: not initialized")
-	}
+func (_ *system) Allocate(account *types.PublicKey, space uint64) (*types.Instruction, error) {
 	if account.IsNil() {
 		return nil, fmt.Errorf("system allocate: account is required")
 	}
@@ -152,7 +136,7 @@ func (s *system) Allocate(account *types.PublicKey, space uint64) (*types.Instru
 	data := codec.Binary.AppendU32(nil, SystemInstructionAllocate)
 	data = codec.Binary.AppendU64(data, space)
 
-	return types.NewInstruction(s.id, types.NewAccounts(
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
 		types.NewWritableSignerAccount(account),
 	), data), nil
 }
@@ -163,10 +147,7 @@ func (s *system) Allocate(account *types.PublicKey, space uint64) (*types.Instru
 // puts an account under a program's control. Ownership here is a field on the
 // account rather than a mapping the program keeps, which is the inverse of an
 // EVM contract holding balances for its users in its own storage.
-func (s *system) Assign(account, owner *types.PublicKey) (*types.Instruction, error) {
-	if s.id.IsNil() {
-		return nil, fmt.Errorf("system: not initialized")
-	}
+func (_ *system) Assign(account, owner *types.PublicKey) (*types.Instruction, error) {
 	if account.IsNil() {
 		return nil, fmt.Errorf("system assign: account is required")
 	}
@@ -177,7 +158,7 @@ func (s *system) Assign(account, owner *types.PublicKey) (*types.Instruction, er
 	data := codec.Binary.AppendU32(nil, SystemInstructionAssign)
 	data = codec.Binary.AppendBytes(data, owner.Bytes())
 
-	return types.NewInstruction(s.id, types.NewAccounts(
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
 		types.NewWritableSignerAccount(account),
 	), data), nil
 }
@@ -193,10 +174,7 @@ func (s *system) Assign(account, owner *types.PublicKey) (*types.Instruction, er
 // The address is derived here rather than taken as an argument. The runtime
 // recomputes it and rejects the instruction if it disagrees, so accepting one
 // from a caller would only add a way to be wrong.
-func (s *system) CreateAccountWithSeed(from, base *types.PublicKey, seed string, owner *types.PublicKey, lamports, space uint64) (*types.Instruction, error) {
-	if s.id.IsNil() {
-		return nil, fmt.Errorf("system: not initialized")
-	}
+func (_ *system) CreateAccountWithSeed(from, base *types.PublicKey, seed string, owner *types.PublicKey, lamports, space uint64) (*types.Instruction, error) {
 	if from.IsNil() {
 		return nil, fmt.Errorf("system create account with seed: funder is required")
 	}
@@ -216,7 +194,7 @@ func (s *system) CreateAccountWithSeed(from, base *types.PublicKey, seed string,
 	data = codec.Binary.AppendU64(data, space)
 	data = codec.Binary.AppendBytes(data, owner.Bytes())
 
-	return types.NewInstruction(s.id, types.NewAccounts(
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
 		types.NewWritableSignerAccount(from),
 		types.NewWritableAccount(derived),
 		types.NewReadonlySignerAccount(base),
@@ -232,10 +210,7 @@ func (s *system) CreateAccountWithSeed(from, base *types.PublicKey, seed string,
 // The owner is the one the address was derived for, not a new one. It has to
 // be the System Program for the transfer itself to be legal, since only the
 // owning program may debit an account.
-func (s *system) TransferWithSeed(base *types.PublicKey, seed string, owner, to *types.PublicKey, lamports uint64) (*types.Instruction, error) {
-	if s.id.IsNil() {
-		return nil, fmt.Errorf("system: not initialized")
-	}
+func (_ *system) TransferWithSeed(base *types.PublicKey, seed string, owner, to *types.PublicKey, lamports uint64) (*types.Instruction, error) {
 	if to.IsNil() {
 		return nil, fmt.Errorf("system transfer with seed: recipient is required")
 	}
@@ -253,7 +228,7 @@ func (s *system) TransferWithSeed(base *types.PublicKey, seed string, owner, to 
 	data = codec.Binary.AppendString(data, seed)
 	data = codec.Binary.AppendBytes(data, owner.Bytes())
 
-	return types.NewInstruction(s.id, types.NewAccounts(
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
 		types.NewWritableAccount(derived),
 		types.NewReadonlySignerAccount(base),
 		types.NewWritableAccount(to),
@@ -266,10 +241,7 @@ func (s *system) TransferWithSeed(base *types.PublicKey, seed string, owner, to 
 // the account to be System-owned, so this is the step taken before assigning
 // it away, on an address that was derived for its eventual owner from the
 // start.
-func (s *system) AllocateWithSeed(base *types.PublicKey, seed string, owner *types.PublicKey, space uint64) (*types.Instruction, error) {
-	if s.id.IsNil() {
-		return nil, fmt.Errorf("system: not initialized")
-	}
+func (_ *system) AllocateWithSeed(base *types.PublicKey, seed string, owner *types.PublicKey, space uint64) (*types.Instruction, error) {
 	if space > MaxPermittedDataLength {
 		return nil, fmt.Errorf("system allocate with seed: %d bytes exceeds the %d byte limit", space, MaxPermittedDataLength)
 	}
@@ -285,7 +257,7 @@ func (s *system) AllocateWithSeed(base *types.PublicKey, seed string, owner *typ
 	data = codec.Binary.AppendU64(data, space)
 	data = codec.Binary.AppendBytes(data, owner.Bytes())
 
-	return types.NewInstruction(s.id, types.NewAccounts(
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
 		types.NewWritableAccount(derived),
 		types.NewReadonlySignerAccount(base),
 	), data), nil
@@ -299,10 +271,7 @@ func (s *system) AllocateWithSeed(base *types.PublicKey, seed string, owner *typ
 // account can only be assigned to the program its address already encodes, and
 // the usual flow is to derive for the target program first, fund that address
 // to bring it into existence, then allocate and assign.
-func (s *system) AssignWithSeed(base *types.PublicKey, seed string, owner *types.PublicKey) (*types.Instruction, error) {
-	if s.id.IsNil() {
-		return nil, fmt.Errorf("system: not initialized")
-	}
+func (_ *system) AssignWithSeed(base *types.PublicKey, seed string, owner *types.PublicKey) (*types.Instruction, error) {
 
 	derived, err := types.CreateWithSeed(base, seed, owner)
 	if err != nil {
@@ -314,8 +283,132 @@ func (s *system) AssignWithSeed(base *types.PublicKey, seed string, owner *types
 	data = codec.Binary.AppendString(data, seed)
 	data = codec.Binary.AppendBytes(data, owner.Bytes())
 
-	return types.NewInstruction(s.id, types.NewAccounts(
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
 		types.NewWritableAccount(derived),
 		types.NewReadonlySignerAccount(base),
+	), data), nil
+}
+
+// InitializeNonceAccount turns an existing System-owned account of the right
+// size into a durable nonce account, storing the current blockhash as its
+// first nonce.
+//
+// The nonce account is writable but does not sign. It has already been created
+// by then, and nothing about initializing it needs its authority: the account
+// simply gains the authority named here.
+func (_ *system) InitializeNonceAccount(nonce, authority *types.PublicKey) (*types.Instruction, error) {
+	if nonce.IsNil() {
+		return nil, fmt.Errorf("nonce initialize: nonce account is required")
+	}
+	if authority.IsNil() {
+		return nil, fmt.Errorf("nonce initialize: authority is required")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionInitializeNonceAccount)
+	data = codec.Binary.AppendBytes(data, authority.Bytes())
+
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
+		types.NewWritableAccount(nonce),
+		types.NewReadonlyAccount(Sysvar.RecentBlockhashes()),
+		types.NewReadonlyAccount(Sysvar.Rent()),
+	), data), nil
+}
+
+// AdvanceNonceAccount replaces the stored nonce with the current blockhash.
+//
+// This is what stops a durable nonce from being replayed: a transaction built
+// against a nonce is only valid while that value is stored, and advancing it
+// is the first instruction such a transaction runs, so it consumes the nonce
+// it was built for.
+func (_ *system) AdvanceNonceAccount(nonce, authority *types.PublicKey) (*types.Instruction, error) {
+	if nonce.IsNil() {
+		return nil, fmt.Errorf("nonce advance: nonce account is required")
+	}
+	if authority.IsNil() {
+		return nil, fmt.Errorf("nonce advance: authority is required")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionAdvanceNonceAccount)
+
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
+		types.NewWritableAccount(nonce),
+		types.NewReadonlyAccount(Sysvar.RecentBlockhashes()),
+		types.NewReadonlySignerAccount(authority),
+	), data), nil
+}
+
+// WithdrawNonceAccount moves lamports out of a nonce account.
+//
+// Taking the whole balance closes the account, and the runtime refuses that
+// while the stored nonce is still the current blockhash: a transaction built
+// against it could otherwise be left with nowhere to advance. Taking less
+// requires what remains to stay rent exempt.
+//
+// The authority signs, except on an account that was sized but never
+// initialized, where the account itself is the only thing that can authorize
+// the withdrawal.
+func (_ *system) WithdrawNonceAccount(nonce, authority, to *types.PublicKey, lamports uint64) (*types.Instruction, error) {
+	if nonce.IsNil() {
+		return nil, fmt.Errorf("nonce withdraw: nonce account is required")
+	}
+	if authority.IsNil() {
+		return nil, fmt.Errorf("nonce withdraw: authority is required")
+	}
+	if to.IsNil() {
+		return nil, fmt.Errorf("nonce withdraw: recipient is required")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionWithdrawNonceAccount)
+	data = codec.Binary.AppendU64(data, lamports)
+
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
+		types.NewWritableAccount(nonce),
+		types.NewWritableAccount(to),
+		types.NewReadonlyAccount(Sysvar.RecentBlockhashes()),
+		types.NewReadonlyAccount(Sysvar.Rent()),
+		types.NewReadonlySignerAccount(authority),
+	), data), nil
+}
+
+// AuthorizeNonceAccount hands the right to advance and withdraw to another
+// key.
+//
+// Only the current authority can do this, and nothing else about the account
+// changes: the stored nonce stays as it was, so transactions already built
+// against it remain valid.
+func (_ *system) AuthorizeNonceAccount(nonce, authority, newAuthority *types.PublicKey) (*types.Instruction, error) {
+	if nonce.IsNil() {
+		return nil, fmt.Errorf("nonce authorize: nonce account is required")
+	}
+	if authority.IsNil() {
+		return nil, fmt.Errorf("nonce authorize: authority is required")
+	}
+	if newAuthority.IsNil() {
+		return nil, fmt.Errorf("nonce authorize: new authority is required")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionAuthorizeNonceAccount)
+	data = codec.Binary.AppendBytes(data, newAuthority.Bytes())
+
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
+		types.NewWritableAccount(nonce),
+		types.NewReadonlySignerAccount(authority),
+	), data), nil
+}
+
+// UpgradeNonceAccount migrates a Legacy nonce account to the current version.
+//
+// Accounts created now are already current, so this exists for ones predating
+// the change. Nothing signs: the migration is not a privileged operation, only
+// a rewrite of how the same state is stored.
+func (_ *system) UpgradeNonceAccount(nonce *types.PublicKey) (*types.Instruction, error) {
+	if nonce.IsNil() {
+		return nil, fmt.Errorf("nonce upgrade: nonce account is required")
+	}
+
+	data := codec.Binary.AppendU32(nil, SystemInstructionUpgradeNonceAccount)
+
+	return types.NewInstruction(SystemProgramID, types.NewAccounts(
+		types.NewWritableAccount(nonce),
 	), data), nil
 }

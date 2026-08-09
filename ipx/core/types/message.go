@@ -105,10 +105,10 @@ func newMessage(feePayer *PublicKey, recentBlockhash *Hash, instructions []*Inst
 		return nil, fmt.Errorf("message: at least one instruction is required")
 	}
 
-	// Seeded first so that dedupe treats the fee payer as the earliest entry,
-	// letting a later reference to the same key merge into it instead of
-	// creating a second one.
-	accounts := []*Account{NewWritableSignerAccount(feePayer)}
+	// Seeded first so that the dedupe below treats the fee payer as the
+	// earliest entry, letting a later reference to the same key merge into it
+	// instead of creating a second one.
+	referenced := []*Account{NewWritableSignerAccount(feePayer)}
 	for n, ix := range instructions {
 		if ix.IsNil() {
 			return nil, fmt.Errorf("message: instruction[%d] is nil", n)
@@ -117,12 +117,33 @@ func newMessage(feePayer *PublicKey, recentBlockhash *Hash, instructions []*Inst
 			if a.IsNil() {
 				return nil, fmt.Errorf("message: instruction[%d].account[%d] is nil", n, j)
 			}
-			accounts = append(accounts, a)
+			referenced = append(referenced, a)
 		}
-		accounts = append(accounts, NewReadonlyAccount(ix.ProgramID))
+		referenced = append(referenced, NewReadonlyAccount(ix.ProgramID))
 	}
 
-	accounts = dedupeAccounts(accounts)
+	// Repeated keys collapse into one entry carrying the union of their
+	// privileges, so an account passed read-only to one instruction and
+	// writable to another ends up writable once.
+	//
+	// The map is keyed by the base58 string rather than by the key itself
+	// because PublicKey is a pointer, so using it directly would compare
+	// addresses and treat two pointers to the same key as different accounts.
+	seen := make(map[string]*Account, len(referenced))
+	accounts := make([]*Account, 0, len(referenced))
+	for _, a := range referenced {
+		key := a.PublicKey.Base58()
+		if existing, ok := seen[key]; ok {
+			existing.Merge(a)
+			continue
+		}
+
+		// Copied so that merging never mutates an Account the caller still
+		// holds a reference to through its instruction.
+		cp := NewAccount(a.PublicKey, a.IsSigner, a.IsWritable)
+		seen[key] = cp
+		accounts = append(accounts, cp)
+	}
 
 	// The fee payer is pulled out so the sort cannot move it, then put back at
 	// index 0.
@@ -198,32 +219,6 @@ func newMessage(feePayer *PublicKey, recentBlockhash *Hash, instructions []*Inst
 		RecentBlockhash: recentBlockhash,
 		Instructions:    compiled,
 	}, nil
-}
-
-// dedupeAccounts collapses repeated keys, merging privileges upward.
-//
-// The map is keyed by the base58 string rather than the key itself because
-// PublicKey is a pointer, so using it directly would compare addresses and
-// treat two pointers to the same key as different accounts.
-func dedupeAccounts(accounts []*Account) []*Account {
-	seen := make(map[string]*Account, len(accounts))
-	out := make([]*Account, 0, len(accounts))
-
-	for _, a := range accounts {
-		key := a.PublicKey.Base58()
-		if existing, ok := seen[key]; ok {
-			existing.Merge(a)
-			continue
-		}
-
-		// Copied so that merging never mutates an Account the caller still
-		// holds a reference to through its instruction.
-		cp := NewAccount(a.PublicKey, a.IsSigner, a.IsWritable)
-		seen[key] = cp
-		out = append(out, cp)
-	}
-
-	return out
 }
 
 func (m *Message) IsNil() bool {

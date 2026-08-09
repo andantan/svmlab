@@ -15,8 +15,6 @@ import (
 	"github.com/andantan/svmlab/api/handler/misc"
 	v1 "github.com/andantan/svmlab/api/handler/v1"
 	v2 "github.com/andantan/svmlab/api/handler/v2"
-	"github.com/andantan/svmlab/core"
-	"github.com/andantan/svmlab/core/types"
 	_ "github.com/andantan/svmlab/docs"
 	"github.com/andantan/svmlab/internal/config"
 	"github.com/andantan/svmlab/internal/rpc"
@@ -43,22 +41,6 @@ func run() error {
 	if err != nil {
 		return err
 	}
-
-	systemProgramID, err := types.NewPublicKeyFromBase58(cfg.Programs.System)
-	if err != nil {
-		return fmt.Errorf("config: programs.system: %w", err)
-	}
-	core.System.Init(systemProgramID)
-
-	recentBlockhashesSysvar, err := types.NewPublicKeyFromBase58(cfg.Sysvars.RecentBlockhashes)
-	if err != nil {
-		return fmt.Errorf("config: sysvars.recent_blockhashes: %w", err)
-	}
-	rentSysvar, err := types.NewPublicKeyFromBase58(cfg.Sysvars.Rent)
-	if err != nil {
-		return fmt.Errorf("config: sysvars.rent: %w", err)
-	}
-	core.Sysvar.Init(recentBlockhashesSysvar, rentSysvar)
 
 	cluster := rpc.NewCluster(cfg.Chains)
 

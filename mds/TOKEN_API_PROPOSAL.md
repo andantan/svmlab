@@ -38,15 +38,22 @@ Endpoints that produce a transaction belong under:
 POST /svm/v2/transaction/token/...
 ```
 
-Endpoints that only read and decode state belong with the other read paths:
+Endpoints that only read and decode state are grouped by what they are asked
+about rather than by which RPC method answers them:
 
 ```text
-POST /svm/rpc/token/...
+POST /svm/token/mint        what this mint is
+POST /svm/token/account     what this token account holds
+POST /svm/account/tokens    what this wallet holds
 ```
 
-The split is by what comes back rather than by subject: `/transaction/*`
-returns something to sign, `/rpc/*` returns what is already on chain. Putting a
-mint decoder under `/transaction` because it concerns tokens would be the first
+The first two describe a token, so they sit under `token`. The third describes
+a wallet and belongs beside `account/balance` and `account/nonce`, since the
+question is what one address controls and tokens are one answer among several.
+
+The split against `/transaction/*` is by what comes back: those return
+something to sign, these return what is already on chain. Putting a mint
+decoder under `/transaction` because it concerns tokens would be the first
 endpoint in either tree to break that.
 
 Every state-changing endpoint should accept the existing optional
@@ -208,7 +215,7 @@ still moving, and an extraction now would be shaped around a guess at them.
 Revisit once the lifecycle endpoints in step 3 exist and the block's real
 parameters are visible.
 
-### 2. Shared token foundation — core done, read endpoints pending
+### 2. Shared token foundation — done
 
 Done:
 
@@ -229,12 +236,37 @@ Done:
 - `Token.CreateMint` and `Token.CreateAccount` emit the System create beside the
   initialize as one instruction pair.
 
-Pending:
+- `DecodeMint` and `DecodeTokenAccount`, which take the owning program alongside
+  the data. Ownership belongs with the parse rather than beside it: a mint and a
+  holder account are both owned by a token program and both open with 32 bytes
+  that read as a public key, so nothing in the data says which one it is.
+  Deciding it from the length and the Token-2022 type tag is what stands between
+  a holder account and a supply figure invented from its owner field.
+- The read endpoints, all three of them:
 
-- Read endpoints under `/svm/rpc/token/*`. `mint` and `account` need only a
-  handler, since the parsers exist; `accounts-by-owner` also needs a
-  `getTokenAccountsByOwner` method on the RPC client, which is the one piece of
-  plumbing this group is missing.
+  ```text
+  /svm/token/mint        USDC, USDT, wSOL, and Token-2022 accounts confirmed
+  /svm/token/account     confirmed, including a 170-byte extended account
+  /svm/account/tokens    confirmed against both programs
+  ```
+
+  `/svm/account/tokens` queries classic Token and Token-2022 and merges the
+  results, reporting the program on each entry. An earlier draft of this
+  document argued the two must not be merged, on the grounds that no single
+  instruction can touch accounts from both. That argument is about building a
+  transaction and does not reach a read: the question here is what a wallet
+  holds, the answer spans both programs, and the per-entry program keeps the
+  distinction available to anything that has to act on it.
+
+  Each mint is read once for its decimals and cached across the listing, since a
+  wallet's accounts cluster on a few mints. A mint that cannot be read caches
+  its absence too, so a dead mint costs one call rather than one per account.
+
+  One limit belongs to the method rather than to us: a node drops large accounts
+  from its secondary indexes and answers `getTokenAccountsByOwner` for them with
+  an error, which currently surfaces as a 502.
+
+This group has nothing pending.
 
 ### 3. First usable token lifecycle — builders done, endpoints pending
 
@@ -368,7 +400,7 @@ which a transaction-builder response has no field for. In the classic program
 they are also nearly free to compute: the data size is a fixed 165 and the two
 conversions are a shift of the decimal point by the mint's `decimals`. So build
 them as ordinary builders and let a caller who wants the value run the result
-through the existing `/svm/rpc/transaction/simulate`, rather than growing a
+through the existing `/svm/cluster/transaction/simulate`, rather than growing a
 second response shape for three instructions that barely need one.
 
 `token/batch` comes last because it needs a safe typed representation of nested

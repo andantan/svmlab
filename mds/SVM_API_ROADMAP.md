@@ -12,15 +12,15 @@ account model -> deterministic addresses -> assets -> application state
 
 ## Current Status
 
-Core and endpoints are tracked apart, because they have come apart: the Token
-builders exist and none of them is reachable over HTTP yet.
+Core and endpoints are tracked apart, because they have come apart: Token's
+reads are live while its six transaction builders exist only in `core`.
 
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing       |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi and batch transfer |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts                      |
-| SPL Token classic         | partial | none      | 3 layouts, 25 opcodes, 6 builders, 2 atomic creates; TOKEN_API_PROPOSAL.md  |
+| SPL Token classic         | partial | reads     | 3 layouts, 25 opcodes, 6 builders, 2 atomic creates; TOKEN_API_PROPOSAL.md  |
 | Associated Token Account  | none    | none      | unblocked now that PDA is done                                              |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
@@ -33,7 +33,7 @@ either program; only the extension-specific part is still its own group.
 ~~~
 System (done)
 -> PDA derivation (done)
--> SPL Token classic        <- here: core done, endpoints next
+-> SPL Token classic        <- here: reads done, transaction builders next
 -> Associated Token Account
 -> Vault custom program
 -> Compute Budget
@@ -117,8 +117,10 @@ It covers minting, holder accounts, transfer, delegation, burning, authority
 changes, freezing, multisig, wrapped SOL, and return-data utilities.
 
 Core is partly done: the three layouts parse, all 25 classic opcodes are
-declared, and six builders plus two atomic create pairs exist. No endpoint
-exists. Detailed instruction coverage and implementation ordering:
+declared, and six builders plus two atomic create pairs exist. The reads are
+live at `/svm/token/mint`, `/svm/token/account`, and `/svm/account/tokens`; no
+transaction endpoint exists. Detailed instruction coverage and implementation
+ordering:
 
 ~~~
 TOKEN_API_PROPOSAL.md
@@ -420,8 +422,10 @@ out of the owner and the size, with one caveat worth writing down — a
 Token-2022 account is not a fixed size, so size alone identifies a classic
 account and not a modern one.
 
-`token/accounts-by-owner` is the first of these to be needed rather than merely
-listed, since the Token read endpoints want it.
+`token/accounts-by-owner` was the first of these to be needed rather than
+merely listed, and it shipped as `/svm/account/tokens`: the question is what one
+address controls, so it belongs with the account reads rather than the token
+ones. It queries both token programs and reports the program per entry.
 
 ## Suggested Milestones
 
@@ -434,11 +438,11 @@ PDA derivation (done) -> SPL Token classic -> ATA
 Outcome: mint a token, create holder accounts, transfer safely, and inspect
 resulting state.
 
-Where it stands: PDA is done, and Token's builders are done with no endpoints
-on them. The next concrete work is nine endpoints — six transaction builders
-under `/svm/v2/transaction/token/` and three reads under `/svm/rpc/token/` —
-of which only `accounts-by-owner` needs plumbing that does not exist, namely a
-`getTokenAccountsByOwner` method on the RPC client.
+Where it stands: PDA is done, and so are the three token reads —
+`/svm/token/mint`, `/svm/token/account`, and `/svm/account/tokens`. Token's six
+lifecycle builders exist in `core` with no endpoint on them, so the next
+concrete work is those six under `/svm/v2/transaction/token/`. Nothing they
+need is missing.
 
 ### Milestone B: Program-Controlled Assets
 

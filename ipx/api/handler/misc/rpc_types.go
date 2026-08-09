@@ -577,3 +577,57 @@ func NewAccountOwnerResponse(k *types.PublicKey, info *rpc.AccountInfo) *Account
 		SystemOwned: info.Owner == core.System.ID().Base58(),
 	}
 }
+
+// NonceRequest names the nonce account to read.
+type NonceRequest struct {
+	PublicKey string `json:"public_key" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	publicKey *types.PublicKey
+}
+
+func (r *NonceRequest) ValidateRequest() error {
+	var err error
+	if r.publicKey, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.PublicKey)); err != nil {
+		return errors.New("public_key: " + err.Error())
+	}
+
+	return nil
+}
+
+func (r *NonceRequest) ToPublicKey() *types.PublicKey {
+	return r.publicKey
+}
+
+// NonceResponse reports what a durable nonce account holds.
+//
+// Initialized is separate from the rest because an account sized for a nonce
+// but never initialized is an ordinary intermediate state: create-account
+// allocates the 80 bytes, and they stay zero until the initializer writes
+// them. Such an account reports the Legacy version and the uninitialized
+// state, which is what all-zero bytes decode to.
+//
+// Nonce is the stored blockhash. A transaction carrying it in place of a
+// recent one never expires, which is the whole point of the feature.
+type NonceResponse struct {
+	PublicKey            string `json:"public_key"`
+	Exists               bool   `json:"exists"`
+	Initialized          bool   `json:"initialized"`
+	Version              uint32 `json:"version"`
+	State                uint32 `json:"state"`
+	Authority            string `json:"authority"`
+	Nonce                string `json:"nonce"`
+	LamportsPerSignature string `json:"lamports_per_signature"`
+}
+
+func NewNonceResponse(k *types.PublicKey, n *core.NonceAccount) *NonceResponse {
+	return &NonceResponse{
+		PublicKey:            k.Base58(),
+		Exists:               true,
+		Initialized:          n.Initialized(),
+		Version:              n.Version,
+		State:                n.State,
+		Authority:            n.Authority.Base58(),
+		Nonce:                n.Nonce.Base58(),
+		LamportsPerSignature: strconv.FormatUint(n.LamportsPerSignature, 10),
+	}
+}

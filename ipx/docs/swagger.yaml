@@ -120,6 +120,31 @@ definitions:
       health:
         type: string
     type: object
+  misc.NonceRequest:
+    properties:
+      public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  misc.NonceResponse:
+    properties:
+      authority:
+        type: string
+      exists:
+        type: boolean
+      initialized:
+        type: boolean
+      lamports_per_signature:
+        type: string
+      nonce:
+        type: string
+      public_key:
+        type: string
+      state:
+        type: integer
+      version:
+        type: integer
+    type: object
   misc.RawRequest:
     properties:
       method:
@@ -1198,6 +1223,49 @@ paths:
               type: string
             type: object
       summary: Read the node's health
+      tags:
+      - rpc
+  /svm/rpc/nonce:
+    post:
+      consumes:
+      - application/json
+      description: 'Parses the 80 bytes a nonce account holds. The stored nonce is
+        what a transaction may carry in place of a recent blockhash so that it never
+        expires, which is the opposite of an EVM nonce: there a per-account counter
+        prevents replay, here expiry is what is being removed. An account sized by
+        create-account but never initialized is a normal intermediate state and reports
+        initialized=false with all-zero fields.'
+      parameters:
+      - description: Nonce account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.NonceRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.NonceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read a durable nonce account
       tags:
       - rpc
   /svm/rpc/rent-exemption/mint:

@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/andantan/svmlab/api/handler"
+	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/internal/rpc"
 )
 
@@ -165,6 +166,71 @@ func (h *RPCHandler) AccountOwner(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handler.WriteOK(w, NewAccountOwnerResponse(req.ToPublicKey(), info))
+}
+
+// Nonce godoc
+// @Summary      Read a durable nonce account
+// @Description  Parses the 80 bytes a nonce account holds. The stored nonce is what a transaction may carry in place of a recent blockhash so that it never expires, which is the opposite of an EVM nonce: there a per-account counter prevents replay, here expiry is what is being removed. An account sized by create-account but never initialized is a normal intermediate state and reports initialized=false with all-zero fields.
+// @Tags         rpc
+// @Accept       json
+// @Produce      json
+// @Param        body  body      NonceRequest  true  "Nonce account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  NonceResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/rpc/nonce [post]
+func (h *RPCHandler) Nonce(w http.ResponseWriter, r *http.Request) {
+	req := new(NonceRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.ToPublicKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if info == nil {
+		handler.WriteOK(w, &NonceResponse{PublicKey: req.ToPublicKey().Base58()})
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"public_key: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.ToPublicKey(), info.Owner))
+		return
+	}
+	if info.Space != core.NonceAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"public_key: %s is %d bytes, and a nonce account is %d",
+			req.ToPublicKey(), info.Space, core.NonceAccountSpace))
+		return
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+		return
+	}
+
+	nonce, err := core.DeserializeNonceAccount(data)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewNonceResponse(req.ToPublicKey(), nonce))
 }
 
 // Slot godoc

@@ -542,6 +542,63 @@
                 }
             }
         },
+        "/svm/rpc/nonce": {
+            "post": {
+                "description": "Parses the 80 bytes a nonce account holds. The stored nonce is what a transaction may carry in place of a recent blockhash so that it never expires, which is the opposite of an EVM nonce: there a per-account counter prevents replay, here expiry is what is being removed. An account sized by create-account but never initialized is a normal intermediate state and reports initialized=false with all-zero fields.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "rpc"
+                ],
+                "summary": "Read a durable nonce account",
+                "parameters": [
+                    {
+                        "description": "Nonce account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.NonceRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.NonceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/rpc/rent-exemption/mint": {
             "post": {
                 "produces": [
@@ -2165,6 +2222,44 @@
             "properties": {
                 "health": {
                     "type": "string"
+                }
+            }
+        },
+        "misc.NonceRequest": {
+            "type": "object",
+            "properties": {
+                "public_key": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "misc.NonceResponse": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "type": "string"
+                },
+                "exists": {
+                    "type": "boolean"
+                },
+                "initialized": {
+                    "type": "boolean"
+                },
+                "lamports_per_signature": {
+                    "type": "string"
+                },
+                "nonce": {
+                    "type": "string"
+                },
+                "public_key": {
+                    "type": "string"
+                },
+                "state": {
+                    "type": "integer"
+                },
+                "version": {
+                    "type": "integer"
                 }
             }
         },

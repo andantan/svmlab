@@ -72,6 +72,7 @@ func run() error {
 		r.Post("/balance", rpcHandler.Balance)
 		r.Post("/account", rpcHandler.Account)
 		r.Post("/account/owner", rpcHandler.AccountOwner)
+		r.Post("/nonce", rpcHandler.Nonce)
 		r.Route("/rent-exemption", func(r chi.Router) {
 			r.Post("/system", rpcHandler.RentExemptionSystem)
 			r.Post("/mint", rpcHandler.RentExemptionMint)

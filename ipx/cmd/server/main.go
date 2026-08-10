@@ -163,6 +163,9 @@ func run() error {
 			r.Post("/create-mint", token.CreateMint)
 			r.Post("/create-account", token.CreateAccount)
 			r.Post("/mint-to-checked", token.MintToChecked)
+			r.Post("/transfer-checked", token.TransferChecked)
+			r.Post("/burn-checked", token.BurnChecked)
+			r.Post("/close-account", token.CloseAccount)
 		})
 	})
 

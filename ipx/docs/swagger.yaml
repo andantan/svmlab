@@ -545,6 +545,137 @@ definitions:
         example: "11111111111111111111111111111111"
         type: string
     type: object
+  v2.BurnCheckedRequest:
+    properties:
+      account:
+        example: ""
+        type: string
+      amount:
+        example: "1000"
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      decimals:
+        example: 6
+        type: integer
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.BurnCheckedResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      authority:
+        type: string
+      decimals:
+        type: integer
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.CloseAccountRequest:
+    properties:
+      account:
+        example: ""
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      destination:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.CloseAccountResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      destination:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      reclaimed_lamports:
+        description: |-
+          ReclaimedLamports is the account's balance at the moment it was read,
+          which is what closing hands to destination. It can change between this
+          response and the transaction landing if anything else touches the
+          account first.
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.CreateAccountRequest:
     properties:
       account:
@@ -1915,6 +2046,78 @@ definitions:
         items:
           type: string
         type: array
+      transaction:
+        type: string
+    type: object
+  v2.TransferCheckedRequest:
+    properties:
+      amount:
+        example: "250000"
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      decimals:
+        example: 6
+        type: integer
+      destination:
+        example: ""
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      source:
+        example: ""
+        type: string
+    type: object
+  v2.TransferCheckedResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      authority:
+        type: string
+      decimals:
+        type: integer
+      destination:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      source:
+        type: string
       transaction:
         type: string
     type: object
@@ -4020,6 +4223,90 @@ paths:
       summary: Build a native SOL transfer of the sender's entire balance
       tags:
       - transaction
+  /svm/v2/transaction/token/burn-checked:
+    post:
+      consumes:
+      - application/json
+      description: Reduces the mint's total supply and the account's balance together.
+        decimals is checked against the mint rather than filled in from it, catching
+        a client that formatted amount against the wrong decimals as a 400 instead
+        of an on-chain failure. authority must be the account's owner, or its delegate
+        for no more than the delegated amount — the mint's own authority has no say
+        over what a holder chooses to burn.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Burn parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.BurnCheckedRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.BurnCheckedResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Destroy supply held by a token account
+      tags:
+      - transaction
+  /svm/v2/transaction/token/close-account:
+    post:
+      consumes:
+      - application/json
+      description: The account must already hold no tokens; the balance is not swept,
+        it has to be zero. A wrapped SOL account is the exception, since its lamports
+        are its balance, and closing it is how SOL is unwrapped. authority must be
+        the account's owner or its close authority. The reclaimed lamports go to destination.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Close parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.CloseAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.CloseAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Close a token account and reclaim its rent
+      tags:
+      - transaction
   /svm/v2/transaction/token/create-account:
     post:
       consumes:
@@ -4139,6 +4426,48 @@ paths:
               type: string
             type: object
       summary: Mint new supply into a token account
+      tags:
+      - transaction
+  /svm/v2/transaction/token/transfer-checked:
+    post:
+      consumes:
+      - application/json
+      description: Transfers between token accounts, never to a wallet address directly.
+        decimals is checked against the mint rather than filled in from it, catching
+        a client that formatted amount against the wrong decimals as a 400 instead
+        of an on-chain failure. authority must be the source account's owner, or its
+        delegate for no more than the delegated amount.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Transfer parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.TransferCheckedRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.TransferCheckedResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Move a balance between two token accounts of the same mint
       tags:
       - transaction
 swagger: "2.0"

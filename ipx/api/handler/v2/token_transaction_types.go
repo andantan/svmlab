@@ -537,3 +537,525 @@ func NewMintToCheckedResponse(
 		Fee:             strconv.FormatUint(fee, 10),
 	}
 }
+
+// TransferCheckedRequest moves a balance between two token accounts of the
+// same mint.
+//
+// It never sends to a wallet address directly: a transfer moves between
+// *token accounts*, and a caller with only a wallet address needs the
+// recipient's associated token account created first.
+type TransferCheckedRequest struct {
+	Source      string `json:"source" example:""`
+	Mint        string `json:"mint" example:""`
+	Destination string `json:"destination" example:""`
+	Authority   string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Amount      string `json:"amount" example:"250000"`
+	Decimals    uint8  `json:"decimals" example:"6"`
+	FeePayer    string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program     string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	source          *types.PublicKey
+	mint            *types.PublicKey
+	destination     *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+	amount          uint64
+}
+
+func (r *TransferCheckedRequest) ValidateRequest() error {
+	var err error
+	if r.source, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Source)); err != nil {
+		return errors.New("source: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.destination, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Destination)); err != nil {
+		return errors.New("destination: " + err.Error())
+	}
+	if r.source.Equal(r.destination) {
+		return errors.New("source and destination are the same account")
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: must be a decimal base-unit count")
+	}
+	if r.amount == 0 {
+		return errors.New("amount: must be greater than zero")
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *TransferCheckedRequest) SourceKey() *types.PublicKey {
+	return r.source
+}
+
+func (r *TransferCheckedRequest) MintKey() *types.PublicKey {
+	return r.mint
+}
+
+func (r *TransferCheckedRequest) DestinationKey() *types.PublicKey {
+	return r.destination
+}
+
+func (r *TransferCheckedRequest) AuthorityKey() *types.PublicKey {
+	return r.authority
+}
+
+func (r *TransferCheckedRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *TransferCheckedRequest) NonceAccountKey() *types.PublicKey {
+	return r.nonceAccount
+}
+
+func (r *TransferCheckedRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+func (r *TransferCheckedRequest) ToAmount() uint64 {
+	return r.amount
+}
+
+func (r *TransferCheckedRequest) ToDecimals() uint8 {
+	return r.Decimals
+}
+
+func (r *TransferCheckedRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+type TransferCheckedResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Source      string `json:"source"`
+	Mint        string `json:"mint"`
+	Destination string `json:"destination"`
+	Authority   string `json:"authority"`
+	Program     string `json:"program"`
+	Amount      string `json:"amount"`
+	Decimals    uint8  `json:"decimals"`
+	Fee         string `json:"fee"`
+}
+
+func NewTransferCheckedResponse(
+	tx *types.Transaction, raw, message []byte,
+	source, mint, destination, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	amount uint64, decimals uint8, fee uint64,
+) *TransferCheckedResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &TransferCheckedResponse{
+		Transaction:     base64.StdEncoding.EncodeToString(raw),
+		Message:         base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Source:          source.Base58(),
+		Mint:            mint.Base58(),
+		Destination:     destination.Base58(),
+		Authority:       authority.Base58(),
+		Program:         tokenProgram.Base58(),
+		Amount:          strconv.FormatUint(amount, 10),
+		Decimals:        decimals,
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// BurnCheckedRequest destroys supply held by an account.
+//
+// The authority is the account's owner or delegate, not the mint's authority:
+// burning spends a balance, so it is the holder's to authorize.
+type BurnCheckedRequest struct {
+	Account   string `json:"account" example:""`
+	Mint      string `json:"mint" example:""`
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Amount    string `json:"amount" example:"1000"`
+	Decimals  uint8  `json:"decimals" example:"6"`
+	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	account         *types.PublicKey
+	mint            *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+	amount          uint64
+}
+
+func (r *BurnCheckedRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: must be a decimal base-unit count")
+	}
+	if r.amount == 0 {
+		return errors.New("amount: must be greater than zero")
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *BurnCheckedRequest) AccountKey() *types.PublicKey {
+	return r.account
+}
+
+func (r *BurnCheckedRequest) MintKey() *types.PublicKey {
+	return r.mint
+}
+
+func (r *BurnCheckedRequest) AuthorityKey() *types.PublicKey {
+	return r.authority
+}
+
+func (r *BurnCheckedRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *BurnCheckedRequest) NonceAccountKey() *types.PublicKey {
+	return r.nonceAccount
+}
+
+func (r *BurnCheckedRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+func (r *BurnCheckedRequest) ToAmount() uint64 {
+	return r.amount
+}
+
+func (r *BurnCheckedRequest) ToDecimals() uint8 {
+	return r.Decimals
+}
+
+func (r *BurnCheckedRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+type BurnCheckedResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account   string `json:"account"`
+	Mint      string `json:"mint"`
+	Authority string `json:"authority"`
+	Program   string `json:"program"`
+	Amount    string `json:"amount"`
+	Decimals  uint8  `json:"decimals"`
+	Fee       string `json:"fee"`
+}
+
+func NewBurnCheckedResponse(
+	tx *types.Transaction, raw, message []byte,
+	account, mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	amount uint64, decimals uint8, fee uint64,
+) *BurnCheckedResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &BurnCheckedResponse{
+		Transaction:     base64.StdEncoding.EncodeToString(raw),
+		Message:         base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Mint:            mint.Base58(),
+		Authority:       authority.Base58(),
+		Program:         tokenProgram.Base58(),
+		Amount:          strconv.FormatUint(amount, 10),
+		Decimals:        decimals,
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// CloseAccountRequest reclaims a token account's rent.
+//
+// The account has to hold no tokens first; the balance is not swept, it has to
+// already be zero. A wrapped SOL account is the exception, since its balance
+// is its lamports rather than a separate token amount, and closing it is how
+// SOL is unwrapped. There is no checked variant, since there is no amount to
+// check.
+type CloseAccountRequest struct {
+	Account     string `json:"account" example:""`
+	Destination string `json:"destination" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Authority   string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	FeePayer    string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program     string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	account         *types.PublicKey
+	destination     *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *CloseAccountRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.destination, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Destination)); err != nil {
+		return errors.New("destination: " + err.Error())
+	}
+	if r.account.Equal(r.destination) {
+		return errors.New("account and destination are the same account")
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *CloseAccountRequest) AccountKey() *types.PublicKey {
+	return r.account
+}
+
+func (r *CloseAccountRequest) DestinationKey() *types.PublicKey {
+	return r.destination
+}
+
+func (r *CloseAccountRequest) AuthorityKey() *types.PublicKey {
+	return r.authority
+}
+
+func (r *CloseAccountRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *CloseAccountRequest) NonceAccountKey() *types.PublicKey {
+	return r.nonceAccount
+}
+
+func (r *CloseAccountRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+func (r *CloseAccountRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+type CloseAccountResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account     string `json:"account"`
+	Destination string `json:"destination"`
+	Authority   string `json:"authority"`
+	Program     string `json:"program"`
+
+	// ReclaimedLamports is the account's balance at the moment it was read,
+	// which is what closing hands to destination. It can change between this
+	// response and the transaction landing if anything else touches the
+	// account first.
+	ReclaimedLamports string `json:"reclaimed_lamports"`
+	Fee               string `json:"fee"`
+}
+
+func NewCloseAccountResponse(
+	tx *types.Transaction, raw, message []byte,
+	account, destination, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	reclaimedLamports, fee uint64,
+) *CloseAccountResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &CloseAccountResponse{
+		Transaction:       base64.StdEncoding.EncodeToString(raw),
+		Message:           base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash:   tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:       keys,
+		Signers:           signers,
+		NonceAuthority:    nonceAuth,
+		Account:           account.Base58(),
+		Destination:       destination.Base58(),
+		Authority:         authority.Base58(),
+		Program:           tokenProgram.Base58(),
+		ReclaimedLamports: strconv.FormatUint(reclaimedLamports, 10),
+		Fee:               strconv.FormatUint(fee, 10),
+	}
+}

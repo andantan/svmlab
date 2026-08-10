@@ -273,6 +273,18 @@ Dependencies: complete classic Token model, ATA, extension-aware parsers.
 This is ecosystem-program work rather than Token Program work. It gives a mint
 human-facing metadata and NFT-specific state.
 
+Staying here rather than moving up next to ATA was reconsidered once and left
+alone. The pull for moving it up is real: a mint has no name or symbol until
+this exists, so it is the one gap in the lifecycle a wallet or explorer
+actually shows. The case for leaving it where it is won: Metaplex Token
+Metadata is a different program with its own account layout and its own
+serialization, Borsh rather than this project's short-vec bincode, so it is a
+second thing to learn rather than another instruction on a program already
+understood. Groups 5 and 6 — delegation, freeze, and the compatibility
+opcodes — are still the classic Token surface; finishing that before starting
+a new program's serialization is the more valuable ordering, even though it
+delays the part a screenshot would show off first.
+
 Candidate APIs:
 
 ~~~

@@ -157,6 +157,13 @@ func run() error {
 			r.Post("/nonce/authorize", tx.SystemNonceAuthorize)
 			r.Post("/nonce/upgrade", tx.SystemNonceUpgrade)
 		})
+
+		token := v2.NewTokenTransactionHandler(cfg)
+		r.Route("/transaction/token", func(r chi.Router) {
+			r.Post("/create-mint", token.CreateMint)
+			r.Post("/create-account", token.CreateAccount)
+			r.Post("/mint-to-checked", token.MintToChecked)
+		})
 	})
 
 	fmt.Printf("listening on %s\n", cfg.ServerAddr)

@@ -268,7 +268,7 @@ Done:
 
 This group has nothing pending.
 
-### 3. First usable token lifecycle — builders done, endpoints pending
+### 3. First usable token lifecycle — done
 
 ```text
 token/create-mint                 (CreateAccount + InitializeMint2)
@@ -279,32 +279,54 @@ token/burn-checked
 token/close-account
 ```
 
-Every builder these need is in `core` already. `TransferChecked`,
+All six are live under `/svm/v2/transaction/token/`. `TransferChecked`,
 `CloseAccount`, and `InitializeAccount3` were rebuilt from fifty instructions
 taken off mainnet and match byte for byte with the account order included;
 `MintToChecked` and `BurnChecked` have not been seen on chain yet, since the
 sampled blocks held no mint or burn, so their account order is read from the
-spec rather than confirmed. What is left is the HTTP surface: request and
-response types, validation, the rent and balance reads, and the nonce block.
+spec rather than confirmed — worth a live send before leaning on it.
 
 The holder accounts here are ordinary keypairs, which is why this step could
 come before ATA: the whole lifecycle can be walked end to end without a derived
 address anywhere in it. That was the argument for ordering it first while PDA
-was still unwritten. PDA is written now, so the ordering against step 4 is open
-again — see the note there.
+was still unwritten. PDA is written now, and ATA is next — see the note there.
 
-Every one of these takes an optional `token_program`, defaulting to classic.
-It is the axis that appeared once Token-2022 became an instance rather than a
-follow-up, and it belongs in the request rather than the config because a mint
-belongs to exactly one program and its runtime owner says which.
+Every one of these takes a required `program` field naming the account to
+send the instructions to (classic Token or Token-2022), not defaulted: a mint
+belongs to exactly one of the two forever, and a default would make picking
+wrong silent. It is an address rather than an enum of names because that is
+what actually selects the program on chain — a third Token implementation
+would need no code change here to be reachable.
 
 `decimals` is taken from the request and checked against the mint rather than
-filled in from it. Reading the mint to supply the value would defeat what the
-checked variants exist for, which is catching a client that formatted an amount
-against the wrong decimals; comparing instead reports that as a 400 rather than
-as an on-chain failure.
+filled in from it, on `mint-to-checked`, `transfer-checked`, and
+`burn-checked`. Reading the mint to supply the value would defeat what the
+checked variants exist for; comparing instead reports a wrong-decimals amount
+as a 400 rather than as an on-chain failure.
 
-Devnet walkthrough:
+Authorization splits along two different axes depending on what moves.
+`mint-to-checked` checks the mint's own `mint_authority`, since minting
+creates supply and only the mint can allow that. `transfer-checked` and
+`burn-checked` instead check the account's `owner`, or its `delegate` for no
+more than the delegated amount, since both spend a balance that belongs to
+whoever holds it. `close-account` splits again: `owner` or `close_authority`,
+never a delegate, because delegation covers spending a balance and closing
+isn't spending one.
+
+Every account read for one of these six is also checked against the
+`program` field before it is decoded — the mint and, where applicable, the
+token account's own owning program must equal what the request named, not
+merely decode successfully — since a Token account decodes as a valid
+Token-2022 layout's prefix and the mismatch would otherwise surface as an
+on-chain `IncorrectProgramId` instead of a 400 with a reason.
+
+`close-account`'s zero-balance rule carries one exception: a wrapped SOL
+account's balance is its lamports rather than a token amount, and closing it
+is how SOL is unwrapped, so `IsNative` skips the check rather than the
+account being treated as still holding value.
+
+Devnet walkthrough, exercised end to end including a durable nonce on
+`mint-to-checked` against Token-2022:
 
 ```text
 create mint (decimals 6)
@@ -328,15 +350,13 @@ This is the ATA program rather than the Token program, so it needs its own
 `core.AssociatedToken` namespace on `AssociatedTokenProgramID`, and it is the
 first consumer of `FindProgramAddress`.
 
-It is smaller now than when it was placed here. PDA is done, and the ATA
-instructions themselves are thin: no data at all for the plain create, one byte
-for the idempotent one. So the case for running it before step 3 has grown —
-`create-ata` plus `transfer-checked` is the flow anyone actually uses, and
-building `create-account` first means building the rarely used sibling first.
-The case against is unchanged: keypair accounts keep step 3 verifiable without
-a derivation in the loop. Decide when step 3's request shapes are settled; the
-two orders differ by which endpoint gets exercised first, not by what has to be
-written.
+It is smaller now than when it was placed here. PDA is done, step 3 is done,
+and the ATA instructions themselves are thin: no data at all for the plain
+create, one byte for the idempotent one. Step 3's request shapes are settled
+now, so the open question from when this section was written — whether to
+run ATA before or after the keypair lifecycle — is moot; both exist. What is
+left is only what ATA itself needs: the `core.AssociatedToken` namespace, the
+create and idempotent-create builders, and the three endpoints.
 
 The derived address is already known to be right. The same derivation matched
 1655 live associated accounts in step 0, so what remains to confirm is the

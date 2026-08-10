@@ -12,16 +12,17 @@ account model -> deterministic addresses -> assets -> application state
 
 ## Current Status
 
-Core and endpoints are tracked apart, because they have come apart: Token's
-reads are live while its six transaction builders exist only in `core`.
+Core and endpoints were tracked apart while Token's six transaction builders
+existed only in `core`; that gap is closed now that the first lifecycle has
+endpoints on all six.
 
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing       |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi and batch transfer |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts                      |
-| SPL Token classic         | partial | reads     | 3 layouts, 25 opcodes, 6 builders, 2 atomic creates; TOKEN_API_PROPOSAL.md  |
-| Associated Token Account  | none    | none      | unblocked now that PDA is done                                              |
+| SPL Token classic         | done    | lifecycle | 3 layouts, 25 opcodes, first lifecycle live; TOKEN_API_PROPOSAL.md          |
+| Associated Token Account  | none    | none      | unblocked now that PDA is done, next up                                    |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
 Token-2022 left the "later" list for its classic surface. `core.Token2022` is an
@@ -33,8 +34,8 @@ either program; only the extension-specific part is still its own group.
 ~~~
 System (done)
 -> PDA derivation (done)
--> SPL Token classic        <- here: reads done, transaction builders next
--> Associated Token Account
+-> SPL Token classic first lifecycle (done)
+-> Associated Token Account  <- here
 -> Vault custom program
 -> Compute Budget
 -> Address Lookup Table
@@ -45,11 +46,13 @@ System (done)
 ~~~
 
 ATA and Token swapped places against the original order. Token's first
-lifecycle works on keypair token accounts, so it needed nothing from ATA, and
-running it first keeps the endpoints verifiable without a derivation in the
-loop. The counter-argument is that `create-ata` plus `transfer-checked` is the
-flow anyone actually uses; TOKEN_API_PROPOSAL.md step 4 carries the open
-decision.
+lifecycle worked on keypair token accounts, so it needed nothing from ATA, and
+running it first kept the endpoints verifiable without a derivation in the
+loop. That lifecycle is done now — create-mint, create-account,
+mint-to-checked, transfer-checked, burn-checked, and close-account are all
+live under `/svm/v2/transaction/token/` — so ATA is next, and it is smaller
+than it looked when this order was chosen: PDA is done and the ATA
+instructions carry no data at all in their plain form.
 
 ## Group Catalogue
 
@@ -116,19 +119,26 @@ The original Token Program has fixed 82-byte mint and 165-byte account layouts.
 It covers minting, holder accounts, transfer, delegation, burning, authority
 changes, freezing, multisig, wrapped SOL, and return-data utilities.
 
-Core is partly done: the three layouts parse, all 25 classic opcodes are
-declared, and six builders plus two atomic create pairs exist. The reads are
-live at `/svm/token/mint`, `/svm/token/account`, and `/svm/account/tokens`; no
-transaction endpoint exists. Detailed instruction coverage and implementation
-ordering:
+Core and the first lifecycle are done: the three layouts parse, all 25
+classic opcodes are declared, and create-mint, create-account,
+mint-to-checked, transfer-checked, burn-checked, and close-account are live
+under `/svm/v2/transaction/token/`, alongside the reads at `/svm/token/mint`,
+`/svm/token/account`, and `/svm/account/tokens`. Every one of the six checks
+what a live cluster would reject before building the instruction — decimals
+against the mint, an account's mint against the request's, frozen state,
+authority against owner or delegate (transfer, burn) or against the mint's
+own authority (mint-to), and close authority as its own separate axis — so a
+mismatch comes back as a 400 with the reason instead of a signed transaction
+failing on chain. Detailed instruction coverage and what is still open
+(delegation, admin, compatibility opcodes):
 
 ~~~
 TOKEN_API_PROPOSAL.md
 ~~~
 
 Dependencies: PDA derivation, which is done. ATA is no longer a dependency —
-the first lifecycle works on keypair token accounts, so the two groups can run
-in either order.
+the first lifecycle worked on keypair token accounts, so the two groups could
+run in either order, and Token went first.
 
 ### 4. Vault Custom Program
 
@@ -438,11 +448,13 @@ PDA derivation (done) -> SPL Token classic -> ATA
 Outcome: mint a token, create holder accounts, transfer safely, and inspect
 resulting state.
 
-Where it stands: PDA is done, and so are the three token reads —
-`/svm/token/mint`, `/svm/token/account`, and `/svm/account/tokens`. Token's six
-lifecycle builders exist in `core` with no endpoint on them, so the next
-concrete work is those six under `/svm/v2/transaction/token/`. Nothing they
-need is missing.
+Where it stands: PDA and the three token reads (`/svm/token/mint`,
+`/svm/token/account`, `/svm/account/tokens`) are done, and so is the first
+lifecycle — create-mint, create-account, mint-to-checked, transfer-checked,
+burn-checked, and close-account are all live under
+`/svm/v2/transaction/token/`. The milestone's remaining piece is ATA:
+`create-ata`, `create-ata-idempotent`, and `transfer-to-wallet`, per
+TOKEN_API_PROPOSAL.md step 4.
 
 ### Milestone B: Program-Controlled Assets
 

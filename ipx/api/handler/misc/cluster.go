@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/andantan/svmlab/api/handler"
+	"github.com/andantan/svmlab/core/types"
 	"github.com/andantan/svmlab/internal/rpc"
 )
 
@@ -142,9 +143,53 @@ func (h *ClusterHandler) BlockHash(w http.ResponseWriter, r *http.Request) {
 	handler.WriteOK(w, NewBlockhashResponse(hash.Base58(), lastValid))
 }
 
+// RefreshBlockhash godoc
+// @Summary      Replace an unsigned transaction's recent blockhash
+// @Description  Swaps in a fresh blockhash at finalized commitment, so a transaction built too long ago can still be signed and sent instead of failing "blockhash not found". transaction is base64. The transaction must be unsigned — refreshing after signing would leave every signature invalid without anything here able to tell, so it is refused rather than silently returned broken.
+// @Tags         cluster
+// @Accept       json
+// @Produce      json
+// @Param        body  body      RefreshBlockhashRequest  true  "Transaction"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  RefreshBlockhashResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/cluster/transaction/refresh-blockhash [post]
+func (h *ClusterHandler) RefreshBlockhash(w http.ResponseWriter, r *http.Request) {
+	req := new(RefreshBlockhashRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	hash, lastValid, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	raw, err := types.RefreshTransactionBlockhash(req.ToRaw(), hash)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewRefreshBlockhashResponse(raw, hash.Base58(), lastValid))
+}
+
 // SendTransaction godoc
 // @Summary      Broadcast a signed transaction
-// @Description  Submits a fully signed transaction to the cluster and returns its signature. encoding must name how transaction is encoded, "base64" or "base58". Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. Acceptance is not execution; the transaction still has to land in a block.
+// @Description  Submits a fully signed transaction to the cluster and returns its signature. transaction is base64. Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. Acceptance is not execution; the transaction still has to land in a block.
 // @Tags         cluster
 // @Accept       json
 // @Produce      json
@@ -186,7 +231,7 @@ func (h *ClusterHandler) SendTransaction(w http.ResponseWriter, r *http.Request)
 
 // SimulateTransaction godoc
 // @Summary      Execute a transaction without submitting it
-// @Description  Runs a fully signed transaction against the node's state without broadcasting it, and returns the program logs either way. encoding must name how transaction is encoded, "base64" or "base58". Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. The logs are the only account of why execution stopped; nothing here corresponds to a revert string.
+// @Description  Runs a fully signed transaction against the node's state without broadcasting it, and returns the program logs either way. transaction is base64. Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. The logs are the only account of why execution stopped; nothing here corresponds to a revert string.
 // @Tags         cluster
 // @Accept       json
 // @Produce      json

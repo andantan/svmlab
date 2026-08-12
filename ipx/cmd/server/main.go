@@ -77,6 +77,7 @@ func run() error {
 		r.Post("/health", clusterHandler.Health)
 		r.Post("/slot", clusterHandler.Slot)
 		r.Post("/transaction/fee", clusterHandler.Fee)
+		r.Post("/transaction/refresh-blockhash", clusterHandler.RefreshBlockhash)
 		r.Post("/transaction/send", clusterHandler.SendTransaction)
 		r.Post("/transaction/simulate", clusterHandler.SimulateTransaction)
 		r.Post("/transaction/status", clusterHandler.SignatureStatus)
@@ -123,6 +124,8 @@ func run() error {
 
 		tool := misc.NewToolHandler()
 		r.Post("/generate/keypair", tool.GenerateKeypair)
+		r.Post("/convert/base58264", tool.ConvertBase58To64)
+		r.Post("/convert/base64258", tool.ConvertBase64To58)
 	})
 
 	r.Route("/svm/v1", func(r chi.Router) {

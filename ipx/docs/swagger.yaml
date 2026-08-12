@@ -156,6 +156,26 @@ definitions:
       last_valid_block_height:
         type: integer
     type: object
+  misc.ConvertBase58To64Request:
+    properties:
+      value:
+        type: string
+    type: object
+  misc.ConvertBase58To64Response:
+    properties:
+      base64:
+        type: string
+    type: object
+  misc.ConvertBase64To58Request:
+    properties:
+      value:
+        type: string
+    type: object
+  misc.ConvertBase64To58Response:
+    properties:
+      base58:
+        type: string
+    type: object
   misc.FeeRequest:
     properties:
       message:
@@ -197,6 +217,20 @@ definitions:
         example: getEpochInfo
         type: string
       params: {}
+    type: object
+  misc.RefreshBlockhashRequest:
+    properties:
+      transaction:
+        type: string
+    type: object
+  misc.RefreshBlockhashResponse:
+    properties:
+      blockhash:
+        type: string
+      last_valid_block_height:
+        type: integer
+      transaction:
+        type: string
     type: object
   misc.RentExemptionMintResponse:
     properties:
@@ -286,9 +320,6 @@ definitions:
     type: object
   misc.SendTransactionRequest:
     properties:
-      encoding:
-        example: base64
-        type: string
       transaction:
         type: string
     type: object
@@ -314,14 +345,6 @@ definitions:
     type: object
   misc.SignTransactionRequest:
     properties:
-      encoding:
-        description: |-
-          Encoding is required rather than defaulted or detected, since base64
-          and base58 partly overlap in their alphabets and a wrong guess would
-          decode to different bytes than the caller sent rather than failing
-          outright.
-        example: base64
-        type: string
       private_keys:
         items:
           type: string
@@ -372,9 +395,6 @@ definitions:
     type: object
   misc.SimulateTransactionRequest:
     properties:
-      encoding:
-        example: base64
-        type: string
       transaction:
         type: string
     type: object
@@ -2773,15 +2793,57 @@ paths:
       summary: Price a message
       tags:
       - cluster
+  /svm/cluster/transaction/refresh-blockhash:
+    post:
+      consumes:
+      - application/json
+      description: Swaps in a fresh blockhash at finalized commitment, so a transaction
+        built too long ago can still be signed and sent instead of failing "blockhash
+        not found". transaction is base64. The transaction must be unsigned — refreshing
+        after signing would leave every signature invalid without anything here able
+        to tell, so it is refused rather than silently returned broken.
+      parameters:
+      - description: Transaction
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.RefreshBlockhashRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.RefreshBlockhashResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Replace an unsigned transaction's recent blockhash
+      tags:
+      - cluster
   /svm/cluster/transaction/send:
     post:
       consumes:
       - application/json
       description: Submits a fully signed transaction to the cluster and returns its
-        signature. encoding must name how transaction is encoded, "base64" or "base58".
-        Never parses the message inside, only checks that every signature slot is
-        filled, so a versioned (v0) transaction is accepted the same as a legacy one.
-        Acceptance is not execution; the transaction still has to land in a block.
+        signature. transaction is base64. Never parses the message inside, only checks
+        that every signature slot is filled, so a versioned (v0) transaction is accepted
+        the same as a legacy one. Acceptance is not execution; the transaction still
+        has to land in a block.
       parameters:
       - description: Signed transaction
         in: body
@@ -2820,11 +2882,11 @@ paths:
       consumes:
       - application/json
       description: Runs a fully signed transaction against the node's state without
-        broadcasting it, and returns the program logs either way. encoding must name
-        how transaction is encoded, "base64" or "base58". Never parses the message
-        inside, only checks that every signature slot is filled, so a versioned (v0)
-        transaction is accepted the same as a legacy one. The logs are the only account
-        of why execution stopped; nothing here corresponds to a revert string.
+        broadcasting it, and returns the program logs either way. transaction is base64.
+        Never parses the message inside, only checks that every signature slot is
+        filled, so a versioned (v0) transaction is accepted the same as a legacy one.
+        The logs are the only account of why execution stopped; nothing here corresponds
+        to a revert string.
       parameters:
       - description: Transaction
         in: body
@@ -3313,10 +3375,8 @@ paths:
       - application/json
       description: 'Signs the message inside a serialized transaction and writes each
         signature into its signer''s slot, found from the key rather than from the
-        order given. The message is never rebuilt, so the bytes a caller signs are
-        exactly the bytes they were given. encoding must name how transaction is encoded,
-        "base64" or "base58", since the two alphabets partly overlap and a wrong guess
-        would decode to the wrong bytes rather than fail. A versioned (v0) message
+        order given. transaction is base64. The message is never rebuilt, so the bytes
+        a caller signs are exactly the bytes they were given. A versioned (v0) message
         is accepted and signed without being parsed: a signer must be one of its leading
         static keys, since an address lookup table entry can never sign, so locating
         a slot needs no address table lookups. The response is thinner for one, since
@@ -3487,6 +3547,86 @@ paths:
       summary: Read an SPL Token mint
       tags:
       - token
+  /svm/tool/convert/base58264:
+    post:
+      consumes:
+      - application/json
+      description: Decodes value as base58 and re-encodes the same bytes as base64.
+        Works on any base58 value — a public key, a signature, a hash — since it never
+        interprets what the bytes mean.
+      parameters:
+      - description: Value
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ConvertBase58To64Request'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.ConvertBase58To64Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Convert a base58 string to base64
+      tags:
+      - tool
+  /svm/tool/convert/base64258:
+    post:
+      consumes:
+      - application/json
+      description: Decodes value as base64 and re-encodes the same bytes as base58.
+        Works on any base64 value — a transaction, a message, arbitrary bytes — since
+        it never interprets what the bytes mean.
+      parameters:
+      - description: Value
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ConvertBase64To58Request'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.ConvertBase64To58Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Convert a base64 string to base58
+      tags:
+      - tool
   /svm/tool/generate/keypair:
     post:
       description: 'Returns a new key pair in the base58 form config.yaml expects,

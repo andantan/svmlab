@@ -585,9 +585,66 @@
                 }
             }
         },
+        "/svm/cluster/transaction/refresh-blockhash": {
+            "post": {
+                "description": "Swaps in a fresh blockhash at finalized commitment, so a transaction built too long ago can still be signed and sent instead of failing \"blockhash not found\". transaction is base64. The transaction must be unsigned — refreshing after signing would leave every signature invalid without anything here able to tell, so it is refused rather than silently returned broken.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Replace an unsigned transaction's recent blockhash",
+                "parameters": [
+                    {
+                        "description": "Transaction",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.RefreshBlockhashRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.RefreshBlockhashResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/cluster/transaction/send": {
             "post": {
-                "description": "Submits a fully signed transaction to the cluster and returns its signature. encoding must name how transaction is encoded, \"base64\" or \"base58\". Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. Acceptance is not execution; the transaction still has to land in a block.",
+                "description": "Submits a fully signed transaction to the cluster and returns its signature. transaction is base64. Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. Acceptance is not execution; the transaction still has to land in a block.",
                 "consumes": [
                     "application/json"
                 ],
@@ -644,7 +701,7 @@
         },
         "/svm/cluster/transaction/simulate": {
             "post": {
-                "description": "Runs a fully signed transaction against the node's state without broadcasting it, and returns the program logs either way. encoding must name how transaction is encoded, \"base64\" or \"base58\". Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. The logs are the only account of why execution stopped; nothing here corresponds to a revert string.",
+                "description": "Runs a fully signed transaction against the node's state without broadcasting it, and returns the program logs either way. transaction is base64. Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. The logs are the only account of why execution stopped; nothing here corresponds to a revert string.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1355,7 +1412,7 @@
         },
         "/svm/sign/transaction": {
             "post": {
-                "description": "Signs the message inside a serialized transaction and writes each signature into its signer's slot, found from the key rather than from the order given. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. encoding must name how transaction is encoded, \"base64\" or \"base58\", since the two alphabets partly overlap and a wrong guess would decode to the wrong bytes rather than fail. A versioned (v0) message is accepted and signed without being parsed: a signer must be one of its leading static keys, since an address lookup table entry can never sign, so locating a slot needs no address table lookups. The response is thinner for one, since nothing here reads what the transaction does. public_keys are resolved from config.yaml and private_keys carry the secret directly, for a signer such as a newly created account that is not registered; the two may be mixed in one call. Keys may also be named across several calls, so co-signers can complete a transaction one at a time.",
+                "description": "Signs the message inside a serialized transaction and writes each signature into its signer's slot, found from the key rather than from the order given. transaction is base64. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. A versioned (v0) message is accepted and signed without being parsed: a signer must be one of its leading static keys, since an address lookup table entry can never sign, so locating a slot needs no address table lookups. The response is thinner for one, since nothing here reads what the transaction does. public_keys are resolved from config.yaml and private_keys carry the secret directly, for a signer such as a newly created account that is not registered; the two may be mixed in one call. Keys may also be named across several calls, so co-signers can complete a transaction one at a time.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1567,6 +1624,120 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/token.MintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/tool/convert/base58264": {
+            "post": {
+                "description": "Decodes value as base58 and re-encodes the same bytes as base64. Works on any base58 value — a public key, a signature, a hash — since it never interprets what the bytes mean.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool"
+                ],
+                "summary": "Convert a base58 string to base64",
+                "parameters": [
+                    {
+                        "description": "Value",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ConvertBase58To64Request"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.ConvertBase58To64Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/tool/convert/base64258": {
+            "post": {
+                "description": "Decodes value as base64 and re-encodes the same bytes as base58. Works on any base64 value — a transaction, a message, arbitrary bytes — since it never interprets what the bytes mean.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool"
+                ],
+                "summary": "Convert a base64 string to base58",
+                "parameters": [
+                    {
+                        "description": "Value",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ConvertBase64To58Request"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.ConvertBase64To58Response"
                         }
                     },
                     "400": {
@@ -3520,6 +3691,38 @@
                 }
             }
         },
+        "misc.ConvertBase58To64Request": {
+            "type": "object",
+            "properties": {
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.ConvertBase58To64Response": {
+            "type": "object",
+            "properties": {
+                "base64": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.ConvertBase64To58Request": {
+            "type": "object",
+            "properties": {
+                "value": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.ConvertBase64To58Response": {
+            "type": "object",
+            "properties": {
+                "base58": {
+                    "type": "string"
+                }
+            }
+        },
         "misc.FeeRequest": {
             "type": "object",
             "properties": {
@@ -3583,6 +3786,28 @@
                     "example": "getEpochInfo"
                 },
                 "params": {}
+            }
+        },
+        "misc.RefreshBlockhashRequest": {
+            "type": "object",
+            "properties": {
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.RefreshBlockhashResponse": {
+            "type": "object",
+            "properties": {
+                "blockhash": {
+                    "type": "string"
+                },
+                "last_valid_block_height": {
+                    "type": "integer"
+                },
+                "transaction": {
+                    "type": "string"
+                }
             }
         },
         "misc.RentExemptionMintResponse": {
@@ -3721,10 +3946,6 @@
         "misc.SendTransactionRequest": {
             "type": "object",
             "properties": {
-                "encoding": {
-                    "type": "string",
-                    "example": "base64"
-                },
                 "transaction": {
                     "type": "string"
                 }
@@ -3764,11 +3985,6 @@
         "misc.SignTransactionRequest": {
             "type": "object",
             "properties": {
-                "encoding": {
-                    "description": "Encoding is required rather than defaulted or detected, since base64\nand base58 partly overlap in their alphabets and a wrong guess would\ndecode to different bytes than the caller sent rather than failing\noutright.",
-                    "type": "string",
-                    "example": "base64"
-                },
                 "private_keys": {
                     "type": "array",
                     "items": {
@@ -3846,10 +4062,6 @@
         "misc.SimulateTransactionRequest": {
             "type": "object",
             "properties": {
-                "encoding": {
-                    "type": "string",
-                    "example": "base64"
-                },
                 "transaction": {
                     "type": "string"
                 }

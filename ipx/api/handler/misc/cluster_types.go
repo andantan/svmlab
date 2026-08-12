@@ -74,20 +74,58 @@ func NewBlockhashResponse(blockhash string, lastValidBlockHeight uint64) *Blockh
 	}
 }
 
-// SendTransactionRequest broadcasts a signed transaction.
+// RefreshBlockhashRequest carries an unsigned transaction whose recent
+// blockhash has expired, or is about to.
 //
-// Encoding is required rather than defaulted or detected, since base64 and
-// base58 partly overlap in their alphabets and a wrong guess would decode to
-// different bytes than the caller sent rather than failing outright.
+// The transaction must be unsigned. A signature commits to the exact message
+// bytes it was produced over, so this only makes sense before signing —
+// afterward, the blockhash has to be part of what gets re-signed, not
+// silently swapped underneath an existing signature.
+type RefreshBlockhashRequest struct {
+	Transaction string `json:"transaction"`
+
+	raw []byte
+}
+
+func (r *RefreshBlockhashRequest) ValidateRequest() error {
+	raw, err := codec.Base64.Decode(strings.TrimSpace(r.Transaction))
+	if err != nil {
+		return errors.New("transaction: invalid base64: " + err.Error())
+	}
+	r.raw = raw
+
+	return nil
+}
+
+func (r *RefreshBlockhashRequest) ToRaw() []byte {
+	return r.raw
+}
+
+// RefreshBlockhashResponse carries the transaction with its blockhash
+// replaced, plus the height that blockhash is valid through.
+type RefreshBlockhashResponse struct {
+	Transaction          string `json:"transaction"`
+	Blockhash            string `json:"blockhash"`
+	LastValidBlockHeight uint64 `json:"last_valid_block_height"`
+}
+
+func NewRefreshBlockhashResponse(raw []byte, blockhash string, lastValidBlockHeight uint64) *RefreshBlockhashResponse {
+	return &RefreshBlockhashResponse{
+		Transaction:          codec.Base64.Encode(raw),
+		Blockhash:            blockhash,
+		LastValidBlockHeight: lastValidBlockHeight,
+	}
+}
+
+// SendTransactionRequest broadcasts a signed transaction.
 type SendTransactionRequest struct {
 	Transaction string `json:"transaction"`
-	Encoding    string `json:"encoding" example:"base64"`
 
 	raw []byte
 }
 
 func (r *SendTransactionRequest) ValidateRequest() error {
-	raw, err := types.DecodeFullySignedTransaction(r.Encoding, r.Transaction)
+	raw, err := types.DecodeFullySignedTransaction(r.Transaction)
 	if err != nil {
 		return err
 	}
@@ -121,13 +159,12 @@ func NewSendTransactionResponse(sig *types.Signature) *SendTransactionResponse {
 // than after, which is most of the point of simulating first.
 type SimulateTransactionRequest struct {
 	Transaction string `json:"transaction"`
-	Encoding    string `json:"encoding" example:"base64"`
 
 	raw []byte
 }
 
 func (r *SimulateTransactionRequest) ValidateRequest() error {
-	raw, err := types.DecodeFullySignedTransaction(r.Encoding, r.Transaction)
+	raw, err := types.DecodeFullySignedTransaction(r.Transaction)
 	if err != nil {
 		return err
 	}

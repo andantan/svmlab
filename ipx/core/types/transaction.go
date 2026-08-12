@@ -209,15 +209,15 @@ func IsFullySignedTransaction(raw []byte) (bool, error) {
 	return true, nil
 }
 
-// DecodeFullySignedTransaction decodes an encoded transaction and checks
-// that every signature slot is filled, without parsing the message inside
-// it. It returns raw bytes rather than a *Transaction because that type
-// only models a legacy message — a versioned (v0) transaction has no
+// DecodeFullySignedTransaction decodes a base64 transaction and checks that
+// every signature slot is filled, without parsing the message inside it. It
+// returns raw bytes rather than a *Transaction because that type only
+// models a legacy message — a versioned (v0) transaction has no
 // Transaction to parse into, and this check has to pass for either.
-func DecodeFullySignedTransaction(encoding, transaction string) ([]byte, error) {
-	raw, err := codec.DecodeByName(encoding, transaction)
+func DecodeFullySignedTransaction(transaction string) ([]byte, error) {
+	raw, err := codec.Base64.Decode(strings.TrimSpace(transaction))
 	if err != nil {
-		return nil, fmt.Errorf("transaction: %w", err)
+		return nil, fmt.Errorf("transaction: invalid base64: %w", err)
 	}
 
 	fullySigned, err := IsFullySignedTransaction(raw)
@@ -229,6 +229,75 @@ func DecodeFullySignedTransaction(encoding, transaction string) ([]byte, error) 
 	}
 
 	return raw, nil
+}
+
+// RefreshTransactionBlockhash replaces an unsigned transaction's recent
+// blockhash in place, without parsing the message into a *Message.
+//
+// It works the same way SignRawTransaction locates a signer's slot: a
+// blockhash sits at a fixed offset past the header and the account key
+// list, whether the message is legacy or versioned, so finding it costs a
+// header and two short-vec counts, not the instructions or address lookup
+// tables that follow.
+//
+// The transaction must be unsigned. A signature commits to the exact
+// message bytes it was produced over, so changing the blockhash after
+// signing would leave every existing signature invalid without anything
+// here able to tell — better to refuse a transaction carrying any signature
+// than hand back one whose signatures silently stopped meaning anything.
+func RefreshTransactionBlockhash(raw []byte, blockhash *Hash) ([]byte, error) {
+	if blockhash.IsNil() {
+		return nil, fmt.Errorf("transaction: blockhash is nil")
+	}
+
+	n, sigPrefixSize, err := codec.Binary.ReadShortVecLen(raw)
+	if err != nil {
+		return nil, fmt.Errorf("transaction signatures: %w", err)
+	}
+	sigSectionEnd := sigPrefixSize + n*SignatureLength
+	if len(raw) < sigSectionEnd {
+		return nil, fmt.Errorf("transaction: %d bytes is too short for %d signatures", len(raw), n)
+	}
+	for i := range n {
+		start := sigPrefixSize + i*SignatureLength
+		for _, b := range raw[start : start+SignatureLength] {
+			if b != 0 {
+				return nil, fmt.Errorf("transaction: already signed, refreshing the blockhash would invalidate every signature")
+			}
+		}
+	}
+
+	versioned, err := IsVersionedTransaction(raw)
+	if err != nil {
+		return nil, fmt.Errorf("transaction: %w", err)
+	}
+
+	message := raw[sigSectionEnd:]
+	offset := 0
+	if versioned {
+		offset = 1
+	}
+	if len(message) < offset+MessageHeaderLength {
+		return nil, fmt.Errorf("transaction: message is too short for a header")
+	}
+
+	keyCount, keyCountSize, err := codec.Binary.ReadShortVecLen(message[offset+MessageHeaderLength:])
+	if err != nil {
+		return nil, fmt.Errorf("transaction: account key count: %w", err)
+	}
+
+	keysStart := offset + MessageHeaderLength + keyCountSize
+	keysEnd := keysStart + keyCount*PublicKeyLength
+	blockhashEnd := keysEnd + HashLength
+	if len(message) < blockhashEnd {
+		return nil, fmt.Errorf("transaction: message is too short for a blockhash")
+	}
+
+	out := make([]byte, len(raw))
+	copy(out, raw)
+	copy(out[sigSectionEnd+keysEnd:], blockhash.Bytes())
+
+	return out, nil
 }
 
 // DeserializeTransaction parses the wire format.

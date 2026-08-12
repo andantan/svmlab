@@ -32,13 +32,7 @@ import (
 // does, so it cannot be shown back, and a caller signing one it cannot
 // otherwise account for is trusting whatever produced it.
 type SignTransactionRequest struct {
-	Transaction string `json:"transaction"`
-
-	// Encoding is required rather than defaulted or detected, since base64
-	// and base58 partly overlap in their alphabets and a wrong guess would
-	// decode to different bytes than the caller sent rather than failing
-	// outright.
-	Encoding    string   `json:"encoding" example:"base64"`
+	Transaction string   `json:"transaction"`
 	PublicKeys  []string `json:"public_keys" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 	PrivateKeys []string `json:"private_keys"`
 
@@ -49,9 +43,9 @@ type SignTransactionRequest struct {
 }
 
 func (r *SignTransactionRequest) ValidateRequest() error {
-	raw, err := codec.DecodeByName(r.Encoding, r.Transaction)
+	raw, err := codec.Base64.Decode(strings.TrimSpace(r.Transaction))
 	if err != nil {
-		return errors.New("transaction: " + err.Error())
+		return errors.New("transaction: invalid base64: " + err.Error())
 	}
 
 	if r.versioned, err = types.IsVersionedTransaction(raw); err != nil {

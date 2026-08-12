@@ -2937,6 +2937,63 @@
                 }
             }
         },
+        "/svm/v2/transaction/token/approve-checked": {
+            "post": {
+                "description": "Authorizes delegate to move up to amount from account, on the account owner's behalf. A second approve replaces the delegation entirely rather than adding to it, since the program stores one delegate and one amount, not a list; the owner may still move the whole balance regardless of what a delegate holds. Only the account's owner may approve, never an existing delegate, so re-delegating is not possible through this endpoint. decimals is checked against the mint the same way every other checked endpoint checks it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Grant a delegate limited spending rights over a token account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Delegation parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ApproveCheckedRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ApproveCheckedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/burn-checked": {
             "post": {
                 "description": "Reduces the mint's total supply and the account's balance together. decimals is checked against the mint rather than filled in from it, catching a client that formatted amount against the wrong decimals as a 400 instead of an on-chain failure. authority must be the account's owner, or its delegate for no more than the delegated amount — the mint's own authority has no say over what a holder chooses to burn.",
@@ -3322,6 +3379,462 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.MintToCheckedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/revoke": {
+            "post": {
+                "description": "Revokes an account's delegate and delegated amount, whatever they are, without naming either: the program clears what is stored, so there is nothing to get wrong by naming it. An account with no delegate revokes cleanly too. Only the account's owner may revoke, matching approve-checked's rule that only the owner may grant one.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Clear whatever delegation an account currently has",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Revoke parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.RevokeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.RevokeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/set-authority/close/clear": {
+            "post": {
+                "description": "Clears close_authority to None. This is recoverable: the owner never goes away, and close-account already falls back to the owner when no close authority is set, so clearing this only reverts to that default.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Remove a token account's close authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Authority change parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetCloseAuthorityClearRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetCloseAuthorityClearResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/set-authority/close/replace": {
+            "post": {
+                "description": "Hands close_authority to new_authority. The current authority is whichever one is already recorded: the account's close authority if one is set, otherwise its owner, the same rule close-account itself checks.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Replace a token account's close authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Authority change parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetCloseAuthorityReplaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetCloseAuthorityReplaceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/set-authority/freeze/clear": {
+            "post": {
+                "description": "Clears freeze_authority to None. No holder of this mint can ever be frozen afterward, and nothing can restore the capability.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Remove a mint's freeze authority permanently",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Authority change parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetFreezeAuthorityClearRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetFreezeAuthorityClearResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/set-authority/freeze/replace": {
+            "post": {
+                "description": "Hands freeze_authority to new_authority. The current authority must be the mint's existing freeze_authority exactly.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Replace a mint's freeze authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Authority change parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetFreezeAuthorityReplaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetFreezeAuthorityReplaceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/set-authority/mint/clear": {
+            "post": {
+                "description": "Clears mint_authority to None. This caps the supply forever: the program accepts a None mint_authority, and once it is None nothing can ever sign as that authority again to restore it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Remove a mint's mint authority permanently",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Authority change parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetMintAuthorityClearRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetMintAuthorityClearResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/set-authority/mint/replace": {
+            "post": {
+                "description": "Hands mint_authority to new_authority. The current authority must be the mint's existing mint_authority exactly; there is no delegate concept for this role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Replace a mint's mint authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Authority change parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetMintAuthorityReplaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetMintAuthorityReplaceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/set-authority/owner/replace": {
+            "post": {
+                "description": "Hands the account to new_authority. The current authority must be the account's existing owner exactly, never a delegate. There is no clear variant: the owner field has no None representation on chain, and the program rejects one.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Replace a token account's owner",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Authority change parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetAccountOwnerReplaceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetAccountOwnerReplaceResponse"
                         }
                     },
                     "400": {
@@ -4335,6 +4848,107 @@
                 }
             }
         },
+        "v2.ApproveCheckedRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "amount": {
+                    "type": "string",
+                    "example": "500000"
+                },
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "decimals": {
+                    "type": "integer",
+                    "example": 6
+                },
+                "delegate": {
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.ApproveCheckedResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "amount": {
+                    "type": "string"
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "decimals": {
+                    "type": "integer"
+                },
+                "delegate": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.BurnCheckedRequest": {
             "type": "object",
             "properties": {
@@ -4917,6 +5531,627 @@
                     "type": "string"
                 },
                 "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.RevokeRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.RevokeResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetAccountOwnerReplaceRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "type": "string",
+                    "example": ""
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.SetAccountOwnerReplaceResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetCloseAuthorityClearRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.SetCloseAuthorityClearResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "cleared": {
+                    "type": "boolean"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetCloseAuthorityReplaceRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "type": "string",
+                    "example": ""
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.SetCloseAuthorityReplaceResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetFreezeAuthorityClearRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.SetFreezeAuthorityClearResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "cleared": {
+                    "type": "boolean"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetFreezeAuthorityReplaceRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "type": "string",
+                    "example": ""
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.SetFreezeAuthorityReplaceResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetMintAuthorityClearRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.SetMintAuthorityClearResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "cleared": {
+                    "type": "boolean"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetMintAuthorityReplaceRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "type": "string",
+                    "example": ""
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.SetMintAuthorityReplaceResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
                     "type": "string"
                 },
                 "nonce_authority": {

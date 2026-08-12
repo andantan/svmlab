@@ -579,6 +579,78 @@ definitions:
         example: "11111111111111111111111111111111"
         type: string
     type: object
+  v2.ApproveCheckedRequest:
+    properties:
+      account:
+        example: ""
+        type: string
+      amount:
+        example: "500000"
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      decimals:
+        example: 6
+        type: integer
+      delegate:
+        example: ""
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.ApproveCheckedResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      authority:
+        type: string
+      decimals:
+        type: integer
+      delegate:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.BurnCheckedRequest:
     properties:
       account:
@@ -1021,6 +1093,448 @@ definitions:
       message:
         type: string
       mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.RevokeRequest:
+    properties:
+      account:
+        example: ""
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.RevokeResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SetAccountOwnerReplaceRequest:
+    properties:
+      account:
+        example: ""
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      new_authority:
+        example: ""
+        type: string
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.SetAccountOwnerReplaceResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      new_authority:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SetCloseAuthorityClearRequest:
+    properties:
+      account:
+        example: ""
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.SetCloseAuthorityClearResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      cleared:
+        type: boolean
+      fee:
+        type: string
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SetCloseAuthorityReplaceRequest:
+    properties:
+      account:
+        example: ""
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      new_authority:
+        example: ""
+        type: string
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.SetCloseAuthorityReplaceResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      new_authority:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SetFreezeAuthorityClearRequest:
+    properties:
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.SetFreezeAuthorityClearResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      cleared:
+        type: boolean
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SetFreezeAuthorityReplaceRequest:
+    properties:
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      new_authority:
+        example: ""
+        type: string
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.SetFreezeAuthorityReplaceResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      new_authority:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SetMintAuthorityClearRequest:
+    properties:
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.SetMintAuthorityClearResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      cleared:
+        type: boolean
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SetMintAuthorityReplaceRequest:
+    properties:
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      new_authority:
+        example: ""
+        type: string
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.SetMintAuthorityReplaceResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      new_authority:
         type: string
       nonce_authority:
         type: string
@@ -4612,6 +5126,50 @@ paths:
       summary: Build a native SOL transfer of the sender's entire balance
       tags:
       - transaction
+  /svm/v2/transaction/token/approve-checked:
+    post:
+      consumes:
+      - application/json
+      description: Authorizes delegate to move up to amount from account, on the account
+        owner's behalf. A second approve replaces the delegation entirely rather than
+        adding to it, since the program stores one delegate and one amount, not a
+        list; the owner may still move the whole balance regardless of what a delegate
+        holds. Only the account's owner may approve, never an existing delegate, so
+        re-delegating is not possible through this endpoint. decimals is checked against
+        the mint the same way every other checked endpoint checks it.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Delegation parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ApproveCheckedRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ApproveCheckedResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Grant a delegate limited spending rights over a token account
+      tags:
+      - transaction
   /svm/v2/transaction/token/burn-checked:
     post:
       consumes:
@@ -4900,6 +5458,327 @@ paths:
               type: string
             type: object
       summary: Mint new supply into a token account
+      tags:
+      - transaction
+  /svm/v2/transaction/token/revoke:
+    post:
+      consumes:
+      - application/json
+      description: 'Revokes an account''s delegate and delegated amount, whatever
+        they are, without naming either: the program clears what is stored, so there
+        is nothing to get wrong by naming it. An account with no delegate revokes
+        cleanly too. Only the account''s owner may revoke, matching approve-checked''s
+        rule that only the owner may grant one.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Revoke parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.RevokeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.RevokeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Clear whatever delegation an account currently has
+      tags:
+      - transaction
+  /svm/v2/transaction/token/set-authority/close/clear:
+    post:
+      consumes:
+      - application/json
+      description: 'Clears close_authority to None. This is recoverable: the owner
+        never goes away, and close-account already falls back to the owner when no
+        close authority is set, so clearing this only reverts to that default.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Authority change parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetCloseAuthorityClearRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetCloseAuthorityClearResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Remove a token account's close authority
+      tags:
+      - transaction
+  /svm/v2/transaction/token/set-authority/close/replace:
+    post:
+      consumes:
+      - application/json
+      description: 'Hands close_authority to new_authority. The current authority
+        is whichever one is already recorded: the account''s close authority if one
+        is set, otherwise its owner, the same rule close-account itself checks.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Authority change parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetCloseAuthorityReplaceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetCloseAuthorityReplaceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Replace a token account's close authority
+      tags:
+      - transaction
+  /svm/v2/transaction/token/set-authority/freeze/clear:
+    post:
+      consumes:
+      - application/json
+      description: Clears freeze_authority to None. No holder of this mint can ever
+        be frozen afterward, and nothing can restore the capability.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Authority change parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetFreezeAuthorityClearRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetFreezeAuthorityClearResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Remove a mint's freeze authority permanently
+      tags:
+      - transaction
+  /svm/v2/transaction/token/set-authority/freeze/replace:
+    post:
+      consumes:
+      - application/json
+      description: Hands freeze_authority to new_authority. The current authority
+        must be the mint's existing freeze_authority exactly.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Authority change parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetFreezeAuthorityReplaceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetFreezeAuthorityReplaceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Replace a mint's freeze authority
+      tags:
+      - transaction
+  /svm/v2/transaction/token/set-authority/mint/clear:
+    post:
+      consumes:
+      - application/json
+      description: 'Clears mint_authority to None. This caps the supply forever: the
+        program accepts a None mint_authority, and once it is None nothing can ever
+        sign as that authority again to restore it.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Authority change parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetMintAuthorityClearRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetMintAuthorityClearResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Remove a mint's mint authority permanently
+      tags:
+      - transaction
+  /svm/v2/transaction/token/set-authority/mint/replace:
+    post:
+      consumes:
+      - application/json
+      description: Hands mint_authority to new_authority. The current authority must
+        be the mint's existing mint_authority exactly; there is no delegate concept
+        for this role.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Authority change parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetMintAuthorityReplaceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetMintAuthorityReplaceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Replace a mint's mint authority
+      tags:
+      - transaction
+  /svm/v2/transaction/token/set-authority/owner/replace:
+    post:
+      consumes:
+      - application/json
+      description: 'Hands the account to new_authority. The current authority must
+        be the account''s existing owner exactly, never a delegate. There is no clear
+        variant: the owner field has no None representation on chain, and the program
+        rejects one.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Authority change parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetAccountOwnerReplaceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetAccountOwnerReplaceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Replace a token account's owner
       tags:
       - transaction
   /svm/v2/transaction/token/transfer-checked:

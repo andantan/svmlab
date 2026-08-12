@@ -79,11 +79,30 @@ message blockhash and prepends `AdvanceNonceAccount`.
   sign and the named members do.
 - The Token Program owns mint and token-account data. Do not offer a generic
   "set owner program" escape hatch.
-- An authority field that the program declares `Option<Pubkey>` is absent when
-  the request omits it, which follows `nonce_account`. `SetAuthority` is the
-  exception: there an omitted authority is not "leave it alone" but "remove it
-  permanently", so it requires an explicit flag rather than an empty string. A
-  typo should not be able to end a mint's freeze authority forever.
+- An optional public key is encoded **two different ways**, and they must not be
+  confused. In **account data** it is a `COption`: a `u32` tag with the 32-byte
+  payload always written, which is what makes a mint 82 bytes with or without a
+  freeze authority. In **instruction data** it is a one-byte tag, with the key
+  following only when the tag says there is one and `None` written as that
+  single zero byte and nothing else.
+
+  Sending the account form in instruction data is not a harmless overshoot.
+  `unpack_pubkey_option` reads one tag byte and then 32 bytes, so three of the
+  four tag bytes stay in front of the key: it shifts three bytes, loses its
+  last three, and the program stores a valid-looking address nobody holds
+  without reporting anything. This was shipped in `InitializeMint2` and
+  `SetAuthority` and only caught after a `close_authority` written that way
+  left an account nobody could close. `None` had been passing by accident,
+  since the first of the four tag bytes is zero and the rest was ignored.
+
+  `core.appendPubkeyOption` is the instruction-data form. `codec.Binary`'s
+  `AppendCOption`/`ReadCOption` are the account-data form and belong only to
+  the parsers.
+- Removing an authority is a separate endpoint from replacing it, never a
+  request flag. An omitted `new_authority` must not be read as "remove it": for
+  a mint or freeze authority that is permanent, and a field somebody forgot to
+  fill in should not be indistinguishable from a deliberate removal. Hence
+  `/replace` and `/clear` as distinct paths.
 
 ## Complete Original SPL Token Instruction Set
 
@@ -121,16 +140,29 @@ opcodes. Gaps are Token-2022-only opcodes and must not be filled by guessing.
 |     45 | UnwrapLamports           | `token/unwrap-lamports`            | wrapped SOL — unverified |
 |    255 | Batch                    | `token/batch`                      | last — unverified        |
 
-Six of these have builders in `core` today, and none of them has an endpoint:
+Eleven of these have builders in `core` today. All but two have endpoints:
 
 ```text
- 9  CloseAccount        confirmed against mainnet instructions
-12  TransferChecked     confirmed against mainnet instructions
-14  MintToChecked       account order from the spec, not yet seen on chain
-15  BurnChecked         account order from the spec, not yet seen on chain
-18  InitializeAccount3  confirmed against mainnet instructions
-20  InitializeMint2     encoding checked by hand
+ 5  Revoke              live; encoding is a bare opcode, nothing to get wrong
+ 6  SetAuthority        live as seven endpoints; confirmed on devnet after the
+                        option-encoding fix
+ 9  CloseAccount        live; confirmed against mainnet instructions
+10  FreezeAccount       core only, no endpoint yet
+11  ThawAccount         core only, no endpoint yet
+12  TransferChecked     live; confirmed against mainnet instructions
+13  ApproveChecked      live; account order from the spec, not yet seen on chain
+14  MintToChecked       live; account order from the spec, not yet seen on chain
+15  BurnChecked         live; account order from the spec, not yet seen on chain
+18  InitializeAccount3  live; confirmed against mainnet instructions
+20  InitializeMint2     live; confirmed on devnet after the option-encoding fix
 ```
+
+"Confirmed on devnet" for the two that carry an optional public key means the
+mint or account was read back afterward and the stored authority compared byte
+for byte against what the request named. That check is what the earlier
+"encoding checked by hand" note failed to do, and it is why a three-byte shift
+in `InitializeMint2` survived into a shipped endpoint: the bytes matched a
+layout, just not the one the program unpacks.
 
 `InitializeImmutableOwner` is intentionally a no-op in the classic Token
 Program, but it remains necessary for compatibility with the Associated Token
@@ -379,20 +411,64 @@ No `token/close-ata` was needed. `token/close-account` already takes any
 layout at a derived address; nothing about closing distinguishes how the
 address came to exist.
 
-### 5. Delegation and administration
+### 5. Delegation and administration — done except freeze and thaw
+
+Live:
 
 ```text
 token/approve-checked
 token/revoke
-token/set-authority
-token/freeze-account
-token/thaw-account
+token/set-authority/mint/replace     token/set-authority/mint/clear
+token/set-authority/freeze/replace   token/set-authority/freeze/clear
+token/set-authority/owner/replace
+token/set-authority/close/replace    token/set-authority/close/clear
 ```
 
-Walk delegate allowance exhaustion, revocation, authority removal, and a frozen
-account rejecting transfer / burn / approve until thawed. `freeze-account` and
-`thaw-account` only work on a mint whose freeze authority was set when it was
-initialized, so `create-mint` has to have offered that field by now.
+Pending: `freeze-account` and `thaw-account`. Both builders exist in `core`;
+only the endpoints are missing. Neither works on a mint that was initialized
+without a freeze authority, which `create-mint` has offered since it was
+written, and clearing that authority afterward is permanent — so a mint whose
+freeze authority is gone can never freeze a holder again.
+
+`approve-checked` grants a delegate up to an amount, and only the account's
+owner may grant it. An existing delegate cannot re-delegate onward, since that
+would let it hand the owner's balance to a third party the owner never chose.
+A second approve replaces the delegation rather than adding to it, because the
+program stores one delegate and one amount rather than a list, which is also
+why reducing an allowance is another approve rather than a partial revoke.
+
+`revoke` takes neither an amount nor a delegate. It clears whatever is stored,
+so it is a deletion rather than a decrease, and naming the delegate would only
+be a way to get it wrong. An account with no delegate revokes cleanly.
+
+`set-authority` is seven endpoints rather than one, split by role and by
+direction.
+
+The four roles are separate endpoints because they differ in more than the
+`u8` they encode: which account is read (a mint for the first two, a token
+account for the last two), which key must sign, and whether the change can be
+undone. One endpoint would have branched four ways internally to save a single
+path.
+
+Direction is a path segment rather than a request field. Clearing a mint or
+freeze authority is permanent, and a `clear_authority` boolean makes a field
+somebody forgot to fill in indistinguishable from a deliberate removal;
+`/clear` has to be typed. `/replace` rather than `/new`, because three of the
+four roles cannot be set from absent at all — a mint or freeze authority at
+`None` has no signer left to change it, and an owner is never absent — so only
+close authority ever starts empty.
+
+Seven and not eight: `AccountOwner` has no clear variant. A token account's
+owner is a plain `Pubkey` on chain rather than a `COption`, so there is no
+representation for "no owner" to write, and the program rejects the attempt
+rather than accepting a value it could not store.
+
+The authority a `close` change requires is `close_authority.unwrap_or(owner)`,
+the same rule `close-account` itself applies: a close authority **replaces**
+the owner rather than joining it. Once set, the owner can neither close the
+account nor take the role back — only the current close authority can hand it
+on or clear it. This was implemented as owner-or-close-authority at first,
+which let an owner ignore a handover they had made.
 
 ### 6. Compatibility and multisig
 

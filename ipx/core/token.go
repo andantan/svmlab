@@ -352,14 +352,29 @@ func readCOptionPublicKey(src []byte) (*types.PublicKey, []byte, error) {
 	return k, src, nil
 }
 
-// appendCOptionPublicKey writes a 36-byte COption<Pubkey>, zero-filling the key
-// when there is none.
-func appendCOptionPublicKey(dst []byte, k *types.PublicKey) []byte {
+// appendPubkeyOption writes an optional public key the way instruction data
+// carries one: a single tag byte, and the key itself only when there is one.
+//
+// This is deliberately not the COption an account's data uses. There the tag is
+// a u32 and the 32-byte payload is written whether or not it is present, which
+// is what keeps a mint 82 bytes with or without a freeze authority. Instruction
+// data has no fixed width to preserve, so the program packs None as one zero
+// byte and nothing after it.
+//
+// Using the account layout here is not a harmless overshoot. The program reads
+// one tag byte and then 32 bytes, so a four-byte tag leaves three zeros in
+// front of the key, shifting it and dropping its last three bytes: the
+// authority stored on chain is a different address than the caller named, and
+// nothing fails to report it. The None case survives the mistake by accident,
+// since the first of the four tag bytes is zero and the rest is ignored.
+func appendPubkeyOption(dst []byte, k *types.PublicKey) []byte {
 	if k.IsNil() {
-		return codec.Binary.AppendCOption(dst, nil, types.PublicKeyLength)
+		return codec.Binary.AppendU8(dst, 0)
 	}
 
-	return codec.Binary.AppendCOption(dst, k.Bytes(), types.PublicKeyLength)
+	dst = codec.Binary.AppendU8(dst, 1)
+
+	return codec.Binary.AppendBytes(dst, k.Bytes())
 }
 
 // MultisigSpace is the size of an SPL Token multisig account.
@@ -721,7 +736,7 @@ func (t *token) InitializeMint2(mint, mintAuthority, freezeAuthority *types.Publ
 	data := codec.Binary.AppendU8(nil, TokenInstructionInitializeMint2)
 	data = codec.Binary.AppendU8(data, decimals)
 	data = codec.Binary.AppendBytes(data, mintAuthority.Bytes())
-	data = appendCOptionPublicKey(data, freezeAuthority)
+	data = appendPubkeyOption(data, freezeAuthority)
 
 	return types.NewInstruction(t.id, types.NewAccounts(
 		types.NewWritableAccount(mint),
@@ -882,6 +897,150 @@ func (t *token) CloseAccount(account, destination, authority *types.PublicKey, s
 	accounts := types.NewAccounts(
 		types.NewWritableAccount(account),
 		types.NewWritableAccount(destination),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// ApproveChecked authorizes a delegate to move up to amount from an account,
+// on behalf of its owner.
+//
+// The delegate is not a second owner. It may move at most amount and no more,
+// the account's own owner can still move the whole balance regardless, and a
+// second Approve replaces the delegation rather than adding to it — the
+// program stores one delegate and one amount, not a list.
+func (t *token) ApproveChecked(account, mint, delegate, authority *types.PublicKey, signers []*types.PublicKey, amount uint64, decimals uint8) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token approve: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token approve: mint is required")
+	}
+	if delegate.IsNil() {
+		return nil, fmt.Errorf("token approve: delegate is required")
+	}
+	if err := validateAuthority("token approve", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionApproveChecked)
+	data = codec.Binary.AppendU64(data, amount)
+	data = codec.Binary.AppendU8(data, decimals)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(mint),
+		types.NewReadonlyAccount(delegate),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// Revoke withdraws whatever delegation an account currently has.
+//
+// There is no delegate argument: the program clears whichever one is stored,
+// so naming one would only be a way to get it wrong. An account with no
+// delegate revokes cleanly too, since clearing an already-empty delegation is
+// not an error the program raises.
+func (t *token) Revoke(account, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token revoke: account is required")
+	}
+	if err := validateAuthority("token revoke", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionRevoke)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// SetAuthority replaces or removes one of a mint's or a token account's four
+// authorities.
+//
+// Which account is writable and which authority is being replaced are the same
+// piece of information told twice — once as which account was passed, once as
+// authorityType — and the program checks both agree rather than trusting
+// either alone.
+//
+// A nil newAuthority clears the role rather than leaving it unchanged, and for
+// mint_authority or freeze_authority that is permanent: neither can be set
+// again once cleared. Nothing here distinguishes "the caller meant to clear
+// it" from "the caller forgot to fill it in", which is why the endpoint above
+// this has to ask for that distinction explicitly rather than reading it off
+// an empty string.
+func (t *token) SetAuthority(account *types.PublicKey, authorityType uint8, currentAuthority, newAuthority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token set authority: account is required")
+	}
+	if authorityType > TokenAuthorityCloseAccount {
+		return nil, fmt.Errorf("token set authority: authority type is %d, expected 0 through %d", authorityType, TokenAuthorityCloseAccount)
+	}
+	if err := validateAuthority("token set authority", currentAuthority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionSetAuthority)
+	data = codec.Binary.AppendU8(data, authorityType)
+	data = appendPubkeyOption(data, newAuthority)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, currentAuthority, signers), data), nil
+}
+
+// FreezeAccount suspends an account, so it rejects transfer, burn, and
+// approve until thawed.
+//
+// Only a mint that was initialized with a freeze authority can be frozen at
+// all; one initialized without it can never gain the capability afterward.
+// The balance is untouched, since freezing is a state on the account rather
+// than a change to what it holds.
+func (t *token) FreezeAccount(account, mint, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token freeze account: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token freeze account: mint is required")
+	}
+	if err := validateAuthority("token freeze account", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionFreezeAccount)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(mint),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// ThawAccount reverses FreezeAccount, letting transfer, burn, and approve
+// resume against the account.
+func (t *token) ThawAccount(account, mint, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token thaw account: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token thaw account: mint is required")
+	}
+	if err := validateAuthority("token thaw account", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionThawAccount)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(mint),
 	)
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil

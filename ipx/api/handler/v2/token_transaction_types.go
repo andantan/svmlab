@@ -1598,3 +1598,1206 @@ func NewTransferToWalletResponse(
 		Fee:                          strconv.FormatUint(fee, 10),
 	}
 }
+
+// ApproveCheckedRequest names a delegation to grant over an account.
+//
+// Account is the one existing token account whose balance the delegate may
+// move, matching burn-checked and close-account's naming rather than
+// transfer-checked's source/destination pair, since approve has only the one
+// token account: delegate is a bare key, never itself a token account.
+type ApproveCheckedRequest struct {
+	Account   string `json:"account" example:""`
+	Mint      string `json:"mint" example:""`
+	Delegate  string `json:"delegate" example:""`
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Amount    string `json:"amount" example:"500000"`
+	Decimals  uint8  `json:"decimals" example:"6"`
+	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	account         *types.PublicKey
+	mint            *types.PublicKey
+	delegate        *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+	amount          uint64
+}
+
+func (r *ApproveCheckedRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.delegate, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Delegate)); err != nil {
+		return errors.New("delegate: " + err.Error())
+	}
+	if r.account.Equal(r.delegate) {
+		return errors.New("account and delegate are the same account")
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: must be a decimal base-unit count")
+	}
+	if r.amount == 0 {
+		return errors.New("amount: must be greater than zero")
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ApproveCheckedRequest) AccountKey() *types.PublicKey          { return r.account }
+func (r *ApproveCheckedRequest) MintKey() *types.PublicKey             { return r.mint }
+func (r *ApproveCheckedRequest) DelegateKey() *types.PublicKey         { return r.delegate }
+func (r *ApproveCheckedRequest) AuthorityKey() *types.PublicKey        { return r.authority }
+func (r *ApproveCheckedRequest) FeePayerKey() *types.PublicKey         { return r.feePayer }
+func (r *ApproveCheckedRequest) NonceAccountKey() *types.PublicKey     { return r.nonceAccount }
+func (r *ApproveCheckedRequest) TokenProgramID() *types.PublicKey      { return r.tokenProgramID }
+func (r *ApproveCheckedRequest) ToMultisigSigners() []*types.PublicKey { return r.multisigSigners }
+func (r *ApproveCheckedRequest) ToAmount() uint64                      { return r.amount }
+func (r *ApproveCheckedRequest) ToDecimals() uint8                     { return r.Decimals }
+
+// ApproveCheckedResponse reports the delegation just built.
+type ApproveCheckedResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account   string `json:"account"`
+	Mint      string `json:"mint"`
+	Delegate  string `json:"delegate"`
+	Authority string `json:"authority"`
+	Program   string `json:"program"`
+	Amount    string `json:"amount"`
+	Decimals  uint8  `json:"decimals"`
+	Fee       string `json:"fee"`
+}
+
+func NewApproveCheckedResponse(
+	tx *types.Transaction, raw, message []byte,
+	account, mint, delegate, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	amount uint64, decimals uint8, fee uint64,
+) *ApproveCheckedResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ApproveCheckedResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Mint:            mint.Base58(),
+		Delegate:        delegate.Base58(),
+		Authority:       authority.Base58(),
+		Program:         tokenProgram.Base58(),
+		Amount:          strconv.FormatUint(amount, 10),
+		Decimals:        decimals,
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// RevokeRequest names the account whose delegation should be cleared.
+//
+// There is no delegate field. The program clears whichever one is stored
+// without being told which, so naming one here would only be a way to get it
+// wrong; there is also no mint, since revoking touches no balance and needs
+// nothing decoded from it.
+type RevokeRequest struct {
+	Account   string `json:"account" example:""`
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	account         *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *RevokeRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *RevokeRequest) AccountKey() *types.PublicKey          { return r.account }
+func (r *RevokeRequest) AuthorityKey() *types.PublicKey        { return r.authority }
+func (r *RevokeRequest) FeePayerKey() *types.PublicKey         { return r.feePayer }
+func (r *RevokeRequest) NonceAccountKey() *types.PublicKey     { return r.nonceAccount }
+func (r *RevokeRequest) TokenProgramID() *types.PublicKey      { return r.tokenProgramID }
+func (r *RevokeRequest) ToMultisigSigners() []*types.PublicKey { return r.multisigSigners }
+
+// RevokeResponse reports the cleared delegation.
+type RevokeResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account   string `json:"account"`
+	Authority string `json:"authority"`
+	Program   string `json:"program"`
+	Fee       string `json:"fee"`
+}
+
+func NewRevokeResponse(
+	tx *types.Transaction, raw, message []byte,
+	account, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *RevokeResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &RevokeResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Authority:       authority.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// SetMintAuthorityReplace replaces a mint's mint authority with a new key.
+type SetMintAuthorityReplaceRequest struct {
+	Mint         string `json:"mint" example:""`
+	Authority    string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	NewAuthority string `json:"new_authority" example:""`
+	FeePayer     string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program      string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	mint            *types.PublicKey
+	authority       *types.PublicKey
+	newAuthority    *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *SetMintAuthorityReplaceRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	newAuthority := strings.TrimSpace(r.NewAuthority)
+	if newAuthority == "" {
+		return errors.New("new_authority is required")
+	}
+	if r.newAuthority, err = types.NewPublicKeyFromBase58(newAuthority); err != nil {
+		return errors.New("new_authority: " + err.Error())
+	}
+	if r.authority.Equal(r.newAuthority) {
+		return errors.New("new_authority: is already the current authority")
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SetMintAuthorityReplaceRequest) MintKey() *types.PublicKey         { return r.mint }
+func (r *SetMintAuthorityReplaceRequest) AuthorityKey() *types.PublicKey    { return r.authority }
+func (r *SetMintAuthorityReplaceRequest) NewAuthorityKey() *types.PublicKey { return r.newAuthority }
+func (r *SetMintAuthorityReplaceRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
+func (r *SetMintAuthorityReplaceRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
+func (r *SetMintAuthorityReplaceRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetMintAuthorityReplaceRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// SetMintAuthorityReplaceResponse reports the authority change just built.
+type SetMintAuthorityReplaceResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint         string `json:"mint"`
+	Authority    string `json:"authority"`
+	NewAuthority string `json:"new_authority"`
+	Program      string `json:"program"`
+	Fee          string `json:"fee"`
+}
+
+func NewSetMintAuthorityReplaceResponse(
+	tx *types.Transaction, raw, message []byte,
+	mint, authority, tokenProgram, nonceAuthority *types.PublicKey, newAuthority *types.PublicKey,
+	fee uint64,
+) *SetMintAuthorityReplaceResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SetMintAuthorityReplaceResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Mint:            mint.Base58(),
+		Authority:       authority.Base58(),
+		NewAuthority:    newAuthority.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// SetMintAuthorityClear removes a mint's mint authority permanently.
+//
+// Once cleared, no endpoint can set it again: the program stores this as a
+// COption and rejects nothing here, but nothing can ever sign as an authority
+// that is now None. This is how a supply is capped forever.
+type SetMintAuthorityClearRequest struct {
+	Mint      string `json:"mint" example:""`
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	mint            *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *SetMintAuthorityClearRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SetMintAuthorityClearRequest) MintKey() *types.PublicKey         { return r.mint }
+func (r *SetMintAuthorityClearRequest) AuthorityKey() *types.PublicKey    { return r.authority }
+func (r *SetMintAuthorityClearRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
+func (r *SetMintAuthorityClearRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
+func (r *SetMintAuthorityClearRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetMintAuthorityClearRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// SetMintAuthorityClearResponse reports the authority change just built.
+type SetMintAuthorityClearResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint      string `json:"mint"`
+	Authority string `json:"authority"`
+	Cleared   bool   `json:"cleared"`
+	Program   string `json:"program"`
+	Fee       string `json:"fee"`
+}
+
+func NewSetMintAuthorityClearResponse(
+	tx *types.Transaction, raw, message []byte,
+	mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *SetMintAuthorityClearResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SetMintAuthorityClearResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Mint:            mint.Base58(),
+		Authority:       authority.Base58(),
+		Cleared:         true,
+		Program:         tokenProgram.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// SetFreezeAuthorityReplace replaces a mint's freeze authority with a new key.
+type SetFreezeAuthorityReplaceRequest struct {
+	Mint         string `json:"mint" example:""`
+	Authority    string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	NewAuthority string `json:"new_authority" example:""`
+	FeePayer     string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program      string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	mint            *types.PublicKey
+	authority       *types.PublicKey
+	newAuthority    *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *SetFreezeAuthorityReplaceRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	newAuthority := strings.TrimSpace(r.NewAuthority)
+	if newAuthority == "" {
+		return errors.New("new_authority is required")
+	}
+	if r.newAuthority, err = types.NewPublicKeyFromBase58(newAuthority); err != nil {
+		return errors.New("new_authority: " + err.Error())
+	}
+	if r.authority.Equal(r.newAuthority) {
+		return errors.New("new_authority: is already the current authority")
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SetFreezeAuthorityReplaceRequest) MintKey() *types.PublicKey         { return r.mint }
+func (r *SetFreezeAuthorityReplaceRequest) AuthorityKey() *types.PublicKey    { return r.authority }
+func (r *SetFreezeAuthorityReplaceRequest) NewAuthorityKey() *types.PublicKey { return r.newAuthority }
+func (r *SetFreezeAuthorityReplaceRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
+func (r *SetFreezeAuthorityReplaceRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
+func (r *SetFreezeAuthorityReplaceRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetFreezeAuthorityReplaceRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// SetFreezeAuthorityReplaceResponse reports the authority change just built.
+type SetFreezeAuthorityReplaceResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint         string `json:"mint"`
+	Authority    string `json:"authority"`
+	NewAuthority string `json:"new_authority"`
+	Program      string `json:"program"`
+	Fee          string `json:"fee"`
+}
+
+func NewSetFreezeAuthorityReplaceResponse(
+	tx *types.Transaction, raw, message []byte,
+	mint, authority, tokenProgram, nonceAuthority *types.PublicKey, newAuthority *types.PublicKey,
+	fee uint64,
+) *SetFreezeAuthorityReplaceResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SetFreezeAuthorityReplaceResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Mint:            mint.Base58(),
+		Authority:       authority.Base58(),
+		NewAuthority:    newAuthority.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// SetFreezeAuthorityClear removes a mint's freeze authority permanently.
+//
+// Once cleared, no holder of this mint can ever be frozen again, and nothing
+// can restore the capability: there is no authority left to sign the change.
+type SetFreezeAuthorityClearRequest struct {
+	Mint      string `json:"mint" example:""`
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	mint            *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *SetFreezeAuthorityClearRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SetFreezeAuthorityClearRequest) MintKey() *types.PublicKey         { return r.mint }
+func (r *SetFreezeAuthorityClearRequest) AuthorityKey() *types.PublicKey    { return r.authority }
+func (r *SetFreezeAuthorityClearRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
+func (r *SetFreezeAuthorityClearRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
+func (r *SetFreezeAuthorityClearRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetFreezeAuthorityClearRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// SetFreezeAuthorityClearResponse reports the authority change just built.
+type SetFreezeAuthorityClearResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint      string `json:"mint"`
+	Authority string `json:"authority"`
+	Cleared   bool   `json:"cleared"`
+	Program   string `json:"program"`
+	Fee       string `json:"fee"`
+}
+
+func NewSetFreezeAuthorityClearResponse(
+	tx *types.Transaction, raw, message []byte,
+	mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *SetFreezeAuthorityClearResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SetFreezeAuthorityClearResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Mint:            mint.Base58(),
+		Authority:       authority.Base58(),
+		Cleared:         true,
+		Program:         tokenProgram.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// SetAccountOwnerReplace replaces a token account's owner with a new key.
+//
+// There is no clear variant. The account's owner field is a plain Pubkey on
+// chain, not a COption, so there is no representation for "no owner" to set
+// it to; the program rejects a None authority here rather than accepting one
+// it could never store.
+type SetAccountOwnerReplaceRequest struct {
+	Account      string `json:"account" example:""`
+	Authority    string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	NewAuthority string `json:"new_authority" example:""`
+	FeePayer     string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program      string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	account         *types.PublicKey
+	authority       *types.PublicKey
+	newAuthority    *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *SetAccountOwnerReplaceRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	newAuthority := strings.TrimSpace(r.NewAuthority)
+	if newAuthority == "" {
+		return errors.New("new_authority is required")
+	}
+	if r.newAuthority, err = types.NewPublicKeyFromBase58(newAuthority); err != nil {
+		return errors.New("new_authority: " + err.Error())
+	}
+	if r.authority.Equal(r.newAuthority) {
+		return errors.New("new_authority: is already the current authority")
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SetAccountOwnerReplaceRequest) AccountKey() *types.PublicKey      { return r.account }
+func (r *SetAccountOwnerReplaceRequest) AuthorityKey() *types.PublicKey    { return r.authority }
+func (r *SetAccountOwnerReplaceRequest) NewAuthorityKey() *types.PublicKey { return r.newAuthority }
+func (r *SetAccountOwnerReplaceRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
+func (r *SetAccountOwnerReplaceRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
+func (r *SetAccountOwnerReplaceRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetAccountOwnerReplaceRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// SetAccountOwnerReplaceResponse reports the authority change just built.
+type SetAccountOwnerReplaceResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account      string `json:"account"`
+	Authority    string `json:"authority"`
+	NewAuthority string `json:"new_authority"`
+	Program      string `json:"program"`
+	Fee          string `json:"fee"`
+}
+
+func NewSetAccountOwnerReplaceResponse(
+	tx *types.Transaction, raw, message []byte,
+	account, authority, tokenProgram, nonceAuthority *types.PublicKey, newAuthority *types.PublicKey,
+	fee uint64,
+) *SetAccountOwnerReplaceResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SetAccountOwnerReplaceResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Authority:       authority.Base58(),
+		NewAuthority:    newAuthority.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// SetCloseAuthorityReplace replaces a token account's close authority with a new
+// key.
+//
+// The current authority is whichever one is already recorded: the account's
+// close authority if one is set, otherwise its owner, the same rule
+// close-account itself checks.
+type SetCloseAuthorityReplaceRequest struct {
+	Account      string `json:"account" example:""`
+	Authority    string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	NewAuthority string `json:"new_authority" example:""`
+	FeePayer     string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program      string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	account         *types.PublicKey
+	authority       *types.PublicKey
+	newAuthority    *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *SetCloseAuthorityReplaceRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	newAuthority := strings.TrimSpace(r.NewAuthority)
+	if newAuthority == "" {
+		return errors.New("new_authority is required")
+	}
+	if r.newAuthority, err = types.NewPublicKeyFromBase58(newAuthority); err != nil {
+		return errors.New("new_authority: " + err.Error())
+	}
+	if r.authority.Equal(r.newAuthority) {
+		return errors.New("new_authority: is already the current authority")
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SetCloseAuthorityReplaceRequest) AccountKey() *types.PublicKey      { return r.account }
+func (r *SetCloseAuthorityReplaceRequest) AuthorityKey() *types.PublicKey    { return r.authority }
+func (r *SetCloseAuthorityReplaceRequest) NewAuthorityKey() *types.PublicKey { return r.newAuthority }
+func (r *SetCloseAuthorityReplaceRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
+func (r *SetCloseAuthorityReplaceRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
+func (r *SetCloseAuthorityReplaceRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetCloseAuthorityReplaceRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// SetCloseAuthorityReplaceResponse reports the authority change just built.
+type SetCloseAuthorityReplaceResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account      string `json:"account"`
+	Authority    string `json:"authority"`
+	NewAuthority string `json:"new_authority"`
+	Program      string `json:"program"`
+	Fee          string `json:"fee"`
+}
+
+func NewSetCloseAuthorityReplaceResponse(
+	tx *types.Transaction, raw, message []byte,
+	account, authority, tokenProgram, nonceAuthority *types.PublicKey, newAuthority *types.PublicKey,
+	fee uint64,
+) *SetCloseAuthorityReplaceResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SetCloseAuthorityReplaceResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Authority:       authority.Base58(),
+		NewAuthority:    newAuthority.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// SetCloseAuthorityClear removes a token account's close authority.
+//
+// Unlike the mint authorities, this one is recoverable: the account's owner
+// never goes away, and close-account already falls back to the owner when no
+// close authority is set, so clearing this only reverts to that default.
+type SetCloseAuthorityClearRequest struct {
+	Account   string `json:"account" example:""`
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	account         *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *SetCloseAuthorityClearRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SetCloseAuthorityClearRequest) AccountKey() *types.PublicKey      { return r.account }
+func (r *SetCloseAuthorityClearRequest) AuthorityKey() *types.PublicKey    { return r.authority }
+func (r *SetCloseAuthorityClearRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
+func (r *SetCloseAuthorityClearRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
+func (r *SetCloseAuthorityClearRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetCloseAuthorityClearRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// SetCloseAuthorityClearResponse reports the authority change just built.
+type SetCloseAuthorityClearResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account   string `json:"account"`
+	Authority string `json:"authority"`
+	Cleared   bool   `json:"cleared"`
+	Program   string `json:"program"`
+	Fee       string `json:"fee"`
+}
+
+func NewSetCloseAuthorityClearResponse(
+	tx *types.Transaction, raw, message []byte,
+	account, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *SetCloseAuthorityClearResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SetCloseAuthorityClearResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Authority:       authority.Base58(),
+		Cleared:         true,
+		Program:         tokenProgram.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}

@@ -12,16 +12,16 @@ account model -> deterministic addresses -> assets -> application state
 
 ## Current Status
 
-Core and endpoints were tracked apart while Token's six transaction builders
-existed only in `core`; that gap is closed now that the first lifecycle has
-endpoints on all six.
+Core and endpoints are still tracked apart, because they keep coming apart:
+Token's freeze and thaw builders exist with nothing serving them, the same
+shape the first lifecycle was in before it shipped.
 
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing       |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi and batch transfer |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts; first used by ATA   |
-| SPL Token classic         | done    | lifecycle | 3 layouts, 25 opcodes, first lifecycle live; delegation/admin next          |
+| SPL Token classic         | done    | partial   | lifecycle, delegation, and 7 set-authority endpoints live; freeze/thaw next |
 | Associated Token Account  | done    | done      | create, create-idempotent, transfer-to-wallet; recover-nested deferred      |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
@@ -36,7 +36,7 @@ System (done)
 -> PDA derivation (done)
 -> SPL Token classic first lifecycle (done)
 -> Associated Token Account (done)
--> SPL Token classic delegation and administration  <- here
+-> SPL Token classic delegation (done) and administration  <- here: freeze/thaw
 -> Vault custom program
 -> Compute Budget
 -> Address Lookup Table
@@ -143,18 +143,21 @@ The original Token Program has fixed 82-byte mint and 165-byte account layouts.
 It covers minting, holder accounts, transfer, delegation, burning, authority
 changes, freezing, multisig, wrapped SOL, and return-data utilities.
 
-Core and the first lifecycle are done: the three layouts parse, all 25
-classic opcodes are declared, and create-mint, create-account,
-mint-to-checked, transfer-checked, burn-checked, and close-account are live
-under `/svm/v2/transaction/token/`, alongside the reads at `/svm/token/mint`,
-`/svm/token/account`, and `/svm/account/tokens`. Every one of the six checks
+Core, the first lifecycle, and delegation are done: the three layouts parse,
+all 25 classic opcodes are declared, and create-mint, create-account,
+mint-to-checked, transfer-checked, burn-checked, close-account,
+approve-checked, revoke, and seven set-authority endpoints are live under
+`/svm/v2/transaction/token/`, alongside the reads at `/svm/token/mint`,
+`/svm/token/account`, and `/svm/account/tokens`. Every one of them checks
 what a live cluster would reject before building the instruction — decimals
 against the mint, an account's mint against the request's, frozen state,
 authority against owner or delegate (transfer, burn) or against the mint's
 own authority (mint-to), and close authority as its own separate axis — so a
 mismatch comes back as a 400 with the reason instead of a signed transaction
-failing on chain. Detailed instruction coverage and what is still open
-(delegation, admin, compatibility opcodes):
+failing on chain.
+
+Still open here: freeze-account and thaw-account, whose builders exist with
+no endpoint on them, and the compatibility opcodes. Detailed coverage:
 
 ~~~
 TOKEN_API_PROPOSAL.md

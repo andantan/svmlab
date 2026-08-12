@@ -21,7 +21,7 @@ func NewSignHandler(cfg *config.Config) *SignHandler {
 
 // SignTransaction godoc
 // @Summary      Sign a serialized transaction
-// @Description  Signs the message inside a serialized transaction and writes each signature into its signer's slot, found from the key rather than from the order given. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. public_keys are resolved from config.yaml and private_keys carry the secret directly, for a signer such as a newly created account that is not registered; the two may be mixed in one call. Keys may also be named across several calls, so co-signers can complete a transaction one at a time.
+// @Description  Signs the message inside a serialized transaction and writes each signature into its signer's slot, found from the key rather than from the order given. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. encoding must name how transaction is encoded, "base64" or "base58", since the two alphabets partly overlap and a wrong guess would decode to the wrong bytes rather than fail. A versioned (v0) message is accepted and signed without being parsed: a signer must be one of its leading static keys, since an address lookup table entry can never sign, so locating a slot needs no address table lookups. The response is thinner for one, since nothing here reads what the transaction does. public_keys are resolved from config.yaml and private_keys carry the secret directly, for a signer such as a newly created account that is not registered; the two may be mixed in one call. Keys may also be named across several calls, so co-signers can complete a transaction one at a time.
 // @Tags         sign
 // @Accept       json
 // @Produce      json
@@ -58,6 +58,29 @@ func (h *SignHandler) SignTransaction(w http.ResponseWriter, r *http.Request) {
 		privs = append(privs, key.PrivateKey)
 	}
 	privs = append(privs, req.ToPrivateKeys()...)
+
+	// A versioned message is never parsed into a *types.Message: locating a
+	// signer's slot and signing over the bytes past the signature array does
+	// not need the address table lookups this project does not model, so the
+	// legacy path below is skipped entirely rather than partially reused.
+	if req.IsVersioned() {
+		raw := req.ToRaw()
+		for i, priv := range privs {
+			var err error
+			if raw, err = core.Signer.SignRawTransaction(raw, priv); err != nil {
+				handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("key[%d]: %s", i, err))
+				return
+			}
+		}
+
+		resp, err := NewSignVersionedTransactionResponse(raw)
+		if err != nil {
+			handler.WriteError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		handler.WriteOK(w, resp)
+		return
+	}
 
 	tx := req.ToTransaction()
 	if err := core.Signer.SignTransaction(tx, privs...); err != nil {

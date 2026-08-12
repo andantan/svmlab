@@ -1,11 +1,11 @@
 package misc
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/andantan/svmlab/core/codec"
 	"github.com/andantan/svmlab/core/types"
 )
 
@@ -21,22 +21,48 @@ import (
 // serialized message lists its signers in slot order, so order here is free
 // and keys may be named across several calls as a transaction moves between
 // co-signers.
+//
+// A versioned message is accepted without being parsed into a *types.Message
+// at all. A signer must be one of the message's leading static keys, since an
+// address lookup table entry can never sign — verifying a signature has to
+// work without resolving the table, so the runtime forbids exactly the case
+// that would require it. Locating a slot therefore costs a header and a
+// short-vec count, not the address table lookups this project does not model.
+// The cost is a thinner response: nothing here reads what the transaction
+// does, so it cannot be shown back, and a caller signing one it cannot
+// otherwise account for is trusting whatever produced it.
 type SignTransactionRequest struct {
-	Transaction string   `json:"transaction"`
+	Transaction string `json:"transaction"`
+
+	// Encoding is required rather than defaulted or detected, since base64
+	// and base58 partly overlap in their alphabets and a wrong guess would
+	// decode to different bytes than the caller sent rather than failing
+	// outright.
+	Encoding    string   `json:"encoding" example:"base64"`
 	PublicKeys  []string `json:"public_keys" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 	PrivateKeys []string `json:"private_keys"`
 
 	tx          *types.Transaction
+	raw         []byte
+	versioned   bool
 	privateKeys []*types.PrivateKey
 }
 
 func (r *SignTransactionRequest) ValidateRequest() error {
-	raw, err := base64.StdEncoding.DecodeString(strings.TrimSpace(r.Transaction))
+	raw, err := codec.DecodeByName(r.Encoding, r.Transaction)
 	if err != nil {
-		return errors.New("transaction: invalid base64: " + err.Error())
-	}
-	if r.tx, err = types.DeserializeTransaction(raw); err != nil {
 		return errors.New("transaction: " + err.Error())
+	}
+
+	if r.versioned, err = types.IsVersionedTransaction(raw); err != nil {
+		return errors.New(err.Error())
+	}
+	r.raw = raw
+
+	if !r.versioned {
+		if r.tx, err = types.DeserializeTransaction(raw); err != nil {
+			return errors.New("transaction: " + err.Error())
+		}
 	}
 
 	if len(r.PublicKeys) == 0 && len(r.PrivateKeys) == 0 {
@@ -62,6 +88,14 @@ func (r *SignTransactionRequest) ValidateRequest() error {
 
 func (r *SignTransactionRequest) ToTransaction() *types.Transaction {
 	return r.tx
+}
+
+func (r *SignTransactionRequest) ToRaw() []byte {
+	return r.raw
+}
+
+func (r *SignTransactionRequest) IsVersioned() bool {
+	return r.versioned
 }
 
 func (r *SignTransactionRequest) ToPrivateKeys() []*types.PrivateKey {
@@ -97,11 +131,57 @@ func NewSignTransactionResponse(tx *types.Transaction, raw []byte) *SignTransact
 	}
 
 	return &SignTransactionResponse{
-		Transaction:   base64.StdEncoding.EncodeToString(raw),
+		Transaction:   codec.Base64.Encode(raw),
 		TransactionID: id,
 		Signatures:    signatures,
 		FullySigned:   tx.IsFullySigned(),
 	}
+}
+
+// NewSignVersionedTransactionResponse builds the same shape from raw bytes
+// alone, reading only the signature array. That array's layout does not
+// depend on the message being legacy or versioned, so the same four fields
+// are answerable without the richer parse the legacy path has.
+func NewSignVersionedTransactionResponse(raw []byte) (*SignTransactionResponse, error) {
+	n, prefix, err := codec.Binary.ReadShortVecLen(raw)
+	if err != nil {
+		return nil, fmt.Errorf("signature count: %w", err)
+	}
+	if len(raw) < prefix+n*types.SignatureLength {
+		return nil, fmt.Errorf("%d bytes is too short for %d signatures", len(raw), n)
+	}
+
+	signatures := make([]string, n)
+	fullySigned := true
+	for i := range n {
+		start := prefix + i*types.SignatureLength
+		b := raw[start : start+types.SignatureLength]
+
+		zero := true
+		for _, c := range b {
+			if c != 0 {
+				zero = false
+				break
+			}
+		}
+		if zero {
+			fullySigned = false
+			continue
+		}
+		signatures[i] = codec.Base58.Encode(b)
+	}
+
+	var id string
+	if fullySigned && n > 0 {
+		id = signatures[0]
+	}
+
+	return &SignTransactionResponse{
+		Transaction:   codec.Base64.Encode(raw),
+		TransactionID: id,
+		Signatures:    signatures,
+		FullySigned:   fullySigned,
+	}, nil
 }
 
 // SignRequest signs arbitrary bytes.
@@ -123,7 +203,7 @@ func (r *SignRequest) ValidateRequest() error {
 		return errors.New("public_key is required")
 	}
 
-	b, err := base64.StdEncoding.DecodeString(strings.TrimSpace(r.Message))
+	b, err := codec.Base64.Decode(strings.TrimSpace(r.Message))
 	if err != nil {
 		return errors.New("message: invalid base64: " + err.Error())
 	}
@@ -173,7 +253,7 @@ func (r *VerifyRequest) ValidateRequest() error {
 		return errors.New("public_key: " + err.Error())
 	}
 
-	if r.message, err = base64.StdEncoding.DecodeString(strings.TrimSpace(r.Message)); err != nil {
+	if r.message, err = codec.Base64.Decode(strings.TrimSpace(r.Message)); err != nil {
 		return errors.New("message: invalid base64: " + err.Error())
 	}
 	if len(r.message) == 0 {

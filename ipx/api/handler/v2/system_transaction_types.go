@@ -1,13 +1,13 @@
 package v2
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/andantan/svmlab/core"
+	"github.com/andantan/svmlab/core/codec"
 	"github.com/andantan/svmlab/core/types"
 )
 
@@ -547,8 +547,8 @@ func NewSystemTransferManyResponse(tx *types.Transaction, raw, message []byte, n
 	}
 
 	return &SystemTransferManyResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -636,8 +636,8 @@ func NewSystemTransferBatchResponse(tx *types.Transaction, raw, message []byte, 
 	}
 
 	return &SystemTransferBatchResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -695,8 +695,8 @@ func NewSystemTransferResponse(tx *types.Transaction, raw, message []byte, nonce
 	}
 
 	return &SystemTransferResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -741,8 +741,8 @@ func NewSystemTransferMaxResponse(tx *types.Transaction, raw, message []byte, no
 	}
 
 	return &SystemTransferMaxResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -892,8 +892,8 @@ func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, 
 	}
 
 	return &SystemCreateAccountResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1010,8 +1010,8 @@ func NewSystemAllocateResponse(tx *types.Transaction, raw, message []byte, nonce
 	}
 
 	return &SystemAllocateResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1108,8 +1108,8 @@ func NewSystemAssignResponse(tx *types.Transaction, raw, message []byte, owner, 
 	}
 
 	return &SystemAssignResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1268,8 +1268,8 @@ func NewSystemSeedCreateAccountResponse(tx *types.Transaction, raw, message []by
 	}
 
 	return &SystemSeedCreateAccountResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1412,8 +1412,8 @@ func NewSystemSeedTransferResponse(tx *types.Transaction, raw, message []byte, d
 	}
 
 	return &SystemSeedTransferResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1542,8 +1542,8 @@ func NewSystemSeedAllocateResponse(tx *types.Transaction, raw, message []byte, d
 	}
 
 	return &SystemSeedAllocateResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1657,8 +1657,8 @@ func NewSystemSeedAssignResponse(tx *types.Transaction, raw, message []byte, der
 	}
 
 	return &SystemSeedAssignResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1775,8 +1775,8 @@ func NewSystemSeedTransferMaxResponse(tx *types.Transaction, raw, message []byte
 	}
 
 	return &SystemSeedTransferMaxResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1907,8 +1907,8 @@ func NewSystemNonceCreateResponse(tx *types.Transaction, raw, message []byte, ne
 	}
 
 	return &SystemNonceCreateResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -2025,8 +2025,8 @@ func NewSystemNonceInitializeResponse(tx *types.Transaction, raw, message []byte
 	}
 
 	return &SystemNonceInitializeResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -2145,8 +2145,8 @@ func NewSystemNonceAdvanceResponse(tx *types.Transaction, raw, message []byte, t
 	}
 
 	return &SystemNonceAdvanceResponse{
-		Transaction:        base64.StdEncoding.EncodeToString(raw),
-		Message:            base64.StdEncoding.EncodeToString(message),
+		Transaction:        codec.Base64.Encode(raw),
+		Message:            codec.Base64.Encode(message),
 		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:        keys,
 		Signers:            signers,
@@ -2297,8 +2297,8 @@ func NewSystemNonceWithdrawResponse(tx *types.Transaction, raw, message []byte, 
 	}
 
 	return &SystemNonceWithdrawResponse{
-		Transaction:        base64.StdEncoding.EncodeToString(raw),
-		Message:            base64.StdEncoding.EncodeToString(message),
+		Transaction:        codec.Base64.Encode(raw),
+		Message:            codec.Base64.Encode(message),
 		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:        keys,
 		Signers:            signers,
@@ -2431,8 +2431,8 @@ func NewSystemNonceWithdrawMaxResponse(tx *types.Transaction, raw, message []byt
 	}
 
 	return &SystemNonceWithdrawMaxResponse{
-		Transaction:        base64.StdEncoding.EncodeToString(raw),
-		Message:            base64.StdEncoding.EncodeToString(message),
+		Transaction:        codec.Base64.Encode(raw),
+		Message:            codec.Base64.Encode(message),
 		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:        keys,
 		Signers:            signers,
@@ -2561,8 +2561,8 @@ func NewSystemNonceAuthorizeResponse(tx *types.Transaction, raw, message []byte,
 	}
 
 	return &SystemNonceAuthorizeResponse{
-		Transaction:        base64.StdEncoding.EncodeToString(raw),
-		Message:            base64.StdEncoding.EncodeToString(message),
+		Transaction:        codec.Base64.Encode(raw),
+		Message:            codec.Base64.Encode(message),
 		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:        keys,
 		Signers:            signers,
@@ -2672,8 +2672,8 @@ func NewSystemNonceUpgradeResponse(tx *types.Transaction, raw, message []byte, t
 	}
 
 	return &SystemNonceUpgradeResponse{
-		Transaction:        base64.StdEncoding.EncodeToString(raw),
-		Message:            base64.StdEncoding.EncodeToString(message),
+		Transaction:        codec.Base64.Encode(raw),
+		Message:            codec.Base64.Encode(message),
 		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:        keys,
 		Signers:            signers,

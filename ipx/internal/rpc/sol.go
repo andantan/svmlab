@@ -2,12 +2,12 @@ package rpc
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/andantan/svmlab/core"
+	"github.com/andantan/svmlab/core/codec"
 	"github.com/andantan/svmlab/core/types"
 )
 
@@ -57,7 +57,7 @@ func (a *AccountInfo) Bytes() ([]byte, error) {
 		return nil, fmt.Errorf("account data: expected a base64 string but got %T", a.Data[0])
 	}
 
-	return base64.StdEncoding.DecodeString(encoded)
+	return codec.Base64.Decode(encoded)
 }
 
 // KeyedAccount is an account together with the address it was found at.
@@ -315,7 +315,7 @@ func (c *Client) FeeForMessage(ctx context.Context, message *types.Message, comm
 	}
 
 	var result Result[*uint64]
-	if err = c.Call(ctx, SOLGetFeeForMessage(base64.StdEncoding.EncodeToString(raw), commitment, &result)); err != nil {
+	if err = c.Call(ctx, SOLGetFeeForMessage(codec.Base64.Encode(raw), commitment, &result)); err != nil {
 		return 0, false, err
 	}
 	if result.Value == nil {
@@ -333,8 +333,15 @@ func (c *Client) SimulateTransaction(ctx context.Context, tx *types.Transaction,
 		return nil, fmt.Errorf("simulate transaction: %w", err)
 	}
 
+	return c.SimulateRawTransaction(ctx, raw, sigVerify, commitment)
+}
+
+// SimulateRawTransaction is SimulateTransaction over bytes already on the
+// wire, so it works on a versioned message too: nothing above the RPC call
+// itself needs the message parsed, only the bytes it was given.
+func (c *Client) SimulateRawTransaction(ctx context.Context, raw []byte, sigVerify bool, commitment Commitment) (*SimulateValue, error) {
 	var result Result[SimulateValue]
-	if err = c.Call(ctx, SOLSimulateTransaction(base64.StdEncoding.EncodeToString(raw), sigVerify, commitment, &result)); err != nil {
+	if err := c.Call(ctx, SOLSimulateTransaction(codec.Base64.Encode(raw), sigVerify, commitment, &result)); err != nil {
 		return nil, err
 	}
 
@@ -353,8 +360,15 @@ func (c *Client) SendTransaction(ctx context.Context, tx *types.Transaction, ski
 		return nil, fmt.Errorf("send transaction: %w", err)
 	}
 
+	return c.SendRawTransaction(ctx, raw, skipPreflight, commitment)
+}
+
+// SendRawTransaction is SendTransaction over bytes already on the wire, so it
+// works on a versioned message too: broadcasting only ever sends base64 bytes
+// over RPC, and nothing here needs them parsed first.
+func (c *Client) SendRawTransaction(ctx context.Context, raw []byte, skipPreflight bool, commitment Commitment) (*types.Signature, error) {
 	var result string
-	if err = c.Call(ctx, SOLSendTransaction(base64.StdEncoding.EncodeToString(raw), skipPreflight, commitment, &result)); err != nil {
+	if err := c.Call(ctx, SOLSendTransaction(codec.Base64.Encode(raw), skipPreflight, commitment, &result)); err != nil {
 		return nil, err
 	}
 

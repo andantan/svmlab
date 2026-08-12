@@ -9,6 +9,12 @@ import (
 	"github.com/andantan/svmlab/internal/rpc"
 )
 
+type ProtocolHandler struct{}
+
+func NewProtocolHandler() *ProtocolHandler {
+	return &ProtocolHandler{}
+}
+
 // RentExemptionSystem godoc
 // @Summary      Minimum balance for a plain wallet
 // @Description  A wallet holds lamports and no data, so this is the floor any account must clear. It is also what a transfer to a previously unused address has to meet, since the transfer creates the account.
@@ -19,7 +25,7 @@ import (
 // @Success      200   {object}  RentExemptionSystemResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/protocol/rent-exemption/system [post]
-func (h *RPCHandler) RentExemptionSystem(w http.ResponseWriter, r *http.Request) {
+func (h *ProtocolHandler) RentExemptionSystem(w http.ResponseWriter, r *http.Request) {
 	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, err.Error())
@@ -44,7 +50,7 @@ func (h *RPCHandler) RentExemptionSystem(w http.ResponseWriter, r *http.Request)
 // @Success      200   {object}  RentExemptionMintResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/protocol/rent-exemption/mint [post]
-func (h *RPCHandler) RentExemptionMint(w http.ResponseWriter, r *http.Request) {
+func (h *ProtocolHandler) RentExemptionMint(w http.ResponseWriter, r *http.Request) {
 	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, err.Error())
@@ -70,7 +76,7 @@ func (h *RPCHandler) RentExemptionMint(w http.ResponseWriter, r *http.Request) {
 // @Success      200   {object}  RentExemptionTokenResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/protocol/rent-exemption/token [post]
-func (h *RPCHandler) RentExemptionToken(w http.ResponseWriter, r *http.Request) {
+func (h *ProtocolHandler) RentExemptionToken(w http.ResponseWriter, r *http.Request) {
 	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, err.Error())
@@ -95,7 +101,7 @@ func (h *RPCHandler) RentExemptionToken(w http.ResponseWriter, r *http.Request) 
 // @Success      200   {object}  RentExemptionStakeResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/protocol/rent-exemption/stake [post]
-func (h *RPCHandler) RentExemptionStake(w http.ResponseWriter, r *http.Request) {
+func (h *ProtocolHandler) RentExemptionStake(w http.ResponseWriter, r *http.Request) {
 	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, err.Error())
@@ -120,7 +126,7 @@ func (h *RPCHandler) RentExemptionStake(w http.ResponseWriter, r *http.Request) 
 // @Success      200   {object}  RentExemptionVoteResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/protocol/rent-exemption/vote [post]
-func (h *RPCHandler) RentExemptionVote(w http.ResponseWriter, r *http.Request) {
+func (h *ProtocolHandler) RentExemptionVote(w http.ResponseWriter, r *http.Request) {
 	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, err.Error())
@@ -146,7 +152,7 @@ func (h *RPCHandler) RentExemptionVote(w http.ResponseWriter, r *http.Request) {
 // @Success      200   {object}  RentExemptionNonceResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/protocol/rent-exemption/nonce [post]
-func (h *RPCHandler) RentExemptionNonce(w http.ResponseWriter, r *http.Request) {
+func (h *ProtocolHandler) RentExemptionNonce(w http.ResponseWriter, r *http.Request) {
 	chain, err := rpc.ChainFromContext(r.Context())
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, err.Error())
@@ -174,7 +180,7 @@ func (h *RPCHandler) RentExemptionNonce(w http.ResponseWriter, r *http.Request) 
 // @Success      200   {object}  RentExemptionSpaceResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/protocol/rent-exemption/space [post]
-func (h *RPCHandler) RentExemptionSpace(w http.ResponseWriter, r *http.Request) {
+func (h *ProtocolHandler) RentExemptionSpace(w http.ResponseWriter, r *http.Request) {
 	req := new(RentExemptionSpaceRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -212,7 +218,7 @@ func (h *RPCHandler) RentExemptionSpace(w http.ResponseWriter, r *http.Request) 
 // @Success      200   {object}  RentExemptionPublicKeyResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/protocol/rent-exemption/public-key [post]
-func (h *RPCHandler) RentExemptionPublicKey(w http.ResponseWriter, r *http.Request) {
+func (h *ProtocolHandler) RentExemptionPublicKey(w http.ResponseWriter, r *http.Request) {
 	req := new(RentExemptionPublicKeyRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))

@@ -63,7 +63,7 @@ func run() error {
 	r.Route("/svm/token", func(r chi.Router) {
 		r.Use(handler.RequireChain(cluster))
 
-		tokenHandler := token.NewHandler()
+		tokenHandler := token.NewTokenHandler()
 		r.Post("/mint", tokenHandler.Mint)
 		r.Post("/account", tokenHandler.Account)
 	})
@@ -71,7 +71,7 @@ func run() error {
 	r.Route("/svm/cluster", func(r chi.Router) {
 		r.Use(handler.RequireChain(cluster))
 
-		clusterHandler := misc.NewRPCHandler()
+		clusterHandler := misc.NewClusterHandler()
 		r.Post("/blockhash", clusterHandler.BlockHash)
 		r.Post("/genesis-hash", clusterHandler.GenesisHash)
 		r.Post("/health", clusterHandler.Health)
@@ -86,7 +86,7 @@ func run() error {
 	r.Route("/svm/protocol", func(r chi.Router) {
 		r.Use(handler.RequireChain(cluster))
 
-		protocolHandler := misc.NewRPCHandler()
+		protocolHandler := misc.NewProtocolHandler()
 		r.Post("/rent-exemption/system", protocolHandler.RentExemptionSystem)
 		r.Post("/rent-exemption/mint", protocolHandler.RentExemptionMint)
 		r.Post("/rent-exemption/token", protocolHandler.RentExemptionToken)

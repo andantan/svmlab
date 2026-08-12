@@ -11,10 +11,10 @@ import (
 	"github.com/andantan/svmlab/internal/rpc"
 )
 
-type Handler struct{}
+type TokenHandler struct{}
 
-func NewHandler() *Handler {
-	return &Handler{}
+func NewTokenHandler() *TokenHandler {
+	return &TokenHandler{}
 }
 
 // Mint godoc
@@ -29,7 +29,7 @@ func NewHandler() *Handler {
 // @Success      200   {object}  MintResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/token/mint [post]
-func (h *Handler) Mint(w http.ResponseWriter, r *http.Request) {
+func (h *TokenHandler) Mint(w http.ResponseWriter, r *http.Request) {
 	req := new(MintRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -87,7 +87,7 @@ func (h *Handler) Mint(w http.ResponseWriter, r *http.Request) {
 // @Success      200   {object}  AccountResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/token/account [post]
-func (h *Handler) Account(w http.ResponseWriter, r *http.Request) {
+func (h *TokenHandler) Account(w http.ResponseWriter, r *http.Request) {
 	req := new(AccountRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))

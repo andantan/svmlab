@@ -1,12 +1,12 @@
 package account
 
 import (
-	"encoding/base64"
 	"errors"
 	"strconv"
 	"strings"
 
 	"github.com/andantan/svmlab/core"
+	"github.com/andantan/svmlab/core/codec"
 	"github.com/andantan/svmlab/core/types"
 	"github.com/andantan/svmlab/internal/rpc"
 )
@@ -76,7 +76,7 @@ func NewAccountResponse(k *types.PublicKey, info *rpc.AccountInfo) *AccountRespo
 		Owner:      info.Owner,
 		Executable: info.Executable,
 		Space:      info.Space,
-		Data:       base64.StdEncoding.EncodeToString(data),
+		Data:       codec.Base64.Encode(data),
 	}
 }
 

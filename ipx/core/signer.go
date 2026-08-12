@@ -1,9 +1,11 @@
 package core
 
 import (
+	"bytes"
 	"crypto/ed25519"
 	"fmt"
 
+	"github.com/andantan/svmlab/core/codec"
 	"github.com/andantan/svmlab/core/types"
 )
 
@@ -140,4 +142,89 @@ func (s *signer) VerifyTransaction(tx *types.Transaction) error {
 	}
 
 	return nil
+}
+
+// SignRawTransaction signs a serialized transaction without parsing its
+// message into a *types.Message, and returns the transaction with the
+// signature written into its slot.
+//
+// This is what an externally built transaction needs — a swap or bridge
+// payload, typically a v0 message with address lookup tables this project
+// does not model yet. Placing a signature turns out not to need that model at
+// all. A signer must be a static key, since a lookup table address can never
+// be one: verifying a signature has to work without resolving the table, so
+// the runtime forbids exactly the case that would require it. The slots are
+// therefore the message's leading account keys whether the message is legacy
+// or versioned, and reading them costs three header bytes and a short-vec
+// count, not the instructions or the lookup tables that follow.
+//
+// The bytes signed are everything after the signature array, unchanged and
+// unreordered, which is what the same rule guarantees a validator will
+// reproduce when it verifies. That is also why this function knows nothing
+// about what the transaction does: reading that far is not a security check
+// here, it is out of scope, and a caller signing a transaction it cannot
+// otherwise account for is trusting whatever produced it.
+func (s *signer) SignRawTransaction(raw []byte, priv *types.PrivateKey) ([]byte, error) {
+	if priv.IsNil() {
+		return nil, fmt.Errorf("signer: private key is nil")
+	}
+
+	versioned, err := types.IsVersionedTransaction(raw)
+	if err != nil {
+		return nil, fmt.Errorf("signer: %w", err)
+	}
+
+	n, sigPrefixSize, err := codec.Binary.ReadShortVecLen(raw)
+	if err != nil {
+		return nil, fmt.Errorf("signer: signature count: %w", err)
+	}
+
+	sigSectionEnd := sigPrefixSize + n*types.SignatureLength
+	message := raw[sigSectionEnd:]
+
+	offset := 0
+	if versioned {
+		// The version byte precedes the header in a versioned message and has
+		// no counterpart in a legacy one.
+		offset = 1
+	}
+	if len(message) < offset+types.MessageHeaderLength {
+		return nil, fmt.Errorf("signer: message is too short for a header")
+	}
+	numRequiredSignatures := int(message[offset])
+
+	keyCount, keyCountSize, err := codec.Binary.ReadShortVecLen(message[offset+types.MessageHeaderLength:])
+	if err != nil {
+		return nil, fmt.Errorf("signer: account key count: %w", err)
+	}
+	if numRequiredSignatures > keyCount {
+		return nil, fmt.Errorf("signer: %d required signatures exceeds %d account keys", numRequiredSignatures, keyCount)
+	}
+
+	keysStart := offset + types.MessageHeaderLength + keyCountSize
+	keysEnd := keysStart + numRequiredSignatures*types.PublicKeyLength
+	if len(message) < keysEnd {
+		return nil, fmt.Errorf("signer: message is too short for %d signer keys", numRequiredSignatures)
+	}
+
+	pub := priv.PublicKey().Bytes()
+	slot := -1
+	for i := range numRequiredSignatures {
+		start := keysStart + i*types.PublicKeyLength
+		if bytes.Equal(message[start:start+types.PublicKeyLength], pub) {
+			slot = i
+			break
+		}
+	}
+	if slot < 0 {
+		return nil, fmt.Errorf("signer: %s is not a required signer", priv.PublicKey())
+	}
+
+	sig := ed25519.Sign(priv.Key, message)
+
+	out := make([]byte, len(raw))
+	copy(out, raw)
+	copy(out[sigPrefixSize+slot*types.SignatureLength:], sig)
+
+	return out, nil
 }

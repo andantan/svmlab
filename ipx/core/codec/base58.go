@@ -144,3 +144,18 @@ func (c *base58Codec) DecodeFixed(s string, n int) ([]byte, error) {
 
 	return b, nil
 }
+
+// ToBase64 re-encodes a base58 string as base64, decoding and re-encoding
+// rather than transliterating: the two alphabets share no digit values, so
+// there is no shortcut between them, only the bytes underneath. This is what
+// an external transaction handed over in base58 needs before it goes into
+// this project's RPC calls, which take base64 the way the cluster itself
+// does.
+func (c *base58Codec) ToBase64(s string) (string, error) {
+	b, err := c.Decode(s)
+	if err != nil {
+		return "", err
+	}
+
+	return Base64.Encode(b), nil
+}

@@ -150,6 +150,87 @@ func (t *Transaction) Serialize() ([]byte, error) {
 	return out, nil
 }
 
+// IsVersionedTransaction peeks the byte that opens the message, just past the
+// signature array, without otherwise reading it.
+//
+// A versioned message sets that byte's high bit; a legacy one cannot, since
+// its own first byte is a signature count that DeserializeMessage bounds well
+// below 128. The two callers that need this — DeserializeTransaction, to
+// reject a version it does not model, and a signer placing a signature into a
+// wire-format transaction it never parses into a *Message at all — both stop
+// here rather than duplicating the peek.
+func IsVersionedTransaction(raw []byte) (bool, error) {
+	n, prefix, err := codec.Binary.ReadShortVecLen(raw)
+	if err != nil {
+		return false, fmt.Errorf("transaction signatures: %w", err)
+	}
+
+	messageStart := prefix + n*SignatureLength
+	if len(raw) <= messageStart {
+		return false, fmt.Errorf("transaction: %d bytes is too short for %d signatures and a message", len(raw), n)
+	}
+
+	return raw[messageStart]&0x80 != 0, nil
+}
+
+// IsFullySignedTransaction reports whether every signature slot in a
+// serialized transaction is filled, reading only the signature array.
+//
+// Like IsVersionedTransaction, this answers a question about the wire format
+// without parsing the message the signatures belong to. Sending and
+// simulating both gate on this, and neither otherwise needs the message
+// parsed either — only the raw bytes travel over RPC — so requiring a full
+// legacy-only DeserializeTransaction first would reject a versioned
+// transaction for a reason that has nothing to do with why either endpoint
+// reads it.
+func IsFullySignedTransaction(raw []byte) (bool, error) {
+	n, prefix, err := codec.Binary.ReadShortVecLen(raw)
+	if err != nil {
+		return false, fmt.Errorf("transaction signatures: %w", err)
+	}
+	if len(raw) < prefix+n*SignatureLength {
+		return false, fmt.Errorf("transaction: %d bytes is too short for %d signatures", len(raw), n)
+	}
+
+	for i := 0; i < n; i++ {
+		start := prefix + i*SignatureLength
+		zero := true
+		for _, b := range raw[start : start+SignatureLength] {
+			if b != 0 {
+				zero = false
+				break
+			}
+		}
+		if zero {
+			return false, nil
+		}
+	}
+
+	return true, nil
+}
+
+// DecodeFullySignedTransaction decodes an encoded transaction and checks
+// that every signature slot is filled, without parsing the message inside
+// it. It returns raw bytes rather than a *Transaction because that type
+// only models a legacy message — a versioned (v0) transaction has no
+// Transaction to parse into, and this check has to pass for either.
+func DecodeFullySignedTransaction(encoding, transaction string) ([]byte, error) {
+	raw, err := codec.DecodeByName(encoding, transaction)
+	if err != nil {
+		return nil, fmt.Errorf("transaction: %w", err)
+	}
+
+	fullySigned, err := IsFullySignedTransaction(raw)
+	if err != nil {
+		return nil, fmt.Errorf("transaction: %w", err)
+	}
+	if !fullySigned {
+		return nil, fmt.Errorf("transaction: is not fully signed")
+	}
+
+	return raw, nil
+}
+
 // DeserializeTransaction parses the wire format.
 func DeserializeTransaction(raw []byte) (*Transaction, error) {
 	n, size, err := codec.Binary.ReadShortVecLen(raw)

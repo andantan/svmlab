@@ -593,7 +593,7 @@ const docTemplate = `{
         },
         "/svm/cluster/transaction/send": {
             "post": {
-                "description": "Submits a fully signed transaction to the cluster and returns its signature. Acceptance is not execution; the transaction still has to land in a block.",
+                "description": "Submits a fully signed transaction to the cluster and returns its signature. encoding must name how transaction is encoded, \"base64\" or \"base58\". Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. Acceptance is not execution; the transaction still has to land in a block.",
                 "consumes": [
                     "application/json"
                 ],
@@ -650,7 +650,7 @@ const docTemplate = `{
         },
         "/svm/cluster/transaction/simulate": {
             "post": {
-                "description": "Runs a fully signed transaction against the node's state without broadcasting it, and returns the program logs either way. The logs are the only account of why execution stopped; nothing here corresponds to a revert string.",
+                "description": "Runs a fully signed transaction against the node's state without broadcasting it, and returns the program logs either way. encoding must name how transaction is encoded, \"base64\" or \"base58\". Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. The logs are the only account of why execution stopped; nothing here corresponds to a revert string.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1361,7 +1361,7 @@ const docTemplate = `{
         },
         "/svm/sign/transaction": {
             "post": {
-                "description": "Signs the message inside a serialized transaction and writes each signature into its signer's slot, found from the key rather than from the order given. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. public_keys are resolved from config.yaml and private_keys carry the secret directly, for a signer such as a newly created account that is not registered; the two may be mixed in one call. Keys may also be named across several calls, so co-signers can complete a transaction one at a time.",
+                "description": "Signs the message inside a serialized transaction and writes each signature into its signer's slot, found from the key rather than from the order given. The message is never rebuilt, so the bytes a caller signs are exactly the bytes they were given. encoding must name how transaction is encoded, \"base64\" or \"base58\", since the two alphabets partly overlap and a wrong guess would decode to the wrong bytes rather than fail. A versioned (v0) message is accepted and signed without being parsed: a signer must be one of its leading static keys, since an address lookup table entry can never sign, so locating a slot needs no address table lookups. The response is thinner for one, since nothing here reads what the transaction does. public_keys are resolved from config.yaml and private_keys carry the secret directly, for a signer such as a newly created account that is not registered; the two may be mixed in one call. Keys may also be named across several calls, so co-signers can complete a transaction one at a time.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3727,6 +3727,10 @@ const docTemplate = `{
         "misc.SendTransactionRequest": {
             "type": "object",
             "properties": {
+                "encoding": {
+                    "type": "string",
+                    "example": "base64"
+                },
                 "transaction": {
                     "type": "string"
                 }
@@ -3766,6 +3770,11 @@ const docTemplate = `{
         "misc.SignTransactionRequest": {
             "type": "object",
             "properties": {
+                "encoding": {
+                    "description": "Encoding is required rather than defaulted or detected, since base64\nand base58 partly overlap in their alphabets and a wrong guess would\ndecode to different bytes than the caller sent rather than failing\noutright.",
+                    "type": "string",
+                    "example": "base64"
+                },
                 "private_keys": {
                     "type": "array",
                     "items": {
@@ -3843,6 +3852,10 @@ const docTemplate = `{
         "misc.SimulateTransactionRequest": {
             "type": "object",
             "properties": {
+                "encoding": {
+                    "type": "string",
+                    "example": "base64"
+                },
                 "transaction": {
                     "type": "string"
                 }

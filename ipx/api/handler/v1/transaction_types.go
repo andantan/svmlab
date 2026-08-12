@@ -1,11 +1,11 @@
 package v1
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strings"
 
+	"github.com/andantan/svmlab/core/codec"
 	"github.com/andantan/svmlab/core/types"
 )
 
@@ -77,7 +77,7 @@ func (r *BuildTransactionRequest) ValidateRequest() error {
 			accounts[j] = types.NewAccount(key, a.IsSigner, a.IsWritable)
 		}
 
-		data, err := base64.StdEncoding.DecodeString(strings.TrimSpace(ix.Data))
+		data, err := codec.Base64.Decode(strings.TrimSpace(ix.Data))
 		if err != nil {
 			return fmt.Errorf("instructions[%d].data: invalid base64: %s", i, err)
 		}
@@ -134,8 +134,8 @@ func NewBuildTransactionResponse(tx *types.Transaction, raw, message []byte) *Bu
 	}
 
 	return &BuildTransactionResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,

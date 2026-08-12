@@ -1,13 +1,13 @@
 package v2
 
 import (
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
 	"github.com/andantan/svmlab/core"
+	"github.com/andantan/svmlab/core/codec"
 	"github.com/andantan/svmlab/core/types"
 )
 
@@ -184,8 +184,8 @@ func NewCreateMintResponse(
 	}
 
 	return &CreateMintResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -346,8 +346,8 @@ func NewCreateAccountResponse(
 	}
 
 	return &CreateAccountResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -522,8 +522,8 @@ func NewMintToCheckedResponse(
 	}
 
 	return &MintToCheckedResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -710,8 +710,8 @@ func NewTransferCheckedResponse(
 	}
 
 	return &TransferCheckedResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -884,8 +884,8 @@ func NewBurnCheckedResponse(
 	}
 
 	return &BurnCheckedResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1045,8 +1045,8 @@ func NewCloseAccountResponse(
 	}
 
 	return &CloseAccountResponse{
-		Transaction:       base64.StdEncoding.EncodeToString(raw),
-		Message:           base64.StdEncoding.EncodeToString(message),
+		Transaction:       codec.Base64.Encode(raw),
+		Message:           codec.Base64.Encode(message),
 		RecentBlockhash:   tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:       keys,
 		Signers:           signers,
@@ -1198,8 +1198,8 @@ func NewCreateATAResponse(
 	}
 
 	return &CreateATAResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1340,8 +1340,8 @@ func NewCreateATAIdempotentResponse(
 	}
 
 	return &CreateATAIdempotentResponse{
-		Transaction:     base64.StdEncoding.EncodeToString(raw),
-		Message:         base64.StdEncoding.EncodeToString(message),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
@@ -1578,8 +1578,8 @@ func NewTransferToWalletResponse(
 	}
 
 	return &TransferToWalletResponse{
-		Transaction:                  base64.StdEncoding.EncodeToString(raw),
-		Message:                      base64.StdEncoding.EncodeToString(message),
+		Transaction:                  codec.Base64.Encode(raw),
+		Message:                      codec.Base64.Encode(message),
 		RecentBlockhash:              tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:                  keys,
 		Signers:                      signers,

@@ -2943,6 +2943,120 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/token/create-ata": {
+            "post": {
+                "description": "Derives the associated token address and creates it. The address is not a request field: it follows from wallet, mint, and program, so nothing generates a keypair for it and nothing has to remember it. The account itself does not sign, unlike a keypair token account, because a program derived address has no private key. Fails if the account already exists; use create-ata-idempotent when that is not known in advance.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Create the canonical token account for a wallet and mint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Associated account parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.CreateATARequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.CreateATAResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/create-ata-idempotent": {
+            "post": {
+                "description": "Same as create-ata, except the instruction succeeds rather than fails when the account is already there. This is the one to prepend to a transfer: checking first and creating only if absent leaves a window in which somebody else creates it, and the plain create would then fail the whole transaction over an account that exists and is correct.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Create the canonical token account, succeeding if it exists",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Associated account parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.CreateATAIdempotentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.CreateATAIdempotentResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/create-mint": {
             "post": {
                 "description": "System CreateAccount and InitializeMint2 as one transaction. An uninitialized Token-owned account can be initialized by anybody else before its intended owner does, so the two never exist as separate endpoints.",
@@ -3100,6 +3214,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.TransferCheckedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/transfer-to-wallet": {
+            "post": {
+                "description": "Derives both sides' associated token accounts from account and destination and transfers between them, prepending an idempotent create for the destination when it does not exist yet. Both fields are wallet addresses, not token accounts, which is the whole reason this endpoint exists rather than being transfer-checked with a flag: neither side computes an associated address first. The source's associated account is never created, since an account nobody has funded has nothing to send. decimals is checked against the mint rather than filled in from it, catching a client that formatted amount against the wrong decimals as a 400 instead of an on-chain failure. authority must be account's associated account owner, or its delegate for no more than the delegated amount.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Move a balance between the associated token accounts of two wallets",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Transfer parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.TransferToWalletRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.TransferToWalletResponse"
                         }
                     },
                     "400": {
@@ -4119,6 +4290,167 @@ const docTemplate = `{
                     }
                 },
                 "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.CreateATAIdempotentRequest": {
+            "type": "object",
+            "properties": {
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "rent_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "wallet": {
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                }
+            }
+        },
+        "v2.CreateATAIdempotentResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "bump": {
+                    "type": "integer"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "rent_exempt": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "wallet": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.CreateATARequest": {
+            "type": "object",
+            "properties": {
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program is a seed of the derived address, not only the program the\naccount belongs to, so one wallet has a different associated account\nfor classic Token than for Token-2022 over the same mint.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "rent_payer": {
+                    "description": "RentPayer covers the rent-exemption deposit, distinct from FeePayer:\nthe two are separate balances to check, and a caller funding somebody\nelse's associated account pays this one without necessarily paying the\ntransaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "wallet": {
+                    "description": "Wallet is who ends up owning the account, which need not be RentPayer.\nFunding somebody else's associated account is ordinary: the address is\ntheirs either way.",
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                }
+            }
+        },
+        "v2.CreateATAResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "bump": {
+                    "type": "integer"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "rent_exempt": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "wallet": {
                     "type": "string"
                 }
             }
@@ -5886,6 +6218,127 @@ const docTemplate = `{
                     }
                 },
                 "source": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.TransferToWalletRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "description": "Account is the sender's wallet. Its associated token account is\nderived rather than accepted directly, and unlike Destination it is\nnever created: an account nobody has funded has nothing to send, so a\nmissing source fails rather than being created empty.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "amount": {
+                    "type": "string",
+                    "example": "250000"
+                },
+                "authority": {
+                    "description": "Authority signs for the source account. It is usually Account itself,\nbut kept as its own field because it need not be: a delegate approved\nfor no more than its delegated amount may sign in Account's place, the\nsame rule transfer-checked applies to any source.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "decimals": {
+                    "type": "integer",
+                    "example": 6
+                },
+                "destination": {
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "rent_payer": {
+                    "description": "RentPayer covers the rent-exemption deposit if destination's\nassociated account does not exist yet, distinct from FeePayer in the\nsame way create-ata's is: a caller funding somebody else's account\nneed not also be covering the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.TransferToWalletResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "amount": {
+                    "type": "string"
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "created_ata": {
+                    "description": "CreatedATA records whether an idempotent create was prepended for the\ndestination, since the same request against an already-funded\ndestination does not need one. The source associated account is never\ncreated by this endpoint, so there is nothing equivalent to record for\nit.",
+                    "type": "boolean"
+                },
+                "decimals": {
+                    "type": "integer"
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "destination_associated_account": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "rent_exempt": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source_associated_account": {
                     "type": "string"
                 },
                 "transaction": {

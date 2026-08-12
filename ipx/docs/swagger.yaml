@@ -676,6 +676,127 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.CreateATAIdempotentRequest:
+    properties:
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      rent_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      wallet:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.CreateATAIdempotentResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      bump:
+        type: integer
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+      wallet:
+        type: string
+    type: object
+  v2.CreateATARequest:
+    properties:
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        description: |-
+          Program is a seed of the derived address, not only the program the
+          account belongs to, so one wallet has a different associated account
+          for classic Token than for Token-2022 over the same mint.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer covers the rent-exemption deposit, distinct from FeePayer:
+          the two are separate balances to check, and a caller funding somebody
+          else's associated account pays this one without necessarily paying the
+          transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      wallet:
+        description: |-
+          Wallet is who ends up owning the account, which need not be RentPayer.
+          Funding somebody else's associated account is ordinary: the address is
+          theirs either way.
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.CreateATAResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      bump:
+        type: integer
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+      wallet:
+        type: string
+    type: object
   v2.CreateAccountRequest:
     properties:
       account:
@@ -2117,6 +2238,110 @@ definitions:
           type: string
         type: array
       source:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.TransferToWalletRequest:
+    properties:
+      account:
+        description: |-
+          Account is the sender's wallet. Its associated token account is
+          derived rather than accepted directly, and unlike Destination it is
+          never created: an account nobody has funded has nothing to send, so a
+          missing source fails rather than being created empty.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      amount:
+        example: "250000"
+        type: string
+      authority:
+        description: |-
+          Authority signs for the source account. It is usually Account itself,
+          but kept as its own field because it need not be: a delegate approved
+          for no more than its delegated amount may sign in Account's place, the
+          same rule transfer-checked applies to any source.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      decimals:
+        example: 6
+        type: integer
+      destination:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer covers the rent-exemption deposit if destination's
+          associated account does not exist yet, distinct from FeePayer in the
+          same way create-ata's is: a caller funding somebody else's account
+          need not also be covering the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.TransferToWalletResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      authority:
+        type: string
+      created_ata:
+        description: |-
+          CreatedATA records whether an idempotent create was prepended for the
+          destination, since the same request against an already-funded
+          destination does not need one. The source associated account is never
+          created by this endpoint, so there is nothing equivalent to record for
+          it.
+        type: boolean
+      decimals:
+        type: integer
+      destination:
+        type: string
+      destination_associated_account:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      source_associated_account:
         type: string
       transaction:
         type: string
@@ -4347,6 +4572,91 @@ paths:
       summary: Fund and initialize an SPL Token holder account
       tags:
       - transaction
+  /svm/v2/transaction/token/create-ata:
+    post:
+      consumes:
+      - application/json
+      description: 'Derives the associated token address and creates it. The address
+        is not a request field: it follows from wallet, mint, and program, so nothing
+        generates a keypair for it and nothing has to remember it. The account itself
+        does not sign, unlike a keypair token account, because a program derived address
+        has no private key. Fails if the account already exists; use create-ata-idempotent
+        when that is not known in advance.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Associated account parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.CreateATARequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.CreateATAResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create the canonical token account for a wallet and mint
+      tags:
+      - transaction
+  /svm/v2/transaction/token/create-ata-idempotent:
+    post:
+      consumes:
+      - application/json
+      description: 'Same as create-ata, except the instruction succeeds rather than
+        fails when the account is already there. This is the one to prepend to a transfer:
+        checking first and creating only if absent leaves a window in which somebody
+        else creates it, and the plain create would then fail the whole transaction
+        over an account that exists and is correct.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Associated account parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.CreateATAIdempotentRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.CreateATAIdempotentResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create the canonical token account, succeeding if it exists
+      tags:
+      - transaction
   /svm/v2/transaction/token/create-mint:
     post:
       consumes:
@@ -4468,6 +4778,54 @@ paths:
               type: string
             type: object
       summary: Move a balance between two token accounts of the same mint
+      tags:
+      - transaction
+  /svm/v2/transaction/token/transfer-to-wallet:
+    post:
+      consumes:
+      - application/json
+      description: 'Derives both sides'' associated token accounts from account and
+        destination and transfers between them, prepending an idempotent create for
+        the destination when it does not exist yet. Both fields are wallet addresses,
+        not token accounts, which is the whole reason this endpoint exists rather
+        than being transfer-checked with a flag: neither side computes an associated
+        address first. The source''s associated account is never created, since an
+        account nobody has funded has nothing to send. decimals is checked against
+        the mint rather than filled in from it, catching a client that formatted amount
+        against the wrong decimals as a 400 instead of an on-chain failure. authority
+        must be account''s associated account owner, or its delegate for no more than
+        the delegated amount.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Transfer parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.TransferToWalletRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.TransferToWalletResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Move a balance between the associated token accounts of two wallets
       tags:
       - transaction
 swagger: "2.0"

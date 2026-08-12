@@ -20,9 +20,9 @@ endpoints on all six.
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing       |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi and batch transfer |
-| PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts                      |
-| SPL Token classic         | done    | lifecycle | 3 layouts, 25 opcodes, first lifecycle live; TOKEN_API_PROPOSAL.md          |
-| Associated Token Account  | none    | none      | unblocked now that PDA is done, next up                                    |
+| PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts; first used by ATA   |
+| SPL Token classic         | done    | lifecycle | 3 layouts, 25 opcodes, first lifecycle live; delegation/admin next          |
+| Associated Token Account  | done    | done      | create, create-idempotent, transfer-to-wallet; recover-nested deferred      |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
 Token-2022 left the "later" list for its classic surface. `core.Token2022` is an
@@ -35,7 +35,8 @@ either program; only the extension-specific part is still its own group.
 System (done)
 -> PDA derivation (done)
 -> SPL Token classic first lifecycle (done)
--> Associated Token Account  <- here
+-> Associated Token Account (done)
+-> SPL Token classic delegation and administration  <- here
 -> Vault custom program
 -> Compute Budget
 -> Address Lookup Table
@@ -45,14 +46,23 @@ System (done)
 -> Loader and deployment
 ~~~
 
-ATA and Token swapped places against the original order. Token's first
-lifecycle worked on keypair token accounts, so it needed nothing from ATA, and
-running it first kept the endpoints verifiable without a derivation in the
-loop. That lifecycle is done now — create-mint, create-account,
-mint-to-checked, transfer-checked, burn-checked, and close-account are all
-live under `/svm/v2/transaction/token/` — so ATA is next, and it is smaller
-than it looked when this order was chosen: PDA is done and the ATA
-instructions carry no data at all in their plain form.
+ATA and Token swapped places against the original order, and both are done
+now. Token's first lifecycle worked on keypair token accounts, so it needed
+nothing from ATA, and running it first kept the endpoints verifiable without
+a derivation in the loop. ATA followed once PDA existed: create-ata,
+create-ata-idempotent, and transfer-to-wallet are all live under
+`/svm/v2/transaction/token/`. transfer-to-wallet ended up symmetric rather
+than half-derived — account and destination are both wallet addresses, and
+both associated accounts are derived, not just the recipient's — since a
+sender who already knows their own associated address was never the point;
+that case is what transfer-checked is for. A missing source associated
+account fails instead of being created, since an account nobody has funded
+has nothing to send. Closing an associated account needed nothing new:
+close-account already took any 165-byte account regardless of how its
+address came to exist, associated or keypair. What is still open is
+recover-nested, for the rare case of an associated account mistakenly used as
+a wallet with its own nested associated account beneath it; it is deferred
+as a low-frequency cleanup tool rather than blocking anything.
 
 ## Group Catalogue
 
@@ -87,31 +97,45 @@ The one still-open requirement is typed seeds — string, raw bytes, pubkey, and
 little-endian unsigned integers — which only an endpoint needs, since `core`
 takes `[][]byte` and lets the caller encode.
 
-### 2. Associated Token Account Program
+### 2. Associated Token Account Program — done
 
-ATA is the canonical PDA-backed token account for a wallet and mint. Keep it as
-a separate group even though Token APIs use it immediately.
+ATA is the canonical PDA-backed token account for a wallet and mint. Kept as
+a separate group even though Token APIs use it immediately, since it is a
+different program with its own account list conventions, not an extra Token
+opcode.
 
-Candidate APIs:
+`core/ata.go` holds `Derive`, `Create`, and `CreateIdempotent`. The derivation
+was already known to be right before any endpoint existed — it matched 1655
+live associated accounts — and the create instructions confirmed cleanly
+against it: no data at all in the plain form, one byte in the idempotent one.
+
+Live under `/svm/v2/transaction/token/`:
 
 ~~~
-ata/derive
-ata/validate
-ata/account
-transaction/ata/create
-transaction/ata/create-idempotent
-transaction/ata/recover-nested
+create-ata               fails if the account already exists
+create-ata-idempotent    succeeds either way; the one to prepend to a transfer
+transfer-to-wallet       derives both sides' associated accounts and transfers
 ~~~
 
-Dependencies: PDA derivation (done), System (done), Token Program id (done). So
-this group is unblocked and nothing in it is written yet. The derivation is
-already known to be right — it matched 1655 live associated accounts — so what
-remains here is the create instruction, which carries no data at all in its
-plain form and one byte in its idempotent one.
+transfer-to-wallet takes two wallet addresses, `account` and `destination`,
+and derives an associated account for each rather than accepting either
+directly. The destination's may be created via CreateIdempotent if it does
+not exist; the source's never is, since an unfunded account has nothing to
+send. A caller who already holds an exact token account address, associated
+or not, uses transfer-checked instead — that is what it is for.
 
-Note that the token program is a seed of the address, so a wallet has different
-associated accounts for classic Token and Token-2022 over otherwise identical
-mints. `ata/derive` has to take it.
+No dedicated close endpoint was needed: `token/close-account` already takes
+any 165-byte Token or Token-2022 account, and an associated account is that
+same layout at a derived address, indistinguishable to the instruction.
+
+Not done: `recover-nested`, for an associated account that was mistakenly
+funded as if it were a wallet and now has its own nested associated account
+underneath it. Low-frequency cleanup, not on the path to anything else.
+
+The token program is a seed of the address, so a wallet has a different
+associated account for classic Token than for Token-2022 over the same mint.
+Every endpoint above takes `program` for that reason, the same field the rest
+of the Token lifecycle takes.
 
 ### 3. SPL Token Classic Program
 
@@ -451,22 +475,25 @@ ones. It queries both token programs and reports the program per entry.
 
 ## Suggested Milestones
 
-### Milestone A: App Foundations
+### Milestone A: App Foundations — done
 
 ~~~
-PDA derivation (done) -> SPL Token classic -> ATA
+PDA derivation (done) -> SPL Token classic (done) -> ATA (done)
 ~~~
 
 Outcome: mint a token, create holder accounts, transfer safely, and inspect
 resulting state.
 
-Where it stands: PDA and the three token reads (`/svm/token/mint`,
-`/svm/token/account`, `/svm/account/tokens`) are done, and so is the first
+All three pieces are live. PDA and the three token reads (`/svm/token/mint`,
+`/svm/token/account`, `/svm/account/tokens`) were done first; the first
 lifecycle — create-mint, create-account, mint-to-checked, transfer-checked,
-burn-checked, and close-account are all live under
-`/svm/v2/transaction/token/`. The milestone's remaining piece is ATA:
-`create-ata`, `create-ata-idempotent`, and `transfer-to-wallet`, per
-TOKEN_API_PROPOSAL.md step 4.
+burn-checked, close-account — and ATA — create-ata, create-ata-idempotent,
+transfer-to-wallet — are all live under `/svm/v2/transaction/token/`. The
+milestone can be walked end to end: mint a token, fund either a keypair or an
+associated account, move value between wallets without either side deriving
+an address by hand, and close what is left empty. What is not in this
+milestone — delegation, freezing, and the compatibility opcodes — is
+TOKEN_API_PROPOSAL.md's next step, not a gap in this one.
 
 ### Milestone B: Program-Controlled Assets
 

@@ -1059,3 +1059,542 @@ func NewCloseAccountResponse(
 		Fee:               strconv.FormatUint(fee, 10),
 	}
 }
+
+// CreateATARequest creates the canonical token account for a
+// wallet and mint.
+//
+// There is no account field: the address is derived rather than chosen, which
+// is the whole point. Nothing generates a keypair for it and nothing has to
+// remember where it went, since anyone holding the wallet and the mint can
+// recompute it.
+type CreateATARequest struct {
+	// RentPayer covers the rent-exemption deposit, distinct from FeePayer:
+	// the two are separate balances to check, and a caller funding somebody
+	// else's associated account pays this one without necessarily paying the
+	// transaction fee.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Wallet is who ends up owning the account, which need not be RentPayer.
+	// Funding somebody else's associated account is ordinary: the address is
+	// theirs either way.
+	Wallet string `json:"wallet" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	Mint   string `json:"mint" example:""`
+
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program is a seed of the derived address, not only the program the
+	// account belongs to, so one wallet has a different associated account
+	// for classic Token than for Token-2022 over the same mint.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	rentPayer      *types.PublicKey
+	wallet         *types.PublicKey
+	mint           *types.PublicKey
+	feePayer       *types.PublicKey
+	nonceAccount   *types.PublicKey
+	tokenProgramID *types.PublicKey
+}
+
+func (r *CreateATARequest) ValidateRequest() error {
+	var err error
+	if r.rentPayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RentPayer)); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+	if r.wallet, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Wallet)); err != nil {
+		return errors.New("wallet: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *CreateATARequest) RentPayerKey() *types.PublicKey {
+	return r.rentPayer
+}
+
+func (r *CreateATARequest) WalletKey() *types.PublicKey {
+	return r.wallet
+}
+
+func (r *CreateATARequest) MintKey() *types.PublicKey {
+	return r.mint
+}
+
+func (r *CreateATARequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *CreateATARequest) NonceAccountKey() *types.PublicKey {
+	return r.nonceAccount
+}
+
+func (r *CreateATARequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// CreateATAResponse reports the derived address and its bump,
+// which the caller never supplied and would otherwise have to derive to know.
+type CreateATAResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account string `json:"account"`
+	Bump    uint8  `json:"bump"`
+	Wallet  string `json:"wallet"`
+	Mint    string `json:"mint"`
+	Program string `json:"program"`
+
+	RentExempt string `json:"rent_exempt"`
+	Fee        string `json:"fee"`
+}
+
+func NewCreateATAResponse(
+	tx *types.Transaction, raw, message []byte,
+	account, wallet, mint, tokenProgram, nonceAuthority *types.PublicKey,
+	bump uint8, rentExempt, fee uint64,
+) *CreateATAResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &CreateATAResponse{
+		Transaction:     base64.StdEncoding.EncodeToString(raw),
+		Message:         base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Bump:            bump,
+		Wallet:          wallet.Base58(),
+		Mint:            mint.Base58(),
+		Program:         tokenProgram.Base58(),
+		RentExempt:      strconv.FormatUint(rentExempt, 10),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// CreateATAIdempotentRequest is CreateATARequest's own type, kept separate
+// rather than shared, even though every field is identical. The two
+// endpoints build different instructions and validate differently in one
+// respect — this one tolerates the account already existing — and giving
+// each its own request type is what keeps that difference from leaking into
+// a shared struct neither endpoint fully owns.
+type CreateATAIdempotentRequest struct {
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Wallet    string `json:"wallet" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	Mint      string `json:"mint" example:""`
+	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	rentPayer      *types.PublicKey
+	wallet         *types.PublicKey
+	mint           *types.PublicKey
+	feePayer       *types.PublicKey
+	nonceAccount   *types.PublicKey
+	tokenProgramID *types.PublicKey
+}
+
+func (r *CreateATAIdempotentRequest) ValidateRequest() error {
+	var err error
+	if r.rentPayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RentPayer)); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+	if r.wallet, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Wallet)); err != nil {
+		return errors.New("wallet: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *CreateATAIdempotentRequest) RentPayerKey() *types.PublicKey {
+	return r.rentPayer
+}
+
+func (r *CreateATAIdempotentRequest) WalletKey() *types.PublicKey {
+	return r.wallet
+}
+
+func (r *CreateATAIdempotentRequest) MintKey() *types.PublicKey {
+	return r.mint
+}
+
+func (r *CreateATAIdempotentRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *CreateATAIdempotentRequest) NonceAccountKey() *types.PublicKey {
+	return r.nonceAccount
+}
+
+func (r *CreateATAIdempotentRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// CreateATAIdempotentResponse is CreateATAResponse's own type, for the same
+// reason the request above has its own: nothing here differs from it in
+// shape, but nothing forces the two to stay that way just because they
+// happen to agree today.
+type CreateATAIdempotentResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account string `json:"account"`
+	Bump    uint8  `json:"bump"`
+	Wallet  string `json:"wallet"`
+	Mint    string `json:"mint"`
+	Program string `json:"program"`
+
+	RentExempt string `json:"rent_exempt"`
+	Fee        string `json:"fee"`
+}
+
+func NewCreateATAIdempotentResponse(
+	tx *types.Transaction, raw, message []byte,
+	account, wallet, mint, tokenProgram, nonceAuthority *types.PublicKey,
+	bump uint8, rentExempt, fee uint64,
+) *CreateATAIdempotentResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &CreateATAIdempotentResponse{
+		Transaction:     base64.StdEncoding.EncodeToString(raw),
+		Message:         base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Bump:            bump,
+		Wallet:          wallet.Base58(),
+		Mint:            mint.Base58(),
+		Program:         tokenProgram.Base58(),
+		RentExempt:      strconv.FormatUint(rentExempt, 10),
+		Fee:             strconv.FormatUint(fee, 10),
+	}
+}
+
+// TransferToWalletRequest moves a balance between the associated token
+// accounts of two wallets for a mint, deriving both addresses rather than
+// taking either directly.
+//
+// Account and Destination are wallet addresses, not token accounts: that is
+// the entire reason this endpoint exists rather than being transfer-checked
+// with a flag. transfer-checked moves between exact token account addresses
+// a caller already knows, which is also the endpoint for a source that is
+// not an associated account, such as one made by create-account. This one
+// is the "wallet to wallet" convenience: neither side computes an
+// associated address first.
+type TransferToWalletRequest struct {
+	// Account is the sender's wallet. Its associated token account is
+	// derived rather than accepted directly, and unlike Destination it is
+	// never created: an account nobody has funded has nothing to send, so a
+	// missing source fails rather than being created empty.
+	Account     string `json:"account" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Mint        string `json:"mint" example:""`
+	Destination string `json:"destination" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+
+	// Authority signs for the source account. It is usually Account itself,
+	// but kept as its own field because it need not be: a delegate approved
+	// for no more than its delegated amount may sign in Account's place, the
+	// same rule transfer-checked applies to any source.
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Amount    string `json:"amount" example:"250000"`
+	Decimals  uint8  `json:"decimals" example:"6"`
+
+	// RentPayer covers the rent-exemption deposit if destination's
+	// associated account does not exist yet, distinct from FeePayer in the
+	// same way create-ata's is: a caller funding somebody else's account
+	// need not also be covering the transaction fee.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	NonceAccount string `json:"nonce_account" example:""`
+
+	account         *types.PublicKey
+	mint            *types.PublicKey
+	destination     *types.PublicKey
+	authority       *types.PublicKey
+	rentPayer       *types.PublicKey
+	feePayer        *types.PublicKey
+	nonceAccount    *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+	amount          uint64
+}
+
+func (r *TransferToWalletRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.destination, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Destination)); err != nil {
+		return errors.New("destination: " + err.Error())
+	}
+	if r.account.Equal(r.destination) {
+		return errors.New("account and destination are the same wallet")
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.rentPayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RentPayer)); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: must be a decimal base-unit count")
+	}
+	if r.amount == 0 {
+		return errors.New("amount: must be greater than zero")
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	if na := strings.TrimSpace(r.NonceAccount); na != "" {
+		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
+			return errors.New("nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *TransferToWalletRequest) AccountKey() *types.PublicKey {
+	return r.account
+}
+
+func (r *TransferToWalletRequest) MintKey() *types.PublicKey {
+	return r.mint
+}
+
+func (r *TransferToWalletRequest) DestinationKey() *types.PublicKey {
+	return r.destination
+}
+
+func (r *TransferToWalletRequest) AuthorityKey() *types.PublicKey {
+	return r.authority
+}
+
+func (r *TransferToWalletRequest) RentPayerKey() *types.PublicKey {
+	return r.rentPayer
+}
+
+func (r *TransferToWalletRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *TransferToWalletRequest) NonceAccountKey() *types.PublicKey {
+	return r.nonceAccount
+}
+
+func (r *TransferToWalletRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+func (r *TransferToWalletRequest) ToAmount() uint64 {
+	return r.amount
+}
+
+func (r *TransferToWalletRequest) ToDecimals() uint8 {
+	return r.Decimals
+}
+
+func (r *TransferToWalletRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// TransferToWalletResponse reports both derived associated accounts, neither
+// of which the caller supplied, alongside what transfer-checked reports.
+//
+// Account and Destination echo the two wallet addresses the request named.
+// SourceAssociatedAccount and DestinationAssociatedAccount are the different
+// thing derived from each: the actual token accounts the transfer moves
+// between.
+type TransferToWalletResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account                      string `json:"account"`
+	SourceAssociatedAccount      string `json:"source_associated_account"`
+	Mint                         string `json:"mint"`
+	Destination                  string `json:"destination"`
+	DestinationAssociatedAccount string `json:"destination_associated_account"`
+	Authority                    string `json:"authority"`
+	Program                      string `json:"program"`
+	Amount                       string `json:"amount"`
+	Decimals                     uint8  `json:"decimals"`
+
+	// CreatedATA records whether an idempotent create was prepended for the
+	// destination, since the same request against an already-funded
+	// destination does not need one. The source associated account is never
+	// created by this endpoint, so there is nothing equivalent to record for
+	// it.
+	CreatedATA bool   `json:"created_ata"`
+	RentExempt string `json:"rent_exempt,omitempty"`
+	Fee        string `json:"fee"`
+}
+
+func NewTransferToWalletResponse(
+	tx *types.Transaction, raw, message []byte,
+	account, sourceAssociatedAccount, mint, destination, destinationAssociatedAccount, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	amount uint64, decimals uint8, createdATA bool, rentExempt, fee uint64,
+) *TransferToWalletResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	rent := ""
+	if createdATA {
+		rent = strconv.FormatUint(rentExempt, 10)
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &TransferToWalletResponse{
+		Transaction:                  base64.StdEncoding.EncodeToString(raw),
+		Message:                      base64.StdEncoding.EncodeToString(message),
+		RecentBlockhash:              tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                  keys,
+		Signers:                      signers,
+		NonceAuthority:               nonceAuth,
+		Account:                      account.Base58(),
+		SourceAssociatedAccount:      sourceAssociatedAccount.Base58(),
+		Mint:                         mint.Base58(),
+		Destination:                  destination.Base58(),
+		DestinationAssociatedAccount: destinationAssociatedAccount.Base58(),
+		Authority:                    authority.Base58(),
+		Program:                      tokenProgram.Base58(),
+		Amount:                       strconv.FormatUint(amount, 10),
+		Decimals:                     decimals,
+		CreatedATA:                   createdATA,
+		RentExempt:                   rent,
+		Fee:                          strconv.FormatUint(fee, 10),
+	}
+}

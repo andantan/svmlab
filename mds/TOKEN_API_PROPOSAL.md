@@ -338,7 +338,7 @@ create mint (decimals 6)
 → drain B and close B's account
 ```
 
-### 4. Associated token accounts
+### 4. Associated token accounts — done
 
 ```text
 token/create-ata
@@ -346,25 +346,38 @@ token/create-ata-idempotent
 token/transfer-to-wallet
 ```
 
-This is the ATA program rather than the Token program, so it needs its own
-`core.AssociatedToken` namespace on `AssociatedTokenProgramID`, and it is the
-first consumer of `FindProgramAddress`.
+This is the ATA program rather than the Token program, so it has its own
+`core.ATA` namespace on `AssociatedTokenProgramID`, and it was the first
+consumer of `PDA.Find`. The derived address was already known to be right
+before any of this was written — the same derivation matched 1655 live
+associated accounts in step 0 — so what the endpoints had to confirm was the
+instructions, not the address: no data at all for the plain create, one byte
+for the idempotent one, both exactly as expected.
 
-It is smaller now than when it was placed here. PDA is done, step 3 is done,
-and the ATA instructions themselves are thin: no data at all for the plain
-create, one byte for the idempotent one. Step 3's request shapes are settled
-now, so the open question from when this section was written — whether to
-run ATA before or after the keypair lifecycle — is moot; both exist. What is
-left is only what ATA itself needs: the `core.AssociatedToken` namespace, the
-create and idempotent-create builders, and the three endpoints.
+`transfer-to-wallet` ended up taking two wallet addresses, `account` and
+`destination`, rather than an exact source account plus a destination wallet.
+The first draft of it only derived the recipient's side, on the assumption
+that a sender already knows their own token account. That assumption did not
+survive contact with the endpoint's own reasoning: if not making the caller
+compute an associated address is worth an endpoint for the recipient, it is
+worth the same thing for the sender. A caller who *does* already hold an
+exact token account address — an associated one or one from
+`token/create-account` — has transfer-checked for that; this endpoint is
+specifically for two wallets that have never had to think about where their
+tokens live.
 
-The derived address is already known to be right. The same derivation matched
-1655 live associated accounts in step 0, so what remains to confirm is the
-instruction, not the address.
+The two sides are not symmetric in what happens when the derived account is
+missing. The destination's gets an idempotent create prepended, so the
+transfer and the account both land in one transaction and neither creator
+loses a race with the other. The source's is never created: an account
+nobody has funded has no balance to send, so a missing one is reported as
+having no associated account for the mint rather than being created empty
+and immediately failing the transfer anyway.
 
-`transfer-to-wallet` reads the recipient's ATA first and only prepends the
-idempotent create when it is missing, so the plain create is never the one that
-races.
+No `token/close-ata` was needed. `token/close-account` already takes any
+165-byte Token or Token-2022 account, and an associated account is that same
+layout at a derived address; nothing about closing distinguishes how the
+address came to exist.
 
 ### 5. Delegation and administration
 

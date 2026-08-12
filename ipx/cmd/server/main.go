@@ -166,6 +166,9 @@ func run() error {
 			r.Post("/transfer-checked", token.TransferChecked)
 			r.Post("/burn-checked", token.BurnChecked)
 			r.Post("/close-account", token.CloseAccount)
+			r.Post("/create-ata", token.CreateATA)
+			r.Post("/create-ata-idempotent", token.CreateATAIdempotent)
+			r.Post("/transfer-to-wallet", token.TransferToWallet)
 		})
 	})
 

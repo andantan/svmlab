@@ -101,7 +101,7 @@ func run() error {
 	r.Route("/svm/account", func(r chi.Router) {
 		r.Use(handler.RequireChain(cluster))
 
-		accountHandler := account.NewHandler()
+		accountHandler := account.NewAccountHandler()
 		r.Post("/state", accountHandler.State)
 		r.Post("/owner", accountHandler.Owner)
 		r.Post("/balance", accountHandler.Balance)

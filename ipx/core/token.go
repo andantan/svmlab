@@ -401,6 +401,55 @@ type Multisig struct {
 	Signers       []*types.PublicKey
 }
 
+// Enrolled reports whether a key is one of the multisig's registered signers.
+//
+// Membership alone authorizes nothing: an enrolled key signing is only
+// sufficient once at least M of them have, which is a count the caller checks
+// against M separately, not something this account can answer about a single
+// key.
+func (ms *Multisig) Enrolled(key *types.PublicKey) bool {
+	for _, s := range ms.Signers {
+		if s.Equal(key) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// RequireMultisigAuthority decodes account data as a multisig and checks that
+// signers is enough of its enrolled members, given the account's owner as
+// read from the cluster.
+//
+// This takes owner and data already fetched rather than an account or a
+// cluster to fetch them from. core has no path to a live cluster — internal/rpc
+// imports core for its decoders, so the reverse import would cycle — and
+// reading is not what varies between callers here, only what to do with what
+// was read.
+func RequireMultisigAuthority(program, owner *types.PublicKey, data []byte, signers []*types.PublicKey) (*Multisig, error) {
+	if !owner.Equal(program) {
+		return nil, fmt.Errorf("owned by %s, not %s", owner, program)
+	}
+
+	multisig, err := DecodeMultisig(owner, data)
+	if err != nil {
+		return nil, err
+	}
+	if !multisig.IsInitialized {
+		return nil, fmt.Errorf("not initialized")
+	}
+	if len(signers) < int(multisig.M) {
+		return nil, fmt.Errorf("requires %d signers, %d were given", multisig.M, len(signers))
+	}
+	for _, s := range signers {
+		if !multisig.Enrolled(s) {
+			return nil, fmt.Errorf("%s is not enrolled", s)
+		}
+	}
+
+	return multisig, nil
+}
+
 // DeserializeMultisig parses the 355 bytes a multisig account holds.
 //
 // Only the first N slots are returned. The remaining slots are present in the
@@ -506,6 +555,21 @@ func DecodeTokenAccount(owner *types.PublicKey, data []byte) (*TokenAccount, err
 	}
 
 	return DeserializeTokenAccount(base)
+}
+
+// DecodeMultisig parses account data as a multisig, given the program that
+// owns it.
+//
+// Unlike a mint or a holder account, this needs no type-tag disambiguation:
+// nothing attaches extensions to a multisig account, so it is exactly 355
+// bytes on both Token and Token-2022 and DeserializeMultisig's own length
+// check is the only one there is to make.
+func DecodeMultisig(owner *types.PublicKey, data []byte) (*Multisig, error) {
+	if _, err := TokenProgram(owner); err != nil {
+		return nil, fmt.Errorf("multisig: owned by %s, which is not a token program", owner)
+	}
+
+	return DeserializeMultisig(data)
 }
 
 // tokenBaseData returns the fixed prefix a classic parser reads, rejecting data

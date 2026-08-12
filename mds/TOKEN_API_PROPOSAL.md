@@ -200,7 +200,7 @@ arithmetic is local and the predicate is the only thing exported.
 
 `core/pda.go` sits on it with `Create` and `Find`. Checked against 2044 token
 accounts pulled from mainnet blocks: 1655 are associated token accounts and
-derive exactly, bumps included, and every account that did not match is one of the
+derive exactly, bumps included, and every account that did not match is one the
 seeds say should not.
 
 ### 1. Durable nonce, extracted — deferred
@@ -451,10 +451,16 @@ Amounts are decimal strings carrying raw base units:
   "authority": "owner_or_delegate",
   "amount": "250000",
   "decimals": 6,
+  "program": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
   "fee_payer": "fee_payer",
   "nonce_account": "optional_durable_nonce"
 }
 ```
+
+`program` is required with no default, since a mint belongs to exactly one of
+Token or Token-2022 forever and defaulting would make picking wrong silent. It
+is the account rather than a `"classic" | "token2022"` enum, so a third
+deployment needs no code change here to be reachable.
 
 This matches what the System endpoints already do — every `amount`,
 `lamports`, and `space` field there is a decimal string, because a `u64` past
@@ -478,26 +484,46 @@ fields such as mint, source, destination, amount, decimals, and authority.
 
 ## Safety Checks
 
-- Validate that every mint and token account belongs to the configured classic
-  Token Program before building an operation.
-- Decode involved accounts and verify their mint relationship before returning
-  a transfer, mint, burn, freeze, or close transaction.
-- Prefer checked variants in public examples and verify the supplied decimals
-  from the decoded mint.
-- Ensure a close of a non-native token account has zero token balance. Native
-  accounts use the dedicated unwrap / close behavior.
-- Verify a destination ATA matches the requested wallet, mint, and Token
-  Program; do not treat an arbitrary token account as a wallet ATA. The check
-  is to derive the address and compare, never to trust one the caller supplied
-  under that name.
-- Derive an ATA only through `FindProgramAddress`. A seed set whose first
-  candidate is on the curve has no valid address at that bump, and taking it
-  anyway produces a plausible base58 string that nothing can ever sign for.
+What the six lifecycle endpoints actually do, and one gap between this list's
+original intent and what got built:
+
+- Every account read for one of the six is checked against the request's
+  `program` field before it is decoded — the mint's owner and, where
+  applicable, the token account's owner must equal what was named, not merely
+  decode successfully. A Token account decodes as a valid prefix of a
+  Token-2022 layout, so without this an on-chain `IncorrectProgramId` would be
+  the first sign of the mismatch instead of a 400 with a reason. There is no
+  single "configured classic Token Program" any more; the program is named per
+  request, and either value gets the same check.
+- Decode every involved account and verify its mint against the request's
+  before returning transfer, burn, or close — implemented in each of those
+  three.
+- Checked variants are the only variants live so far; `decimals` is taken from
+  the request and compared against the decoded mint rather than filled in from
+  it, which is what lets a wrong-decimals amount come back as a 400.
+- A close of a non-native token account requires a zero balance; a native
+  (wrapped SOL) account skips that check, since its balance is its lamports
+  and closing it is how the SOL is unwrapped.
+- A destination ATA is never trusted under that name. `transfer-to-wallet`
+  derives both sides' associated accounts itself through `PDA.Find` rather
+  than accepting a caller-supplied address for either.
 - Preserve the existing signer and durable-nonce rules. A nonce authority is
-  an additional signer, never a substitute for a token authority.
-- For multisig, validate `1 <= m <= n <= 11`, deduplicate signer keys, and
-  reject a request whose unique signer count cannot fit in its serialized
-  transaction.
+  an additional signer, never a substitute for a token authority. Implemented,
+  though duplicated per endpoint rather than shared — see step 1.
+- Multisig authorities are checked against the account they name.
+  `validateMultisigAuthority` reads it, decodes it with `core.DecodeMultisig`
+  (owner-checked like `DecodeMint`, but a fixed 355 bytes since no extension
+  mechanism attaches to a multisig account), and rejects an authority that is
+  not initialized, that requires more signers than were given, or whose given
+  signers include one not enrolled. It runs after the owner-or-delegate check
+  in each endpoint and only when `multisig_signers` is non-empty, since a
+  single-signer authority signs for itself and has nothing on chain to hold a
+  request-shape check against. Verified directly against `DeserializeMultisig`
+  output — below-`m`, an unenrolled signer, a wrong owner, a wrong size, and an
+  uninitialized account all rejected — though not yet through a live endpoint
+  call against a real multisig account, which would need one created on
+  devnet first.
+  already works.
 
 ## Token-2022 Boundary
 

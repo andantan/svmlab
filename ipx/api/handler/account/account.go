@@ -11,10 +11,10 @@ import (
 	"github.com/andantan/svmlab/internal/rpc"
 )
 
-type Handler struct{}
+type AccountHandler struct{}
 
-func NewHandler() *Handler {
-	return &Handler{}
+func NewAccountHandler() *AccountHandler {
+	return &AccountHandler{}
 }
 
 // Balance godoc
@@ -28,7 +28,7 @@ func NewHandler() *Handler {
 // @Success      200   {object}  BalanceResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/account/balance [post]
-func (h *Handler) Balance(w http.ResponseWriter, r *http.Request) {
+func (h *AccountHandler) Balance(w http.ResponseWriter, r *http.Request) {
 	req := new(AccountRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -65,7 +65,7 @@ func (h *Handler) Balance(w http.ResponseWriter, r *http.Request) {
 // @Success      200   {object}  AccountResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/account/state [post]
-func (h *Handler) State(w http.ResponseWriter, r *http.Request) {
+func (h *AccountHandler) State(w http.ResponseWriter, r *http.Request) {
 	req := new(AccountRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -102,7 +102,7 @@ func (h *Handler) State(w http.ResponseWriter, r *http.Request) {
 // @Success      200   {object}  AccountOwnerResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/account/owner [post]
-func (h *Handler) Owner(w http.ResponseWriter, r *http.Request) {
+func (h *AccountHandler) Owner(w http.ResponseWriter, r *http.Request) {
 	req := new(AccountOwnerRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -139,7 +139,7 @@ func (h *Handler) Owner(w http.ResponseWriter, r *http.Request) {
 // @Success      200   {object}  TokensResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/account/tokens [post]
-func (h *Handler) Tokens(w http.ResponseWriter, r *http.Request) {
+func (h *AccountHandler) Tokens(w http.ResponseWriter, r *http.Request) {
 	req := new(TokensRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -175,7 +175,7 @@ func (h *Handler) Tokens(w http.ResponseWriter, r *http.Request) {
 	handler.WriteOK(w, NewTokensResponse(req.ToPublicKey(), entries))
 }
 
-func (h *Handler) tokenEntries(r *http.Request, chain *rpc.Chain, found []rpc.KeyedAccount) ([]*TokenEntry, error) {
+func (h *AccountHandler) tokenEntries(r *http.Request, chain *rpc.Chain, found []rpc.KeyedAccount) ([]*TokenEntry, error) {
 	// Decimals are cached across the listing. A wallet's accounts cluster on a
 	// few mints, so reading each one per account would turn a single call into
 	// dozens for no new information.
@@ -231,7 +231,7 @@ func (h *Handler) tokenEntries(r *http.Request, chain *rpc.Chain, found []rpc.Ke
 // @Success      200   {object}  NonceResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/account/nonce [post]
-func (h *Handler) Nonce(w http.ResponseWriter, r *http.Request) {
+func (h *AccountHandler) Nonce(w http.ResponseWriter, r *http.Request) {
 	req := new(NonceRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
@@ -296,7 +296,7 @@ func (h *Handler) Nonce(w http.ResponseWriter, r *http.Request) {
 // @Success      200   {object}  AirdropResponse
 // @Failure      400   {object}  map[string]string
 // @Router       /svm/account/airdrop [post]
-func (h *Handler) Airdrop(w http.ResponseWriter, r *http.Request) {
+func (h *AccountHandler) Airdrop(w http.ResponseWriter, r *http.Request) {
 	req := new(AirdropRequest)
 	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))

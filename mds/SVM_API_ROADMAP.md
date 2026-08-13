@@ -18,7 +18,7 @@ shape the first lifecycle was in before it shipped.
 
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
-| RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing       |
+| RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi and batch transfer |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts; first used by ATA   |
 | SPL Token classic         | done    | partial   | lifecycle, delegation, and 7 set-authority endpoints live; freeze/thaw next |

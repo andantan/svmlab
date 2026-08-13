@@ -78,6 +78,7 @@ func run() error {
 		r.Post("/slot", clusterHandler.Slot)
 		r.Post("/transaction/fee", clusterHandler.Fee)
 		r.Post("/transaction/refresh-blockhash", clusterHandler.RefreshBlockhash)
+		r.Post("/transaction/replace-blockhash-with-nonce", clusterHandler.ReplaceBlockhashWithNonce)
 		r.Post("/transaction/send", clusterHandler.SendTransaction)
 		r.Post("/transaction/simulate", clusterHandler.SimulateTransaction)
 		r.Post("/transaction/status", clusterHandler.SignatureStatus)

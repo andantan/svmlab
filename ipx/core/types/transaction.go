@@ -300,6 +300,90 @@ func RefreshTransactionBlockhash(raw []byte, blockhash *Hash) ([]byte, error) {
 	return out, nil
 }
 
+// ToLegacyTransaction returns raw in the legacy wire format.
+//
+// A legacy transaction comes back as it went in. A versioned (v0) one that
+// declares no address lookup tables is the same transaction in a different
+// envelope — a version byte in front, an empty table count behind, and
+// nothing else between them — so it is rewritten rather than refused, which
+// is what lets anything downstream take a *Transaction without modelling v0.
+//
+// One that does use a lookup table cannot be rewritten. Its instructions
+// index accounts the message never lists: the keys those indexes stand for
+// live only in tables held on chain, so resolving them means reading each
+// table off the cluster, which is the address lookup table work this project
+// has not done. Refusing is the honest answer, since dropping the section
+// would leave every index past the static keys pointing somewhere else.
+func ToLegacyTransaction(raw []byte) ([]byte, error) {
+	versioned, err := IsVersionedTransaction(raw)
+	if err != nil {
+		return nil, err
+	}
+	if !versioned {
+		return raw, nil
+	}
+
+	n, sigPrefixSize, err := codec.Binary.ReadShortVecLen(raw)
+	if err != nil {
+		return nil, fmt.Errorf("transaction signatures: %w", err)
+	}
+	sigSectionEnd := sigPrefixSize + n*SignatureLength
+	if len(raw) < sigSectionEnd {
+		return nil, fmt.Errorf("transaction: %d bytes is too short for %d signatures", len(raw), n)
+	}
+	message := raw[sigSectionEnd:]
+
+	if v := message[0] & 0x7f; v != 0 {
+		return nil, fmt.Errorf("transaction message: version %d is not supported", v)
+	}
+
+	rest := message[1:]
+	if len(rest) < MessageHeaderLength {
+		return nil, fmt.Errorf("transaction message: too short for a header")
+	}
+	rest = rest[MessageHeaderLength:]
+
+	keyCount, size, err := codec.Binary.ReadShortVecLen(rest)
+	if err != nil {
+		return nil, fmt.Errorf("transaction message account keys: %w", err)
+	}
+	rest = rest[size:]
+	if len(rest) < keyCount*PublicKeyLength+HashLength {
+		return nil, fmt.Errorf("transaction message: too short for %d account keys and a blockhash", keyCount)
+	}
+	rest = rest[keyCount*PublicKeyLength+HashLength:]
+
+	ixCount, size, err := codec.Binary.ReadShortVecLen(rest)
+	if err != nil {
+		return nil, fmt.Errorf("transaction message instructions: %w", err)
+	}
+	rest = rest[size:]
+	for i := range ixCount {
+		if _, rest, err = DeserializeCompiledInstruction(rest); err != nil {
+			return nil, fmt.Errorf("transaction message instruction[%d]: %w", i, err)
+		}
+	}
+
+	tables, size, err := codec.Binary.ReadShortVecLen(rest)
+	if err != nil {
+		return nil, fmt.Errorf("transaction message address lookup tables: %w", err)
+	}
+	if tables != 0 {
+		return nil, fmt.Errorf(
+			"transaction message: %d address lookup tables are not supported, since the accounts they hold are not in the message",
+			tables)
+	}
+	if len(rest) != size {
+		return nil, fmt.Errorf("transaction message: %d trailing bytes", len(rest)-size)
+	}
+
+	out := make([]byte, 0, sigSectionEnd+len(message)-1-size)
+	out = append(out, raw[:sigSectionEnd]...)
+	out = append(out, message[1:len(message)-size]...)
+
+	return out, nil
+}
+
 // DeserializeTransaction parses the wire format.
 func DeserializeTransaction(raw []byte) (*Transaction, error) {
 	n, size, err := codec.Binary.ReadShortVecLen(raw)

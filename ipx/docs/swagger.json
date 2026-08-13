@@ -642,6 +642,63 @@
                 }
             }
         },
+        "/svm/cluster/transaction/replace-blockhash-with-nonce": {
+            "post": {
+                "description": "Recompiles a transaction so it draws its message blockhash from a durable nonce account and advances that nonce as its first instruction, which is what makes it stop expiring. transaction is base64 and must be unsigned: this rebuilds the account list rather than editing it, so any existing signature covers a message that no longer exists. The nonce authority is read off the account rather than taken from the request, and it becomes a required signer, so read signers in the response rather than assuming it matches what went in. A legacy transaction and a versioned (v0) one that declares no address lookup tables are both accepted; the result is legacy either way. A v0 transaction that does use lookup tables is refused, since the accounts its instructions point at are not in the message.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "cluster"
+                ],
+                "summary": "Rebuild an unsigned transaction against a durable nonce",
+                "parameters": [
+                    {
+                        "description": "Transaction and nonce account",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ReplaceBlockhashWithNonceRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.ReplaceBlockhashWithNonceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/cluster/transaction/send": {
             "post": {
                 "description": "Submits a fully signed transaction to the cluster and returns its signature. transaction is base64. Never parses the message inside, only checks that every signature slot is filled, so a versioned (v0) transaction is accepted the same as a legacy one. Acceptance is not execution; the transaction still has to land in a block.",
@@ -4453,6 +4510,59 @@
                 },
                 "space": {
                     "type": "integer"
+                }
+            }
+        },
+        "misc.ReplaceBlockhashWithNonceRequest": {
+            "type": "object",
+            "properties": {
+                "nonce_account": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.ReplaceBlockhashWithNonceResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_account": {
+                    "description": "NonceAccount and NonceAuthority are always present here, unlike the v2\nresponses where the authority doubles as the signal that a nonce was\nused at all: this endpoint does nothing else.",
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "size": {
+                    "type": "integer"
+                },
+                "size_limit": {
+                    "type": "integer"
+                },
+                "transaction": {
+                    "type": "string"
                 }
             }
         },

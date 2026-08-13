@@ -6,6 +6,7 @@ import (
 	"net/http"
 
 	"github.com/andantan/svmlab/api/handler"
+	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/core/types"
 	"github.com/andantan/svmlab/internal/rpc"
 )
@@ -185,6 +186,164 @@ func (h *ClusterHandler) RefreshBlockhash(w http.ResponseWriter, r *http.Request
 	}
 
 	handler.WriteOK(w, NewRefreshBlockhashResponse(raw, hash.Base58(), lastValid))
+}
+
+// ReplaceBlockhashWithNonce godoc
+// @Summary      Rebuild an unsigned transaction against a durable nonce
+// @Description  Recompiles a transaction so it draws its message blockhash from a durable nonce account and advances that nonce as its first instruction, which is what makes it stop expiring. transaction is base64 and must be unsigned: this rebuilds the account list rather than editing it, so any existing signature covers a message that no longer exists. The nonce authority is read off the account rather than taken from the request, and it becomes a required signer, so read signers in the response rather than assuming it matches what went in. A legacy transaction and a versioned (v0) one that declares no address lookup tables are both accepted; the result is legacy either way. A v0 transaction that does use lookup tables is refused, since the accounts its instructions point at are not in the message.
+// @Tags         cluster
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ReplaceBlockhashWithNonceRequest  true  "Transaction and nonce account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ReplaceBlockhashWithNonceResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/cluster/transaction/replace-blockhash-with-nonce [post]
+func (h *ClusterHandler) ReplaceBlockhashWithNonce(w http.ResponseWriter, r *http.Request) {
+	req := new(ReplaceBlockhashWithNonceRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	legacy, err := types.ToLegacyTransaction(req.ToRaw())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	tx, err := types.DeserializeTransaction(legacy)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, "transaction: "+err.Error())
+		return
+	}
+	for i, sig := range tx.Signatures {
+		if !sig.IsNil() && !sig.IsZero() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+				"transaction: signature[%d] is already set, and rebuilding the message would invalidate it", i))
+			return
+		}
+	}
+	if len(tx.Message.AccountKeys) == 0 {
+		handler.WriteError(w, http.StatusBadRequest, "transaction: message names no accounts")
+		return
+	}
+
+	// Index 0 is the fee payer by definition, which is the one account
+	// recompiling has to be told rather than able to work out: every other
+	// key follows from the instructions.
+	feePayer := tx.Message.AccountKeys[0]
+
+	instructions, err := tx.Message.DecompileInstructions()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, "transaction: "+err.Error())
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
+		return
+	}
+	if info == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		return
+	}
+	if info.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
+			req.NonceAccountKey(), info.Owner))
+		return
+	}
+	if info.Space != core.NonceAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
+			"nonce_account: %s is %d bytes, and a nonce account is %d",
+			req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+		return
+	}
+
+	data, err := info.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
+		return
+	}
+	nonce, err := core.DeserializeNonceAccount(data)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if !nonce.Initialized() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+		return
+	}
+
+	advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	message, err := types.NewNonceMessage(feePayer, nonce.Nonce, advance, instructions)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// A stored nonce is not among the cluster's recent blockhashes, so pricing
+	// the real message comes back expired. The fee follows from the signature
+	// count and any compute budget instructions, never from the blockhash, so
+	// the same shape against a live one prices it exactly.
+	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	priced, err := types.NewNonceMessage(feePayer, blockhash, advance, instructions)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadGateway, "failed to price message: the blockhash it was priced against expired")
+		return
+	}
+
+	out, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	raw, err := out.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewReplaceBlockhashWithNonceResponse(
+		out, raw, messageBytes, req.NonceAccountKey(), nonce.Authority, fee))
 }
 
 // SendTransaction godoc

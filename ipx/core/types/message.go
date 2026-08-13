@@ -380,6 +380,51 @@ func DeserializeMessage(raw []byte) (*Message, error) {
 	}, nil
 }
 
+// DecompileInstructions rebuilds the key-carrying instructions the message
+// was compiled from, which is the form NewMessage and NewNonceMessage take.
+//
+// It undoes the index rewriting in newMessage, not the ordering: an index is
+// resolved back to its key and the privileges the header implies for that
+// position, so what comes back describes the same calls with the same
+// operands in the same order. Recompiling the result gathers and sorts the
+// account list again from scratch, which is the point — anything that adds
+// an instruction to an existing message needs the indexes renumbered around
+// the accounts the new one brings, and doing it this way leaves that to the
+// one place that already knows the rules.
+//
+// Two things do not survive the round trip. An account listed in the message
+// but referenced by no instruction is dropped, since nothing carries it
+// through; it costs a load and does nothing else, so this changes what the
+// transaction is charged rather than what it does. And the key order is the
+// one newMessage produces rather than the one that came in, which is why the
+// bytes differ even when the accounts do not.
+func (m *Message) DecompileInstructions() ([]*Instruction, error) {
+	out := make([]*Instruction, len(m.Instructions))
+	for n, ix := range m.Instructions {
+		if ix.IsNil() {
+			return nil, fmt.Errorf("message: instruction[%d] is nil", n)
+		}
+		if int(ix.ProgramIDIndex) >= len(m.AccountKeys) {
+			return nil, fmt.Errorf("message: instruction[%d] program index %d is past %d account keys",
+				n, ix.ProgramIDIndex, len(m.AccountKeys))
+		}
+
+		accounts := make([]*Account, len(ix.AccountIndexes))
+		for j, at := range ix.AccountIndexes {
+			i := int(at)
+			if i >= len(m.AccountKeys) {
+				return nil, fmt.Errorf("message: instruction[%d].account[%d] index %d is past %d account keys",
+					n, j, i, len(m.AccountKeys))
+			}
+			accounts[j] = NewAccount(m.AccountKeys[i], m.IsSigner(i), m.IsWritable(i))
+		}
+
+		out[n] = NewInstruction(m.AccountKeys[ix.ProgramIDIndex], accounts, ix.Data)
+	}
+
+	return out, nil
+}
+
 func (m *Message) String() string {
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "header{sig=%d roSigned=%d roUnsigned=%d} blockhash=%s\n",

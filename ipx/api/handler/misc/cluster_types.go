@@ -117,6 +117,110 @@ func NewRefreshBlockhashResponse(raw []byte, blockhash string, lastValidBlockHei
 	}
 }
 
+// ReplaceBlockhashWithNonceRequest carries an unsigned transaction to rebuild
+// against a durable nonce.
+//
+// The transaction must be unsigned, and for a stronger reason than the
+// blockhash refresh next door has: this does not edit the message, it
+// recompiles one. Advancing the nonce is an instruction, its accounts join
+// the key list, and every index shifts around them — so a signature made
+// over the old bytes is not merely stale, it is a signature over a message
+// that no longer exists.
+//
+// The nonce authority is not a field. It is stored on the nonce account, and
+// reading it there rather than taking the caller's word turns a wrong one
+// into a 400 instead of an on-chain failure.
+type ReplaceBlockhashWithNonceRequest struct {
+	Transaction  string `json:"transaction"`
+	NonceAccount string `json:"nonce_account"`
+
+	raw          []byte
+	nonceAccount *types.PublicKey
+}
+
+func (r *ReplaceBlockhashWithNonceRequest) ValidateRequest() error {
+	raw, err := codec.Base64.Decode(strings.TrimSpace(r.Transaction))
+	if err != nil {
+		return errors.New("transaction: invalid base64: " + err.Error())
+	}
+	r.raw = raw
+
+	if r.nonceAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NonceAccount)); err != nil {
+		return errors.New("nonce_account: " + err.Error())
+	}
+
+	return nil
+}
+
+func (r *ReplaceBlockhashWithNonceRequest) ToRaw() []byte {
+	return r.raw
+}
+
+func (r *ReplaceBlockhashWithNonceRequest) NonceAccountKey() *types.PublicKey {
+	return r.nonceAccount
+}
+
+// ReplaceBlockhashWithNonceResponse mirrors the v2 build responses, so the
+// result goes straight to sign and send the same way a freshly built
+// transaction does.
+//
+// Signers is the field to read. Recompiling can add one — a nonce authority
+// that was not already signing becomes a required signer — so the set here
+// is not necessarily the set the caller sent in.
+//
+// If that authority is a key the transaction already carried as a
+// non-signer, it does not get a second entry; it is the same account with
+// signer added, which every instruction already holding it now sees. Signing
+// is a property of the message rather than of one instruction, so there is
+// no arrangement where a key signs for the nonce and not for the rest, and a
+// nonce account whose authority is an address nobody can sign for leaves a
+// transaction that cannot be completed.
+type ReplaceBlockhashWithNonceResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	// NonceAccount and NonceAuthority are always present here, unlike the v2
+	// responses where the authority doubles as the signal that a nonce was
+	// used at all: this endpoint does nothing else.
+	NonceAccount   string `json:"nonce_account"`
+	NonceAuthority string `json:"nonce_authority"`
+
+	Fee       string `json:"fee"`
+	Size      int    `json:"size"`
+	SizeLimit int    `json:"size_limit"`
+}
+
+func NewReplaceBlockhashWithNonceResponse(
+	tx *types.Transaction, raw, message []byte,
+	nonceAccount, nonceAuthority *types.PublicKey, fee uint64,
+) *ReplaceBlockhashWithNonceResponse {
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ReplaceBlockhashWithNonceResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAccount:    nonceAccount.Base58(),
+		NonceAuthority:  nonceAuthority.Base58(),
+		Fee:             strconv.FormatUint(fee, 10),
+		Size:            len(raw),
+		SizeLimit:       types.MaxTransactionSize,
+	}
+}
+
 // SendTransactionRequest broadcasts a signed transaction.
 type SendTransactionRequest struct {
 	Transaction string `json:"transaction"`

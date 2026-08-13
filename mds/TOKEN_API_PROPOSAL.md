@@ -587,19 +587,18 @@ original intent and what got built:
   an additional signer, never a substitute for a token authority. Implemented,
   though duplicated per endpoint rather than shared — see step 1.
 - Multisig authorities are checked against the account they name.
-  `validateMultisigAuthority` reads it, decodes it with `core.DecodeMultisig`
-  (owner-checked like `DecodeMint`, but a fixed 355 bytes since no extension
-  mechanism attaches to a multisig account), and rejects an authority that is
-  not initialized, that requires more signers than were given, or whose given
-  signers include one not enrolled. It runs after the owner-or-delegate check
-  in each endpoint and only when `multisig_signers` is non-empty, since a
-  single-signer authority signs for itself and has nothing on chain to hold a
-  request-shape check against. Verified directly against `DeserializeMultisig`
-  output — below-`m`, an unenrolled signer, a wrong owner, a wrong size, and an
-  uninitialized account all rejected — though not yet through a live endpoint
-  call against a real multisig account, which would need one created on
-  devnet first.
-  already works.
+  `core.RequireMultisigAuthority` reads it, decodes it with
+  `core.DecodeMultisig` (owner-checked like `DecodeMint`, but a fixed 355
+  bytes since no extension mechanism attaches to a multisig account), and
+  rejects an authority that is not initialized, that requires more signers
+  than were given, or whose given signers include one not enrolled. It runs
+  after the owner-or-delegate check in each endpoint and only when
+  `multisig_signers` is non-empty, since a single-signer authority signs for
+  itself and has nothing on chain to hold a request-shape check against.
+  Verified directly against `DeserializeMultisig` output — below-`m`, an
+  unenrolled signer, a wrong owner, a wrong size, and an uninitialized
+  account all rejected — though not yet through a live endpoint call against
+  a real multisig account, which would need one created on devnet first.
 
 ## Token-2022 Boundary
 

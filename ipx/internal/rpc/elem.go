@@ -84,6 +84,17 @@ func SOLGetAccountInfo(pubkey string, c Commitment, result *Result[*AccountInfo]
 	}
 }
 
+// SOLGetMultipleAccounts reads several accounts in one round trip. The result
+// slice is positional: index i answers for pubkeys[i], nil where the cluster
+// has nothing funded there, the same as SOLGetAccountInfo answers for one.
+func SOLGetMultipleAccounts(pubkeys []string, c Commitment, result *Result[[]*AccountInfo]) Elem {
+	return Elem{
+		Method: "getMultipleAccounts",
+		Params: []any{pubkeys, map[string]any{"commitment": c, "encoding": "base64"}},
+		Result: result,
+	}
+}
+
 // SOLGetTokenAccountsByOwner lists the token accounts a wallet owns, filtered
 // either to one mint or to one token program.
 //

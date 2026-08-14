@@ -143,7 +143,7 @@ func run() error {
 		r.Route("/transaction/system", func(r chi.Router) {
 			r.Post("/transfer", tx.SystemTransfer)
 			r.Post("/transfer/max", tx.SystemTransferMax)
-			r.Post("/transfer/many", tx.SystemTransferMany)
+			r.Post("/transfer/spread", tx.SystemTransferSpread)
 			r.Post("/create-account", tx.SystemCreateAccount)
 			r.Post("/allocate", tx.SystemAllocate)
 			r.Post("/assign", tx.SystemAssign)

@@ -212,13 +212,13 @@ func (r *SystemTransferMaxRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
 
-// SystemTransferManyTarget is one recipient and what they receive.
+// SystemTransferSpreadTarget is one recipient and what they receive.
 //
 // One entry compiles to one Transfer instruction, so the list length is the
 // instruction count, and it is what pushes a transaction toward the size
 // limit. There is no per-entry sender: every transfer here leaves the same
 // account, which is what keeps the signer count at one or two.
-type SystemTransferManyTarget struct {
+type SystemTransferSpreadTarget struct {
 	// To is the account credited. It is not required to exist yet, but if it
 	// does not, Lamports must be at least the rent-exemption minimum, since
 	// the runtime will not create an account below it.
@@ -231,21 +231,21 @@ type SystemTransferManyTarget struct {
 	l uint64
 }
 
-func (t *SystemTransferManyTarget) ToKey() *types.PublicKey {
+func (t *SystemTransferSpreadTarget) ToKey() *types.PublicKey {
 	return t.t
 }
 
-func (t *SystemTransferManyTarget) ToLamports() uint64 {
+func (t *SystemTransferSpreadTarget) ToLamports() uint64 {
 	return t.l
 }
 
-// SystemTransferManyRequest moves lamports from one account to several in a
+// SystemTransferSpreadRequest moves lamports from one account to several in a
 // single transaction.
 //
 // There is no max variant. Sending everything one account holds is a single
 // amount, and there is no reading of how it should be divided among several
 // recipients.
-type SystemTransferManyRequest struct {
+type SystemTransferSpreadRequest struct {
 	// From is the account debited for every transfer. It signs the
 	// transaction as the transfer authority, whether or not it also pays the
 	// fee.
@@ -254,7 +254,7 @@ type SystemTransferManyRequest struct {
 	// Transfers lists the recipients and their amounts, in the order the
 	// instructions are executed and the response echoes them back. There is
 	// no upper bound here beyond what fits in one transaction.
-	Transfers []SystemTransferManyTarget `json:"transfers"`
+	Transfers []SystemTransferSpreadTarget `json:"transfers"`
 
 	// FeePayer signs and pays the transaction fee. It may be the same
 	// account as From, in which case the fee is deducted from its balance
@@ -286,7 +286,7 @@ type SystemTransferManyRequest struct {
 	tot uint64
 }
 
-func (r *SystemTransferManyRequest) ValidateRequest() error {
+func (r *SystemTransferSpreadRequest) ValidateRequest() error {
 	var err error
 	if r.f, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
 		return errors.New("from: " + err.Error())
@@ -360,41 +360,41 @@ func (r *SystemTransferManyRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *SystemTransferManyRequest) DurableNonceAccountKey() *types.PublicKey {
+func (r *SystemTransferSpreadRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-func (r *SystemTransferManyRequest) Blockhash() *types.Hash {
+func (r *SystemTransferSpreadRequest) Blockhash() *types.Hash {
 	return r.rbh
 }
 
-func (r *SystemTransferManyRequest) FromKey() *types.PublicKey {
+func (r *SystemTransferSpreadRequest) FromKey() *types.PublicKey {
 	return r.f
 }
 
-func (r *SystemTransferManyRequest) FeePayerKey() *types.PublicKey {
+func (r *SystemTransferSpreadRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
 
-func (r *SystemTransferManyRequest) Targets() []SystemTransferManyTarget {
+func (r *SystemTransferSpreadRequest) Targets() []SystemTransferSpreadTarget {
 	return r.Transfers
 }
 
 // Total is the sum of every amount, resolved during validation because that is
 // where the overflow it could hide was ruled out.
-func (r *SystemTransferManyRequest) Total() uint64 {
+func (r *SystemTransferSpreadRequest) Total() uint64 {
 	return r.tot
 }
 
-// SystemTransferManyTargetResponse echoes one recipient with its amount in SOL
+// SystemTransferSpreadTargetResponse echoes one recipient with its amount in SOL
 // beside the lamport count.
-type SystemTransferManyTargetResponse struct {
+type SystemTransferSpreadTargetResponse struct {
 	To       string `json:"to"`
 	Lamports string `json:"lamports"`
 	SOL      string `json:"sol"`
 }
 
-type SystemTransferManyResponse struct {
+type SystemTransferSpreadResponse struct {
 	Transaction     string `json:"transaction"`
 	Message         string `json:"message"`
 	RecentBlockhash string `json:"recent_blockhash"`
@@ -413,10 +413,10 @@ type SystemTransferManyResponse struct {
 	// stored value rather than a fetched blockhash.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Transfers     []SystemTransferManyTargetResponse `json:"transfers"`
-	TotalLamports string                             `json:"total_lamports"`
-	TotalSOL      string                             `json:"total_sol"`
-	Fee           string                             `json:"fee"`
+	Transfers     []SystemTransferSpreadTargetResponse `json:"transfers"`
+	TotalLamports string                               `json:"total_lamports"`
+	TotalSOL      string                               `json:"total_sol"`
+	Fee           string                               `json:"fee"`
 
 	// Size and SizeLimit are what bounds this endpoint. A transaction travels
 	// in one packet and cannot be split, so the recipient count is really a
@@ -426,7 +426,7 @@ type SystemTransferManyResponse struct {
 	SizeLimit int `json:"size_limit"`
 }
 
-func NewSystemTransferManyResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, targets []SystemTransferManyTarget, total, fee uint64) *SystemTransferManyResponse {
+func NewSystemTransferSpreadResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, targets []SystemTransferSpreadTarget, total, fee uint64) *SystemTransferSpreadResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
@@ -442,16 +442,16 @@ func NewSystemTransferManyResponse(tx *types.Transaction, raw, message []byte, n
 		signers[i] = k.Base58()
 	}
 
-	transfers := make([]SystemTransferManyTargetResponse, len(targets))
+	transfers := make([]SystemTransferSpreadTargetResponse, len(targets))
 	for i := range targets {
-		transfers[i] = SystemTransferManyTargetResponse{
+		transfers[i] = SystemTransferSpreadTargetResponse{
 			To:       targets[i].ToKey().Base58(),
 			Lamports: strconv.FormatUint(targets[i].ToLamports(), 10),
 			SOL:      types.LamportsToSol(targets[i].ToLamports()),
 		}
 	}
 
-	return &SystemTransferManyResponse{
+	return &SystemTransferSpreadResponse{
 		Transaction:     codec.Base64.Encode(raw),
 		Message:         codec.Base64.Encode(message),
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
@@ -570,99 +570,176 @@ func NewSystemTransferMaxResponse(tx *types.Transaction, raw, message []byte, no
 }
 
 type SystemCreateAccountRequest struct {
-	From       string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	// FundingPayer is the funder. It signs the transaction as the account
+	// debited, whether or not it also pays the fee.
+	FundingPayer string `json:"funding_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// NewAccount is the account created. It signs alongside FundingPayer,
+	// since an address does not exist until whoever holds its private key
+	// authorizes its creation. It must not already exist.
 	NewAccount string `json:"new_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
-	Owner      string `json:"owner" example:"11111111111111111111111111111111"`
-	Lamports   string `json:"lamports" example:"890880"`
-	Space      string `json:"space" example:"0"`
-	FeePayer   string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	NonceAccount string `json:"nonce_account" example:""`
+	// Owner must be executable: only the owning program may debit an account
+	// or write its data, so an account handed to a plain address is locked
+	// from the moment it exists. Pass the System Program for an ordinary
+	// account.
+	Owner string `json:"owner" example:"11111111111111111111111111111111"`
 
-	from         *types.PublicKey
-	newAccount   *types.PublicKey
-	owner        *types.PublicKey
-	feePayer     *types.PublicKey
-	nonceAccount *types.PublicKey
-	lamports     uint64
-	space        uint64
+	// Lamports is NewAccount's final balance target, not what FundingPayer
+	// alone sends: CreateAccount itself is funded by RentPayer for exactly
+	// the rent-exemption minimum for Space, and FundingPayer's own transfer
+	// covers only what that leaves, so Lamports must be at least that
+	// minimum.
+	Lamports string `json:"lamports" example:"1000000"`
+
+	// Space is the byte count allocated for NewAccount's data.
+	Space string `json:"space" example:"0"`
+
+	// FeePayer signs and pays the transaction fee. It may be the same
+	// account as FundingPayer.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	// RentPayer signs a transfer prepended ahead of NewAccount's creation,
+	// for exactly the rent-exemption minimum for Space — always, and only
+	// that amount, whatever FundingPayer separately sends as Lamports. It is
+	// required rather than optional so that which account is answerable for
+	// rent is never left to a default.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	fup *types.PublicKey
+	na  *types.PublicKey
+	o   *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
+	rp  *types.PublicKey
+	l   uint64
+	sp  uint64
 }
 
 func (r *SystemCreateAccountRequest) ValidateRequest() error {
 	var err error
-	if r.from, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
-		return errors.New("from: " + err.Error())
+	if r.fup, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FundingPayer)); err != nil {
+		return errors.New("funding_payer: " + err.Error())
 	}
-	if r.newAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewAccount)); err != nil {
+	if r.na, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewAccount)); err != nil {
 		return errors.New("new_account: " + err.Error())
 	}
-	if r.from.Equal(r.newAccount) {
-		return errors.New("from and new_account are the same account")
+	if r.fup.Equal(r.na) {
+		return errors.New("funding_payer and new_account are the same account")
 	}
-	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+	if r.o, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
 		return errors.New("owner: " + err.Error())
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
+	if r.fp.Equal(r.na) {
+		return errors.New("fee_payer and new_account are the same account")
+	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
+	}
+
+	rp := strings.TrimSpace(r.RentPayer)
+	if rp == "" {
+		return errors.New("rent_payer is required")
+	}
+	if r.rp, err = types.NewPublicKeyFromBase58(rp); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+	if r.rp.Equal(r.na) {
+		return errors.New("rent_payer and new_account are the same account")
 	}
 
 	lamports := strings.TrimSpace(r.Lamports)
 	if lamports == "" {
 		return errors.New("lamports is required")
 	}
-	if r.lamports, err = strconv.ParseUint(lamports, 10, 64); err != nil {
+	if r.l, err = strconv.ParseUint(lamports, 10, 64); err != nil {
 		return errors.New("lamports: must be a decimal lamport count")
+	}
+	if r.l == 0 {
+		return errors.New("lamports: must be greater than zero")
 	}
 
 	space := strings.TrimSpace(r.Space)
 	if space == "" {
 		return errors.New("space is required")
 	}
-	if r.space, err = strconv.ParseUint(space, 10, 64); err != nil {
+	if r.sp, err = strconv.ParseUint(space, 10, 64); err != nil {
 		return errors.New("space: must be a decimal byte count")
 	}
-	if r.space > core.MaxPermittedDataLength {
-		return fmt.Errorf("space: %d bytes exceeds the %d byte limit", r.space, core.MaxPermittedDataLength)
+	if r.sp > core.MaxPermittedDataLength {
+		return fmt.Errorf("space: %d bytes exceeds the %d byte limit", r.sp, core.MaxPermittedDataLength)
 	}
 
 	return nil
 }
 
-func (r *SystemCreateAccountRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+func (r *SystemCreateAccountRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
 }
 
-func (r *SystemCreateAccountRequest) FromKey() *types.PublicKey {
-	return r.from
+func (r *SystemCreateAccountRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+
+func (r *SystemCreateAccountRequest) FundingPayerKey() *types.PublicKey {
+	return r.fup
 }
 
 func (r *SystemCreateAccountRequest) NewAccountKey() *types.PublicKey {
-	return r.newAccount
+	return r.na
 }
 
 func (r *SystemCreateAccountRequest) OwnerKey() *types.PublicKey {
-	return r.owner
+	return r.o
 }
 
 func (r *SystemCreateAccountRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
+}
+
+func (r *SystemCreateAccountRequest) RentPayerKey() *types.PublicKey {
+	return r.rp
 }
 
 func (r *SystemCreateAccountRequest) ToLamports() uint64 {
-	return r.lamports
+	return r.l
 }
 
 func (r *SystemCreateAccountRequest) ToSpace() uint64 {
-	return r.space
+	return r.sp
 }
 
 type SystemCreateAccountResponse struct {
@@ -677,21 +754,39 @@ type SystemCreateAccountResponse struct {
 	// stored value rather than a fetched blockhash.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Lamports    string `json:"lamports"`
-	LamportsSOL string `json:"lamports_sol"`
+	// Funding reports the transfer that runs after CreateAccount: the
+	// request's lamports minus what Rent already covers, since together the
+	// two reach exactly that total. Its lamports are zero, and no such
+	// instruction is built, when Rent alone already reaches it.
+	Funding SystemCreateAccountPayer `json:"funding"`
 
-	// RentExempt is the floor the requested space had to clear. It is
-	// reported because the server had to resolve it to validate lamports
-	// anyway, and it is what a caller needs to know to fund the next one
-	// without guessing.
-	RentExempt string `json:"rent_exempt"`
+	// Rent reports what funds CreateAccount itself. Its lamports are always
+	// exactly the rent-exemption minimum for Space, never more or less.
+	Rent SystemCreateAccountPayer `json:"rent"`
+
+	Fee SystemCreateAccountPayer `json:"fee"`
 
 	Space uint64 `json:"space"`
 	Owner string `json:"owner"`
-	Fee   string `json:"fee"`
 }
 
-func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, owner, nonceAuthority *types.PublicKey, lamports, rentExempt, space, fee uint64) *SystemCreateAccountResponse {
+// SystemCreateAccountPayer is one signer's contribution: who it is and what
+// it moved, in both units.
+type SystemCreateAccountPayer struct {
+	Payer    string `json:"payer"`
+	Lamports string `json:"lamports"`
+	SOL      string `json:"sol"`
+}
+
+func newSystemCreateAccountPayer(payer *types.PublicKey, lamports uint64) SystemCreateAccountPayer {
+	return SystemCreateAccountPayer{
+		Payer:    payer.Base58(),
+		Lamports: strconv.FormatUint(lamports, 10),
+		SOL:      types.LamportsToSol(lamports),
+	}
+}
+
+func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, owner, fundingPayer, rentPayer, feePayer, nonceAuthority *types.PublicKey, fundingLamports, rentLamports, space, fee uint64) *SystemCreateAccountResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
@@ -714,12 +809,11 @@ func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, 
 		AccountKeys:     keys,
 		Signers:         signers,
 		NonceAuthority:  authority,
-		Lamports:        strconv.FormatUint(lamports, 10),
-		LamportsSOL:     types.LamportsToSol(lamports),
-		RentExempt:      strconv.FormatUint(rentExempt, 10),
+		Funding:         newSystemCreateAccountPayer(fundingPayer, fundingLamports),
+		Rent:            newSystemCreateAccountPayer(rentPayer, rentLamports),
+		Fee:             newSystemCreateAccountPayer(feePayer, fee),
 		Space:           space,
 		Owner:           owner.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
 	}
 }
 

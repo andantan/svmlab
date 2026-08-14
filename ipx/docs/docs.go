@@ -35,7 +35,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.AirdropRequest"
+                            "$ref": "#/definitions/account.AirdropRequest"
                         }
                     },
                     {
@@ -57,7 +57,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.AirdropResponse"
+                            "$ref": "#/definitions/account.AirdropResponse"
                         }
                     },
                     "400": {
@@ -91,7 +91,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.AccountRequest"
+                            "$ref": "#/definitions/account.AccountRequest"
                         }
                     },
                     {
@@ -113,7 +113,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.BalanceResponse"
+                            "$ref": "#/definitions/account.BalanceResponse"
                         }
                     },
                     "400": {
@@ -148,7 +148,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.NonceRequest"
+                            "$ref": "#/definitions/account.NonceRequest"
                         }
                     },
                     {
@@ -170,7 +170,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.NonceResponse"
+                            "$ref": "#/definitions/account.NonceResponse"
                         }
                     },
                     "400": {
@@ -205,7 +205,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.AccountOwnerRequest"
+                            "$ref": "#/definitions/account.AccountOwnerRequest"
                         }
                     },
                     {
@@ -227,7 +227,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.AccountOwnerResponse"
+                            "$ref": "#/definitions/account.AccountOwnerResponse"
                         }
                     },
                     "400": {
@@ -262,7 +262,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.AccountRequest"
+                            "$ref": "#/definitions/account.AccountRequest"
                         }
                     },
                     {
@@ -284,7 +284,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.AccountResponse"
+                            "$ref": "#/definitions/account.AccountResponse"
                         }
                     },
                     "400": {
@@ -319,7 +319,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.TokensRequest"
+                            "$ref": "#/definitions/account.TokensRequest"
                         }
                     },
                     {
@@ -341,7 +341,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_account.TokensResponse"
+                            "$ref": "#/definitions/account.TokensResponse"
                         }
                     },
                     "400": {
@@ -386,7 +386,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.BlockhashResponse"
+                            "$ref": "#/definitions/misc.BlockhashResponse"
                         }
                     },
                     "400": {
@@ -431,7 +431,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.GenesisHashResponse"
+                            "$ref": "#/definitions/misc.GenesisHashResponse"
                         }
                     },
                     "400": {
@@ -475,7 +475,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.HealthResponse"
+                            "$ref": "#/definitions/misc.HealthResponse"
                         }
                     },
                     "400": {
@@ -519,7 +519,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SlotResponse"
+                            "$ref": "#/definitions/misc.SlotResponse"
                         }
                     },
                     "400": {
@@ -554,7 +554,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.FeeRequest"
+                            "$ref": "#/definitions/misc.FeeRequest"
                         }
                     },
                     {
@@ -576,7 +576,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.FeeResponse"
+                            "$ref": "#/definitions/misc.FeeResponse"
                         }
                     },
                     "400": {
@@ -611,7 +611,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RefreshBlockhashRequest"
+                            "$ref": "#/definitions/misc.RefreshBlockhashRequest"
                         }
                     },
                     {
@@ -633,7 +633,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RefreshBlockhashResponse"
+                            "$ref": "#/definitions/misc.RefreshBlockhashResponse"
                         }
                     },
                     "400": {
@@ -668,7 +668,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.ReplaceBlockhashWithNonceRequest"
+                            "$ref": "#/definitions/misc.ReplaceBlockhashWithNonceRequest"
                         }
                     },
                     {
@@ -690,7 +690,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.ReplaceBlockhashWithNonceResponse"
+                            "$ref": "#/definitions/misc.ReplaceBlockhashWithNonceResponse"
                         }
                     },
                     "400": {
@@ -725,7 +725,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SendTransactionRequest"
+                            "$ref": "#/definitions/misc.SendTransactionRequest"
                         }
                     },
                     {
@@ -747,7 +747,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SendTransactionResponse"
+                            "$ref": "#/definitions/misc.SendTransactionResponse"
                         }
                     },
                     "400": {
@@ -782,7 +782,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SimulateTransactionRequest"
+                            "$ref": "#/definitions/misc.SimulateTransactionRequest"
                         }
                     },
                     {
@@ -804,7 +804,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SimulateTransactionResponse"
+                            "$ref": "#/definitions/misc.SimulateTransactionResponse"
                         }
                     },
                     "400": {
@@ -839,7 +839,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SignatureStatusRequest"
+                            "$ref": "#/definitions/misc.SignatureStatusRequest"
                         }
                     },
                     {
@@ -861,7 +861,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SignatureStatusResponse"
+                            "$ref": "#/definitions/misc.SignatureStatusResponse"
                         }
                     },
                     "400": {
@@ -905,7 +905,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.VersionResponse"
+                            "$ref": "#/definitions/misc.VersionResponse"
                         }
                     },
                     "400": {
@@ -949,7 +949,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RentExemptionMintResponse"
+                            "$ref": "#/definitions/misc.RentExemptionMintResponse"
                         }
                     },
                     "400": {
@@ -994,7 +994,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RentExemptionNonceResponse"
+                            "$ref": "#/definitions/misc.RentExemptionNonceResponse"
                         }
                     },
                     "400": {
@@ -1029,7 +1029,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RentExemptionPublicKeyRequest"
+                            "$ref": "#/definitions/misc.RentExemptionPublicKeyRequest"
                         }
                     },
                     {
@@ -1051,7 +1051,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RentExemptionPublicKeyResponse"
+                            "$ref": "#/definitions/misc.RentExemptionPublicKeyResponse"
                         }
                     },
                     "400": {
@@ -1086,7 +1086,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RentExemptionSpaceRequest"
+                            "$ref": "#/definitions/misc.RentExemptionSpaceRequest"
                         }
                     },
                     {
@@ -1108,7 +1108,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RentExemptionSpaceResponse"
+                            "$ref": "#/definitions/misc.RentExemptionSpaceResponse"
                         }
                     },
                     "400": {
@@ -1152,7 +1152,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RentExemptionStakeResponse"
+                            "$ref": "#/definitions/misc.RentExemptionStakeResponse"
                         }
                     },
                     "400": {
@@ -1197,7 +1197,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RentExemptionSystemResponse"
+                            "$ref": "#/definitions/misc.RentExemptionSystemResponse"
                         }
                     },
                     "400": {
@@ -1242,7 +1242,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RentExemptionTokenResponse"
+                            "$ref": "#/definitions/misc.RentExemptionTokenResponse"
                         }
                     },
                     "400": {
@@ -1286,7 +1286,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RentExemptionVoteResponse"
+                            "$ref": "#/definitions/misc.RentExemptionVoteResponse"
                         }
                     },
                     "400": {
@@ -1321,7 +1321,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.RawRequest"
+                            "$ref": "#/definitions/misc.RawRequest"
                         }
                     },
                     {
@@ -1378,7 +1378,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.BatchRequest"
+                            "$ref": "#/definitions/misc.BatchRequest"
                         }
                     },
                     {
@@ -1436,7 +1436,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SignRequest"
+                            "$ref": "#/definitions/misc.SignRequest"
                         }
                     },
                     {
@@ -1458,7 +1458,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SignResponse"
+                            "$ref": "#/definitions/misc.SignResponse"
                         }
                     },
                     "400": {
@@ -1493,7 +1493,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SignTransactionRequest"
+                            "$ref": "#/definitions/misc.SignTransactionRequest"
                         }
                     },
                     {
@@ -1515,7 +1515,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.SignTransactionResponse"
+                            "$ref": "#/definitions/misc.SignTransactionResponse"
                         }
                     },
                     "400": {
@@ -1550,7 +1550,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.VerifyRequest"
+                            "$ref": "#/definitions/misc.VerifyRequest"
                         }
                     },
                     {
@@ -1572,7 +1572,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.VerifyResponse"
+                            "$ref": "#/definitions/misc.VerifyResponse"
                         }
                     },
                     "400": {
@@ -1607,7 +1607,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_token.AccountRequest"
+                            "$ref": "#/definitions/token.AccountRequest"
                         }
                     },
                     {
@@ -1629,7 +1629,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_token.AccountResponse"
+                            "$ref": "#/definitions/token.AccountResponse"
                         }
                     },
                     "400": {
@@ -1664,7 +1664,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_token.MintRequest"
+                            "$ref": "#/definitions/token.MintRequest"
                         }
                     },
                     {
@@ -1686,7 +1686,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_token.MintResponse"
+                            "$ref": "#/definitions/token.MintResponse"
                         }
                     },
                     "400": {
@@ -1721,7 +1721,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.ConvertBase58To64Request"
+                            "$ref": "#/definitions/misc.ConvertBase58To64Request"
                         }
                     },
                     {
@@ -1743,7 +1743,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.ConvertBase58To64Response"
+                            "$ref": "#/definitions/misc.ConvertBase58To64Response"
                         }
                     },
                     "400": {
@@ -1778,7 +1778,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.ConvertBase64To58Request"
+                            "$ref": "#/definitions/misc.ConvertBase64To58Request"
                         }
                     },
                     {
@@ -1800,7 +1800,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.ConvertBase64To58Response"
+                            "$ref": "#/definitions/misc.ConvertBase64To58Response"
                         }
                     },
                     "400": {
@@ -1845,7 +1845,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_misc.GenerateKeypairResponse"
+                            "$ref": "#/definitions/misc.GenerateKeypairResponse"
                         }
                     },
                     "500": {
@@ -1880,7 +1880,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v1.BuildTransactionRequest"
+                            "$ref": "#/definitions/v1.BuildTransactionRequest"
                         }
                     },
                     {
@@ -1902,7 +1902,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v1.BuildTransactionResponse"
+                            "$ref": "#/definitions/v1.BuildTransactionResponse"
                         }
                     },
                     "400": {
@@ -1937,7 +1937,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemAllocateRequest"
+                            "$ref": "#/definitions/v2.SystemAllocateRequest"
                         }
                     },
                     {
@@ -1959,7 +1959,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemAllocateResponse"
+                            "$ref": "#/definitions/v2.SystemAllocateResponse"
                         }
                     },
                     "400": {
@@ -1994,7 +1994,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemAssignRequest"
+                            "$ref": "#/definitions/v2.SystemAssignRequest"
                         }
                     },
                     {
@@ -2016,7 +2016,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemAssignResponse"
+                            "$ref": "#/definitions/v2.SystemAssignResponse"
                         }
                     },
                     "400": {
@@ -2033,7 +2033,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/create-account": {
             "post": {
-                "description": "Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account owned by a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
+                "description": "Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account handed to a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside rent_payer, which is what has no EVM counterpart: an address does not exist until whoever holds its private key authorizes its creation, and it must not already exist. lamports is the account's final balance target, not what funding_payer alone sends: rent_payer is required rather than optional, and CreateAccount itself is built funded by rent_payer for exactly the rent-exemption minimum for the requested space, since the account does not exist yet and creating it is the only instruction that may find a zero balance there. funding_payer's own transfer runs second, adding whatever lamports leaves beyond that minimum to an account that already exists and is already exempt, which carries no such restriction — so lamports must be at least that minimum. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2046,12 +2046,12 @@ const docTemplate = `{
                 "summary": "Build a System Program account creation",
                 "parameters": [
                     {
-                        "description": "Funder, new account, owner, lamports, and space",
+                        "description": "Funding payer, new account, owner, lamports, space, and rent payer",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemCreateAccountRequest"
+                            "$ref": "#/definitions/v2.SystemCreateAccountRequest"
                         }
                     },
                     {
@@ -2073,7 +2073,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemCreateAccountResponse"
+                            "$ref": "#/definitions/v2.SystemCreateAccountResponse"
                         }
                     },
                     "400": {
@@ -2108,7 +2108,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceAdvanceRequest"
+                            "$ref": "#/definitions/v2.SystemNonceAdvanceRequest"
                         }
                     },
                     {
@@ -2130,7 +2130,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceAdvanceResponse"
+                            "$ref": "#/definitions/v2.SystemNonceAdvanceResponse"
                         }
                     },
                     "400": {
@@ -2165,7 +2165,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceAuthorizeRequest"
+                            "$ref": "#/definitions/v2.SystemNonceAuthorizeRequest"
                         }
                     },
                     {
@@ -2187,7 +2187,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceAuthorizeResponse"
+                            "$ref": "#/definitions/v2.SystemNonceAuthorizeResponse"
                         }
                     },
                     "400": {
@@ -2222,7 +2222,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceCreateRequest"
+                            "$ref": "#/definitions/v2.SystemNonceCreateRequest"
                         }
                     },
                     {
@@ -2244,7 +2244,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceCreateResponse"
+                            "$ref": "#/definitions/v2.SystemNonceCreateResponse"
                         }
                     },
                     "400": {
@@ -2279,7 +2279,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceInitializeRequest"
+                            "$ref": "#/definitions/v2.SystemNonceInitializeRequest"
                         }
                     },
                     {
@@ -2301,7 +2301,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceInitializeResponse"
+                            "$ref": "#/definitions/v2.SystemNonceInitializeResponse"
                         }
                     },
                     "400": {
@@ -2336,7 +2336,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceUpgradeRequest"
+                            "$ref": "#/definitions/v2.SystemNonceUpgradeRequest"
                         }
                     },
                     {
@@ -2358,7 +2358,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceUpgradeResponse"
+                            "$ref": "#/definitions/v2.SystemNonceUpgradeResponse"
                         }
                     },
                     "400": {
@@ -2393,7 +2393,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceWithdrawRequest"
+                            "$ref": "#/definitions/v2.SystemNonceWithdrawRequest"
                         }
                     },
                     {
@@ -2415,7 +2415,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceWithdrawResponse"
+                            "$ref": "#/definitions/v2.SystemNonceWithdrawResponse"
                         }
                     },
                     "400": {
@@ -2450,7 +2450,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceWithdrawMaxRequest"
+                            "$ref": "#/definitions/v2.SystemNonceWithdrawMaxRequest"
                         }
                     },
                     {
@@ -2472,7 +2472,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemNonceWithdrawMaxResponse"
+                            "$ref": "#/definitions/v2.SystemNonceWithdrawMaxResponse"
                         }
                     },
                     "400": {
@@ -2507,7 +2507,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemSeedAllocateRequest"
+                            "$ref": "#/definitions/v2.SystemSeedAllocateRequest"
                         }
                     },
                     {
@@ -2529,7 +2529,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemSeedAllocateResponse"
+                            "$ref": "#/definitions/v2.SystemSeedAllocateResponse"
                         }
                     },
                     "400": {
@@ -2564,7 +2564,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemSeedAssignRequest"
+                            "$ref": "#/definitions/v2.SystemSeedAssignRequest"
                         }
                     },
                     {
@@ -2586,7 +2586,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemSeedAssignResponse"
+                            "$ref": "#/definitions/v2.SystemSeedAssignResponse"
                         }
                     },
                     "400": {
@@ -2621,7 +2621,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemSeedCreateAccountRequest"
+                            "$ref": "#/definitions/v2.SystemSeedCreateAccountRequest"
                         }
                     },
                     {
@@ -2643,7 +2643,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemSeedCreateAccountResponse"
+                            "$ref": "#/definitions/v2.SystemSeedCreateAccountResponse"
                         }
                     },
                     "400": {
@@ -2678,7 +2678,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemSeedTransferRequest"
+                            "$ref": "#/definitions/v2.SystemSeedTransferRequest"
                         }
                     },
                     {
@@ -2700,7 +2700,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemSeedTransferResponse"
+                            "$ref": "#/definitions/v2.SystemSeedTransferResponse"
                         }
                     },
                     "400": {
@@ -2735,7 +2735,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemSeedTransferMaxRequest"
+                            "$ref": "#/definitions/v2.SystemSeedTransferMaxRequest"
                         }
                     },
                     {
@@ -2757,7 +2757,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemSeedTransferMaxResponse"
+                            "$ref": "#/definitions/v2.SystemSeedTransferMaxResponse"
                         }
                     },
                     "400": {
@@ -2792,7 +2792,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemTransferRequest"
+                            "$ref": "#/definitions/v2.SystemTransferRequest"
                         }
                     },
                     {
@@ -2814,64 +2814,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemTransferResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
-        "/svm/v2/transaction/system/transfer/many": {
-            "post": {
-                "description": "Assembles one Transfer instruction per recipient, all leaving the same account, in a single transaction. This is the first endpoint to carry an arbitrary number of instructions, so it is the first bounded by transaction size rather than by anything it checks: a transaction travels in one 1232-byte packet and cannot be split, which caps the list somewhere around twenty and is reported as size and size_limit. The account keys show fewer entries than instructions, since the sender and the System Program appear in every one and a compiled message lists each key once. There is no max variant, because sending everything one account holds does not say how to divide it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. A recipient is not required to exist yet, but if it does not, its lamports must be at least the rent-exemption minimum, since the runtime will not create an account below it.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "v2-transaction-system-transfer"
-                ],
-                "summary": "Build one transaction paying several recipients",
-                "parameters": [
-                    {
-                        "description": "Sender, recipients with amounts, and fee payer",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemTransferManyRequest"
-                        }
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain name, e.g. solana",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Chain network, e.g. testnet",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemTransferManyResponse"
+                            "$ref": "#/definitions/v2.SystemTransferResponse"
                         }
                     },
                     "400": {
@@ -2906,7 +2849,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemTransferMaxRequest"
+                            "$ref": "#/definitions/v2.SystemTransferMaxRequest"
                         }
                     },
                     {
@@ -2928,7 +2871,64 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SystemTransferMaxResponse"
+                            "$ref": "#/definitions/v2.SystemTransferMaxResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/system/transfer/spread": {
+            "post": {
+                "description": "Assembles one Transfer instruction per recipient, all leaving the same account, in a single transaction. This is the first endpoint to carry an arbitrary number of instructions, so it is the first bounded by transaction size rather than by anything it checks: a transaction travels in one 1232-byte packet and cannot be split, which caps the list somewhere around twenty and is reported as size and size_limit. The account keys show fewer entries than instructions, since the sender and the System Program appear in every one and a compiled message lists each key once. There is no max variant, because sending everything one account holds does not say how to divide it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. A recipient is not required to exist yet, but if it does not, its lamports must be at least the rent-exemption minimum, since the runtime will not create an account below it.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-system-transfer"
+                ],
+                "summary": "Build one transaction paying several recipients",
+                "parameters": [
+                    {
+                        "description": "Sender, recipients with amounts, and fee payer",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemTransferSpreadRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SystemTransferSpreadResponse"
                         }
                     },
                     "400": {
@@ -2977,7 +2977,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.ApproveCheckedRequest"
+                            "$ref": "#/definitions/v2.ApproveCheckedRequest"
                         }
                     }
                 ],
@@ -2985,7 +2985,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.ApproveCheckedResponse"
+                            "$ref": "#/definitions/v2.ApproveCheckedResponse"
                         }
                     },
                     "400": {
@@ -3034,7 +3034,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.BurnCheckedRequest"
+                            "$ref": "#/definitions/v2.BurnCheckedRequest"
                         }
                     }
                 ],
@@ -3042,7 +3042,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.BurnCheckedResponse"
+                            "$ref": "#/definitions/v2.BurnCheckedResponse"
                         }
                     },
                     "400": {
@@ -3091,7 +3091,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.CloseAccountRequest"
+                            "$ref": "#/definitions/v2.CloseAccountRequest"
                         }
                     }
                 ],
@@ -3099,7 +3099,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.CloseAccountResponse"
+                            "$ref": "#/definitions/v2.CloseAccountResponse"
                         }
                     },
                     "400": {
@@ -3148,7 +3148,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.CreateAccountRequest"
+                            "$ref": "#/definitions/v2.CreateAccountRequest"
                         }
                     }
                 ],
@@ -3156,7 +3156,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.CreateAccountResponse"
+                            "$ref": "#/definitions/v2.CreateAccountResponse"
                         }
                     },
                     "400": {
@@ -3205,7 +3205,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.CreateATARequest"
+                            "$ref": "#/definitions/v2.CreateATARequest"
                         }
                     }
                 ],
@@ -3213,7 +3213,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.CreateATAResponse"
+                            "$ref": "#/definitions/v2.CreateATAResponse"
                         }
                     },
                     "400": {
@@ -3262,7 +3262,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.CreateATAIdempotentRequest"
+                            "$ref": "#/definitions/v2.CreateATAIdempotentRequest"
                         }
                     }
                 ],
@@ -3270,7 +3270,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.CreateATAIdempotentResponse"
+                            "$ref": "#/definitions/v2.CreateATAIdempotentResponse"
                         }
                     },
                     "400": {
@@ -3319,7 +3319,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.CreateMintRequest"
+                            "$ref": "#/definitions/v2.CreateMintRequest"
                         }
                     }
                 ],
@@ -3327,7 +3327,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.CreateMintResponse"
+                            "$ref": "#/definitions/v2.CreateMintResponse"
                         }
                     },
                     "400": {
@@ -3376,7 +3376,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.FreezeAccountRequest"
+                            "$ref": "#/definitions/v2.FreezeAccountRequest"
                         }
                     }
                 ],
@@ -3384,7 +3384,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.FreezeAccountResponse"
+                            "$ref": "#/definitions/v2.FreezeAccountResponse"
                         }
                     },
                     "400": {
@@ -3433,7 +3433,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.MintToCheckedRequest"
+                            "$ref": "#/definitions/v2.MintToCheckedRequest"
                         }
                     }
                 ],
@@ -3441,7 +3441,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.MintToCheckedResponse"
+                            "$ref": "#/definitions/v2.MintToCheckedResponse"
                         }
                     },
                     "400": {
@@ -3490,7 +3490,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.RevokeRequest"
+                            "$ref": "#/definitions/v2.RevokeRequest"
                         }
                     }
                 ],
@@ -3498,7 +3498,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.RevokeResponse"
+                            "$ref": "#/definitions/v2.RevokeResponse"
                         }
                     },
                     "400": {
@@ -3547,7 +3547,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetCloseAuthorityClearRequest"
+                            "$ref": "#/definitions/v2.SetCloseAuthorityClearRequest"
                         }
                     }
                 ],
@@ -3555,7 +3555,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetCloseAuthorityClearResponse"
+                            "$ref": "#/definitions/v2.SetCloseAuthorityClearResponse"
                         }
                     },
                     "400": {
@@ -3604,7 +3604,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetCloseAuthorityReplaceRequest"
+                            "$ref": "#/definitions/v2.SetCloseAuthorityReplaceRequest"
                         }
                     }
                 ],
@@ -3612,7 +3612,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetCloseAuthorityReplaceResponse"
+                            "$ref": "#/definitions/v2.SetCloseAuthorityReplaceResponse"
                         }
                     },
                     "400": {
@@ -3661,7 +3661,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetFreezeAuthorityClearRequest"
+                            "$ref": "#/definitions/v2.SetFreezeAuthorityClearRequest"
                         }
                     }
                 ],
@@ -3669,7 +3669,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetFreezeAuthorityClearResponse"
+                            "$ref": "#/definitions/v2.SetFreezeAuthorityClearResponse"
                         }
                     },
                     "400": {
@@ -3718,7 +3718,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetFreezeAuthorityReplaceRequest"
+                            "$ref": "#/definitions/v2.SetFreezeAuthorityReplaceRequest"
                         }
                     }
                 ],
@@ -3726,7 +3726,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetFreezeAuthorityReplaceResponse"
+                            "$ref": "#/definitions/v2.SetFreezeAuthorityReplaceResponse"
                         }
                     },
                     "400": {
@@ -3775,7 +3775,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetMintAuthorityClearRequest"
+                            "$ref": "#/definitions/v2.SetMintAuthorityClearRequest"
                         }
                     }
                 ],
@@ -3783,7 +3783,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetMintAuthorityClearResponse"
+                            "$ref": "#/definitions/v2.SetMintAuthorityClearResponse"
                         }
                     },
                     "400": {
@@ -3832,7 +3832,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetMintAuthorityReplaceRequest"
+                            "$ref": "#/definitions/v2.SetMintAuthorityReplaceRequest"
                         }
                     }
                 ],
@@ -3840,7 +3840,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetMintAuthorityReplaceResponse"
+                            "$ref": "#/definitions/v2.SetMintAuthorityReplaceResponse"
                         }
                     },
                     "400": {
@@ -3889,7 +3889,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetAccountOwnerReplaceRequest"
+                            "$ref": "#/definitions/v2.SetAccountOwnerReplaceRequest"
                         }
                     }
                 ],
@@ -3897,7 +3897,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.SetAccountOwnerReplaceResponse"
+                            "$ref": "#/definitions/v2.SetAccountOwnerReplaceResponse"
                         }
                     },
                     "400": {
@@ -3946,7 +3946,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.ThawAccountRequest"
+                            "$ref": "#/definitions/v2.ThawAccountRequest"
                         }
                     }
                 ],
@@ -3954,7 +3954,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.ThawAccountResponse"
+                            "$ref": "#/definitions/v2.ThawAccountResponse"
                         }
                     },
                     "400": {
@@ -4003,7 +4003,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.TransferCheckedRequest"
+                            "$ref": "#/definitions/v2.TransferCheckedRequest"
                         }
                     }
                 ],
@@ -4011,7 +4011,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.TransferCheckedResponse"
+                            "$ref": "#/definitions/v2.TransferCheckedResponse"
                         }
                     },
                     "400": {
@@ -4060,7 +4060,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.TransferToWalletRequest"
+                            "$ref": "#/definitions/v2.TransferToWalletRequest"
                         }
                     }
                 ],
@@ -4068,7 +4068,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/api_handler_v2.TransferToWalletResponse"
+                            "$ref": "#/definitions/v2.TransferToWalletResponse"
                         }
                     },
                     "400": {
@@ -4085,7 +4085,7 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "api_handler_account.AccountOwnerRequest": {
+        "account.AccountOwnerRequest": {
             "type": "object",
             "properties": {
                 "public_key": {
@@ -4094,7 +4094,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.AccountOwnerResponse": {
+        "account.AccountOwnerResponse": {
             "type": "object",
             "properties": {
                 "exists": {
@@ -4111,7 +4111,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.AccountRequest": {
+        "account.AccountRequest": {
             "type": "object",
             "properties": {
                 "public_key": {
@@ -4120,7 +4120,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.AccountResponse": {
+        "account.AccountResponse": {
             "type": "object",
             "properties": {
                 "data": {
@@ -4149,7 +4149,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.AirdropRequest": {
+        "account.AirdropRequest": {
             "type": "object",
             "properties": {
                 "public_key": {
@@ -4157,7 +4157,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.AirdropResponse": {
+        "account.AirdropResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4171,7 +4171,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.BalanceResponse": {
+        "account.BalanceResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4185,7 +4185,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.NonceRequest": {
+        "account.NonceRequest": {
             "type": "object",
             "properties": {
                 "public_key": {
@@ -4194,7 +4194,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.NonceResponse": {
+        "account.NonceResponse": {
             "type": "object",
             "properties": {
                 "authority": {
@@ -4223,7 +4223,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.TokenAccountResponse": {
+        "account.TokenAccountResponse": {
             "type": "object",
             "properties": {
                 "amount": {
@@ -4267,7 +4267,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.TokensRequest": {
+        "account.TokensRequest": {
             "type": "object",
             "properties": {
                 "public_key": {
@@ -4276,13 +4276,13 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_account.TokensResponse": {
+        "account.TokensResponse": {
             "type": "object",
             "properties": {
                 "accounts": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/api_handler_account.TokenAccountResponse"
+                        "$ref": "#/definitions/account.TokenAccountResponse"
                     }
                 },
                 "count": {
@@ -4293,7 +4293,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.BatchCall": {
+        "misc.BatchCall": {
             "type": "object",
             "properties": {
                 "method": {
@@ -4302,18 +4302,18 @@ const docTemplate = `{
                 "params": {}
             }
         },
-        "api_handler_misc.BatchRequest": {
+        "misc.BatchRequest": {
             "type": "object",
             "properties": {
                 "calls": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/api_handler_misc.BatchCall"
+                        "$ref": "#/definitions/misc.BatchCall"
                     }
                 }
             }
         },
-        "api_handler_misc.BlockhashResponse": {
+        "misc.BlockhashResponse": {
             "type": "object",
             "properties": {
                 "blockhash": {
@@ -4324,7 +4324,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.ConvertBase58To64Request": {
+        "misc.ConvertBase58To64Request": {
             "type": "object",
             "properties": {
                 "value": {
@@ -4332,7 +4332,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.ConvertBase58To64Response": {
+        "misc.ConvertBase58To64Response": {
             "type": "object",
             "properties": {
                 "base64": {
@@ -4340,7 +4340,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.ConvertBase64To58Request": {
+        "misc.ConvertBase64To58Request": {
             "type": "object",
             "properties": {
                 "value": {
@@ -4348,7 +4348,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.ConvertBase64To58Response": {
+        "misc.ConvertBase64To58Response": {
             "type": "object",
             "properties": {
                 "base58": {
@@ -4356,7 +4356,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.FeeRequest": {
+        "misc.FeeRequest": {
             "type": "object",
             "properties": {
                 "message": {
@@ -4364,7 +4364,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.FeeResponse": {
+        "misc.FeeResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4378,7 +4378,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.GenerateKeypairResponse": {
+        "misc.GenerateKeypairResponse": {
             "type": "object",
             "properties": {
                 "private_key": {
@@ -4389,7 +4389,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.GenesisHashResponse": {
+        "misc.GenesisHashResponse": {
             "type": "object",
             "properties": {
                 "configured": {
@@ -4403,7 +4403,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.HealthResponse": {
+        "misc.HealthResponse": {
             "type": "object",
             "properties": {
                 "health": {
@@ -4411,7 +4411,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RawRequest": {
+        "misc.RawRequest": {
             "type": "object",
             "properties": {
                 "method": {
@@ -4421,7 +4421,7 @@ const docTemplate = `{
                 "params": {}
             }
         },
-        "api_handler_misc.RefreshBlockhashRequest": {
+        "misc.RefreshBlockhashRequest": {
             "type": "object",
             "properties": {
                 "transaction": {
@@ -4429,7 +4429,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RefreshBlockhashResponse": {
+        "misc.RefreshBlockhashResponse": {
             "type": "object",
             "properties": {
                 "blockhash": {
@@ -4443,7 +4443,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RentExemptionMintResponse": {
+        "misc.RentExemptionMintResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4457,7 +4457,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RentExemptionNonceResponse": {
+        "misc.RentExemptionNonceResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4471,7 +4471,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RentExemptionPublicKeyRequest": {
+        "misc.RentExemptionPublicKeyRequest": {
             "type": "object",
             "properties": {
                 "public_key": {
@@ -4480,7 +4480,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RentExemptionPublicKeyResponse": {
+        "misc.RentExemptionPublicKeyResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4497,7 +4497,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RentExemptionSpaceRequest": {
+        "misc.RentExemptionSpaceRequest": {
             "type": "object",
             "properties": {
                 "space": {
@@ -4506,7 +4506,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RentExemptionSpaceResponse": {
+        "misc.RentExemptionSpaceResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4520,7 +4520,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RentExemptionStakeResponse": {
+        "misc.RentExemptionStakeResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4534,7 +4534,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RentExemptionSystemResponse": {
+        "misc.RentExemptionSystemResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4548,7 +4548,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RentExemptionTokenResponse": {
+        "misc.RentExemptionTokenResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4562,7 +4562,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.RentExemptionVoteResponse": {
+        "misc.RentExemptionVoteResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -4576,7 +4576,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.ReplaceBlockhashWithNonceRequest": {
+        "misc.ReplaceBlockhashWithNonceRequest": {
             "type": "object",
             "properties": {
                 "nonce_account": {
@@ -4587,7 +4587,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.ReplaceBlockhashWithNonceResponse": {
+        "misc.ReplaceBlockhashWithNonceResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -4629,7 +4629,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SendTransactionRequest": {
+        "misc.SendTransactionRequest": {
             "type": "object",
             "properties": {
                 "transaction": {
@@ -4637,7 +4637,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SendTransactionResponse": {
+        "misc.SendTransactionResponse": {
             "type": "object",
             "properties": {
                 "signature": {
@@ -4645,7 +4645,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SignRequest": {
+        "misc.SignRequest": {
             "type": "object",
             "properties": {
                 "message": {
@@ -4657,7 +4657,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SignResponse": {
+        "misc.SignResponse": {
             "type": "object",
             "properties": {
                 "public_key": {
@@ -4668,7 +4668,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SignTransactionRequest": {
+        "misc.SignTransactionRequest": {
             "type": "object",
             "properties": {
                 "private_keys": {
@@ -4691,7 +4691,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SignTransactionResponse": {
+        "misc.SignTransactionResponse": {
             "type": "object",
             "properties": {
                 "fully_signed": {
@@ -4711,7 +4711,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SignatureStatusRequest": {
+        "misc.SignatureStatusRequest": {
             "type": "object",
             "properties": {
                 "signature": {
@@ -4719,7 +4719,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SignatureStatusResponse": {
+        "misc.SignatureStatusResponse": {
             "type": "object",
             "properties": {
                 "confirmation_status": {
@@ -4745,7 +4745,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SimulateTransactionRequest": {
+        "misc.SimulateTransactionRequest": {
             "type": "object",
             "properties": {
                 "transaction": {
@@ -4753,7 +4753,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SimulateTransactionResponse": {
+        "misc.SimulateTransactionResponse": {
             "type": "object",
             "properties": {
                 "err": {
@@ -4773,7 +4773,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.SlotResponse": {
+        "misc.SlotResponse": {
             "type": "object",
             "properties": {
                 "slot": {
@@ -4781,7 +4781,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.VerifyRequest": {
+        "misc.VerifyRequest": {
             "type": "object",
             "properties": {
                 "message": {
@@ -4796,7 +4796,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.VerifyResponse": {
+        "misc.VerifyResponse": {
             "type": "object",
             "properties": {
                 "valid": {
@@ -4804,7 +4804,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_misc.VersionResponse": {
+        "misc.VersionResponse": {
             "type": "object",
             "properties": {
                 "version": {
@@ -4813,7 +4813,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_token.AccountRequest": {
+        "token.AccountRequest": {
             "type": "object",
             "properties": {
                 "token_account": {
@@ -4822,7 +4822,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_token.AccountResponse": {
+        "token.AccountResponse": {
             "type": "object",
             "properties": {
                 "amount": {
@@ -4872,7 +4872,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_token.MintRequest": {
+        "token.MintRequest": {
             "type": "object",
             "properties": {
                 "mint_account": {
@@ -4881,7 +4881,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_token.MintResponse": {
+        "token.MintResponse": {
             "type": "object",
             "properties": {
                 "decimals": {
@@ -4919,7 +4919,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v1.Account": {
+        "v1.Account": {
             "type": "object",
             "properties": {
                 "is_signer": {
@@ -4936,7 +4936,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v1.BuildTransactionRequest": {
+        "v1.BuildTransactionRequest": {
             "type": "object",
             "properties": {
                 "fee_payer": {
@@ -4946,7 +4946,7 @@ const docTemplate = `{
                 "instructions": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/api_handler_v1.Instruction"
+                        "$ref": "#/definitions/v1.Instruction"
                     }
                 },
                 "recent_blockhash": {
@@ -4956,7 +4956,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v1.BuildTransactionResponse": {
+        "v1.BuildTransactionResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -4966,7 +4966,7 @@ const docTemplate = `{
                     }
                 },
                 "header": {
-                    "$ref": "#/definitions/api_handler_v1.Header"
+                    "$ref": "#/definitions/v1.Header"
                 },
                 "message": {
                     "type": "string"
@@ -4988,7 +4988,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v1.Header": {
+        "v1.Header": {
             "type": "object",
             "properties": {
                 "num_readonly_signed_accounts": {
@@ -5002,13 +5002,13 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v1.Instruction": {
+        "v1.Instruction": {
             "type": "object",
             "properties": {
                 "accounts": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/api_handler_v1.Account"
+                        "$ref": "#/definitions/v1.Account"
                     }
                 },
                 "data": {
@@ -5021,7 +5021,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.ApproveCheckedRequest": {
+        "v2.ApproveCheckedRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5069,7 +5069,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.ApproveCheckedResponse": {
+        "v2.ApproveCheckedResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5122,7 +5122,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.BurnCheckedRequest": {
+        "v2.BurnCheckedRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5166,7 +5166,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.BurnCheckedResponse": {
+        "v2.BurnCheckedResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5216,7 +5216,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.CloseAccountRequest": {
+        "v2.CloseAccountRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5252,7 +5252,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.CloseAccountResponse": {
+        "v2.CloseAccountResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5300,7 +5300,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.CreateATAIdempotentRequest": {
+        "v2.CreateATAIdempotentRequest": {
             "type": "object",
             "properties": {
                 "fee_payer": {
@@ -5329,7 +5329,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.CreateATAIdempotentResponse": {
+        "v2.CreateATAIdempotentResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5379,7 +5379,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.CreateATARequest": {
+        "v2.CreateATARequest": {
             "type": "object",
             "properties": {
                 "fee_payer": {
@@ -5411,7 +5411,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.CreateATAResponse": {
+        "v2.CreateATAResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5461,7 +5461,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.CreateAccountRequest": {
+        "v2.CreateAccountRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5495,7 +5495,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.CreateAccountResponse": {
+        "v2.CreateAccountResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5542,7 +5542,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.CreateMintRequest": {
+        "v2.CreateMintRequest": {
             "type": "object",
             "properties": {
                 "decimals": {
@@ -5581,7 +5581,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.CreateMintResponse": {
+        "v2.CreateMintResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -5632,7 +5632,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.FreezeAccountRequest": {
+        "v2.FreezeAccountRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5668,7 +5668,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.FreezeAccountResponse": {
+        "v2.FreezeAccountResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5712,7 +5712,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.MintToCheckedRequest": {
+        "v2.MintToCheckedRequest": {
             "type": "object",
             "properties": {
                 "amount": {
@@ -5756,7 +5756,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.MintToCheckedResponse": {
+        "v2.MintToCheckedResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -5806,7 +5806,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.RevokeRequest": {
+        "v2.RevokeRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5838,7 +5838,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.RevokeResponse": {
+        "v2.RevokeResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5879,7 +5879,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetAccountOwnerReplaceRequest": {
+        "v2.SetAccountOwnerReplaceRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5915,7 +5915,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetAccountOwnerReplaceResponse": {
+        "v2.SetAccountOwnerReplaceResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5959,7 +5959,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetCloseAuthorityClearRequest": {
+        "v2.SetCloseAuthorityClearRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -5991,7 +5991,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetCloseAuthorityClearResponse": {
+        "v2.SetCloseAuthorityClearResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -6035,7 +6035,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetCloseAuthorityReplaceRequest": {
+        "v2.SetCloseAuthorityReplaceRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -6071,7 +6071,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetCloseAuthorityReplaceResponse": {
+        "v2.SetCloseAuthorityReplaceResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -6115,7 +6115,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetFreezeAuthorityClearRequest": {
+        "v2.SetFreezeAuthorityClearRequest": {
             "type": "object",
             "properties": {
                 "authority": {
@@ -6147,7 +6147,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetFreezeAuthorityClearResponse": {
+        "v2.SetFreezeAuthorityClearResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6191,7 +6191,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetFreezeAuthorityReplaceRequest": {
+        "v2.SetFreezeAuthorityReplaceRequest": {
             "type": "object",
             "properties": {
                 "authority": {
@@ -6227,7 +6227,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetFreezeAuthorityReplaceResponse": {
+        "v2.SetFreezeAuthorityReplaceResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6271,7 +6271,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetMintAuthorityClearRequest": {
+        "v2.SetMintAuthorityClearRequest": {
             "type": "object",
             "properties": {
                 "authority": {
@@ -6303,7 +6303,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetMintAuthorityClearResponse": {
+        "v2.SetMintAuthorityClearResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6347,7 +6347,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetMintAuthorityReplaceRequest": {
+        "v2.SetMintAuthorityReplaceRequest": {
             "type": "object",
             "properties": {
                 "authority": {
@@ -6383,7 +6383,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SetMintAuthorityReplaceResponse": {
+        "v2.SetMintAuthorityReplaceResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6427,7 +6427,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemAllocateRequest": {
+        "v2.SystemAllocateRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -6449,7 +6449,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemAllocateResponse": {
+        "v2.SystemAllocateResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6489,7 +6489,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemAssignRequest": {
+        "v2.SystemAssignRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -6511,7 +6511,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemAssignResponse": {
+        "v2.SystemAssignResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6547,41 +6547,71 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemCreateAccountRequest": {
+        "v2.SystemCreateAccountPayer": {
             "type": "object",
             "properties": {
+                "lamports": {
+                    "type": "string"
+                },
+                "payer": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SystemCreateAccountRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as FundingPayer.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "from": {
+                "funding_payer": {
+                    "description": "FundingPayer is the funder. It signs the transaction as the account\ndebited, whether or not it also pays the fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "lamports": {
+                    "description": "Lamports is NewAccount's final balance target, not what FundingPayer\nalone sends: CreateAccount itself is funded by RentPayer for exactly\nthe rent-exemption minimum for Space, and FundingPayer's own transfer\ncovers only what that leaves, so Lamports must be at least that\nminimum.",
                     "type": "string",
-                    "example": "890880"
+                    "example": "1000000"
                 },
                 "new_account": {
+                    "description": "NewAccount is the account created. It signs alongside FundingPayer,\nsince an address does not exist until whoever holds its private key\nauthorizes its creation. It must not already exist.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
-                "nonce_account": {
-                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
-                    "type": "string",
-                    "example": ""
-                },
                 "owner": {
+                    "description": "Owner must be executable: only the owning program may debit an account\nor write its data, so an account handed to a plain address is locked\nfrom the moment it exists. Pass the System Program for an ordinary\naccount.",
                     "type": "string",
                     "example": "11111111111111111111111111111111"
                 },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "rent_payer": {
+                    "description": "RentPayer signs a transfer prepended ahead of NewAccount's creation,\nfor exactly the rent-exemption minimum for Space — always, and only\nthat amount, whatever FundingPayer separately sends as Lamports. It is\nrequired rather than optional so that which account is answerable for\nrent is never left to a default.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
                 "space": {
+                    "description": "Space is the byte count allocated for NewAccount's data.",
                     "type": "string",
                     "example": "0"
                 }
             }
         },
-        "api_handler_v2.SystemCreateAccountResponse": {
+        "v2.SystemCreateAccountResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6591,13 +6621,15 @@ const docTemplate = `{
                     }
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemCreateAccountPayer"
                 },
-                "lamports": {
-                    "type": "string"
-                },
-                "lamports_sol": {
-                    "type": "string"
+                "funding": {
+                    "description": "Funding reports the transfer that runs after CreateAccount: the\nrequest's lamports minus what Rent already covers, since together the\ntwo reach exactly that total. Its lamports are zero, and no such\ninstruction is built, when Rent alone already reaches it.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemCreateAccountPayer"
+                        }
+                    ]
                 },
                 "message": {
                     "type": "string"
@@ -6612,9 +6644,13 @@ const docTemplate = `{
                 "recent_blockhash": {
                     "type": "string"
                 },
-                "rent_exempt": {
-                    "description": "RentExempt is the floor the requested space had to clear. It is\nreported because the server had to resolve it to validate lamports\nanyway, and it is what a caller needs to know to fund the next one\nwithout guessing.",
-                    "type": "string"
+                "rent": {
+                    "description": "Rent reports what funds CreateAccount itself. Its lamports are always\nexactly the rent-exemption minimum for Space, never more or less.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemCreateAccountPayer"
+                        }
+                    ]
                 },
                 "signers": {
                     "type": "array",
@@ -6630,7 +6666,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceAdvanceRequest": {
+        "v2.SystemNonceAdvanceRequest": {
             "type": "object",
             "properties": {
                 "authority": {
@@ -6653,7 +6689,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceAdvanceResponse": {
+        "v2.SystemNonceAdvanceResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6696,7 +6732,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceAuthorizeRequest": {
+        "v2.SystemNonceAuthorizeRequest": {
             "type": "object",
             "properties": {
                 "authority": {
@@ -6723,7 +6759,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceAuthorizeResponse": {
+        "v2.SystemNonceAuthorizeResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6765,7 +6801,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceCreateRequest": {
+        "v2.SystemNonceCreateRequest": {
             "type": "object",
             "properties": {
                 "authority": {
@@ -6792,7 +6828,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceCreateResponse": {
+        "v2.SystemNonceCreateResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6840,7 +6876,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceInitializeRequest": {
+        "v2.SystemNonceInitializeRequest": {
             "type": "object",
             "properties": {
                 "authority": {
@@ -6863,7 +6899,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceInitializeResponse": {
+        "v2.SystemNonceInitializeResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6902,7 +6938,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceUpgradeRequest": {
+        "v2.SystemNonceUpgradeRequest": {
             "type": "object",
             "properties": {
                 "fee_payer": {
@@ -6921,7 +6957,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceUpgradeResponse": {
+        "v2.SystemNonceUpgradeResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -6960,7 +6996,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceWithdrawMaxRequest": {
+        "v2.SystemNonceWithdrawMaxRequest": {
             "type": "object",
             "properties": {
                 "authority": {
@@ -6987,7 +7023,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceWithdrawMaxResponse": {
+        "v2.SystemNonceWithdrawMaxResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -7032,7 +7068,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceWithdrawRequest": {
+        "v2.SystemNonceWithdrawRequest": {
             "type": "object",
             "properties": {
                 "amount": {
@@ -7063,7 +7099,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemNonceWithdrawResponse": {
+        "v2.SystemNonceWithdrawResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -7112,7 +7148,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemSeedAllocateRequest": {
+        "v2.SystemSeedAllocateRequest": {
             "type": "object",
             "properties": {
                 "base": {
@@ -7142,7 +7178,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemSeedAllocateResponse": {
+        "v2.SystemSeedAllocateResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -7184,7 +7220,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemSeedAssignRequest": {
+        "v2.SystemSeedAssignRequest": {
             "type": "object",
             "properties": {
                 "base": {
@@ -7210,7 +7246,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemSeedAssignResponse": {
+        "v2.SystemSeedAssignResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -7249,7 +7285,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemSeedCreateAccountRequest": {
+        "v2.SystemSeedCreateAccountRequest": {
             "type": "object",
             "properties": {
                 "base": {
@@ -7287,7 +7323,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemSeedCreateAccountResponse": {
+        "v2.SystemSeedCreateAccountResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -7339,7 +7375,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemSeedTransferMaxRequest": {
+        "v2.SystemSeedTransferMaxRequest": {
             "type": "object",
             "properties": {
                 "base": {
@@ -7369,7 +7405,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemSeedTransferMaxResponse": {
+        "v2.SystemSeedTransferMaxResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -7411,7 +7447,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemSeedTransferRequest": {
+        "v2.SystemSeedTransferRequest": {
             "type": "object",
             "properties": {
                 "amount": {
@@ -7445,7 +7481,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemSeedTransferResponse": {
+        "v2.SystemSeedTransferResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -7487,7 +7523,151 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemTransferManyRequest": {
+        "v2.SystemTransferMaxRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as From, in which case the fee is deducted from what is sent.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "from": {
+                    "description": "From is the account drained. It signs the transaction as the transfer\nauthority, whether or not it also pays the fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "to": {
+                    "description": "To is the account credited. It is not required to exist yet, but if it\ndoes not, the drained amount must be at least the rent-exemption\nminimum, since the runtime will not create an account below it.",
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                }
+            }
+        },
+        "v2.SystemTransferMaxResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "lamports": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SystemTransferRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as From.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "from": {
+                    "description": "From is the account debited. It signs the transaction as the transfer\nauthority, whether or not it also pays the fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "lamports": {
+                    "description": "Lamports is the raw amount moved from From to To.",
+                    "type": "string",
+                    "example": "1000000"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "to": {
+                    "description": "To is the account credited. It is not required to exist yet.",
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                }
+            }
+        },
+        "v2.SystemTransferResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "lamports": {
+                    "description": "Lamports and Fee are strings for the same reason the request's lamports\nis: a JSON number is a float, so a lamport count past 2^53 would reach a\nJavaScript client already rounded.",
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries\na stored value rather than a fetched blockhash and the transaction does\nnot expire. It is reported because the request never named it: advancing\nthe nonce is the first instruction and that key has to sign, and the\nserver read it off the account.",
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SystemTransferSpreadRequest": {
             "type": "object",
             "properties": {
                 "durable_nonce_account": {
@@ -7514,12 +7694,12 @@ const docTemplate = `{
                     "description": "Transfers lists the recipients and their amounts, in the order the\ninstructions are executed and the response echoes them back. There is\nno upper bound here beyond what fits in one transaction.",
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/api_handler_v2.SystemTransferManyTarget"
+                        "$ref": "#/definitions/v2.SystemTransferSpreadTarget"
                     }
                 }
             }
         },
-        "api_handler_v2.SystemTransferManyResponse": {
+        "v2.SystemTransferSpreadResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -7567,12 +7747,12 @@ const docTemplate = `{
                 "transfers": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/api_handler_v2.SystemTransferManyTargetResponse"
+                        "$ref": "#/definitions/v2.SystemTransferSpreadTargetResponse"
                     }
                 }
             }
         },
-        "api_handler_v2.SystemTransferManyTarget": {
+        "v2.SystemTransferSpreadTarget": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -7587,7 +7767,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemTransferManyTargetResponse": {
+        "v2.SystemTransferSpreadTargetResponse": {
             "type": "object",
             "properties": {
                 "lamports": {
@@ -7601,151 +7781,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.SystemTransferMaxRequest": {
-            "type": "object",
-            "properties": {
-                "durable_nonce_account": {
-                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
-                    "type": "string",
-                    "example": ""
-                },
-                "fee_payer": {
-                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as From, in which case the fee is deducted from what is sent.",
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "from": {
-                    "description": "From is the account drained. It signs the transaction as the transfer\nauthority, whether or not it also pays the fee.",
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "recent_blockhash": {
-                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
-                    "type": "string",
-                    "example": ""
-                },
-                "to": {
-                    "description": "To is the account credited. It is not required to exist yet, but if it\ndoes not, the drained amount must be at least the rent-exemption\nminimum, since the runtime will not create an account below it.",
-                    "type": "string",
-                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
-                }
-            }
-        },
-        "api_handler_v2.SystemTransferMaxResponse": {
-            "type": "object",
-            "properties": {
-                "account_keys": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "fee": {
-                    "type": "string"
-                },
-                "lamports": {
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "nonce_authority": {
-                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash.",
-                    "type": "string"
-                },
-                "recent_blockhash": {
-                    "type": "string"
-                },
-                "signers": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "sol": {
-                    "type": "string"
-                },
-                "transaction": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_handler_v2.SystemTransferRequest": {
-            "type": "object",
-            "properties": {
-                "durable_nonce_account": {
-                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
-                    "type": "string",
-                    "example": ""
-                },
-                "fee_payer": {
-                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as From.",
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "from": {
-                    "description": "From is the account debited. It signs the transaction as the transfer\nauthority, whether or not it also pays the fee.",
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "lamports": {
-                    "description": "Lamports is the raw amount moved from From to To.",
-                    "type": "string",
-                    "example": "1000000"
-                },
-                "recent_blockhash": {
-                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
-                    "type": "string",
-                    "example": ""
-                },
-                "to": {
-                    "description": "To is the account credited. It is not required to exist yet.",
-                    "type": "string",
-                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
-                }
-            }
-        },
-        "api_handler_v2.SystemTransferResponse": {
-            "type": "object",
-            "properties": {
-                "account_keys": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "fee": {
-                    "type": "string"
-                },
-                "lamports": {
-                    "description": "Lamports and Fee are strings for the same reason the request's lamports\nis: a JSON number is a float, so a lamport count past 2^53 would reach a\nJavaScript client already rounded.",
-                    "type": "string"
-                },
-                "message": {
-                    "type": "string"
-                },
-                "nonce_authority": {
-                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries\na stored value rather than a fetched blockhash and the transaction does\nnot expire. It is reported because the request never named it: advancing\nthe nonce is the first instruction and that key has to sign, and the\nserver read it off the account.",
-                    "type": "string"
-                },
-                "recent_blockhash": {
-                    "type": "string"
-                },
-                "signers": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "sol": {
-                    "type": "string"
-                },
-                "transaction": {
-                    "type": "string"
-                }
-            }
-        },
-        "api_handler_v2.ThawAccountRequest": {
+        "v2.ThawAccountRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -7781,7 +7817,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.ThawAccountResponse": {
+        "v2.ThawAccountResponse": {
             "type": "object",
             "properties": {
                 "account": {
@@ -7825,7 +7861,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.TransferCheckedRequest": {
+        "v2.TransferCheckedRequest": {
             "type": "object",
             "properties": {
                 "amount": {
@@ -7873,7 +7909,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.TransferCheckedResponse": {
+        "v2.TransferCheckedResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -7926,7 +7962,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.TransferToWalletRequest": {
+        "v2.TransferToWalletRequest": {
             "type": "object",
             "properties": {
                 "account": {
@@ -7981,7 +8017,7 @@ const docTemplate = `{
                 }
             }
         },
-        "api_handler_v2.TransferToWalletResponse": {
+        "v2.TransferToWalletResponse": {
             "type": "object",
             "properties": {
                 "account": {

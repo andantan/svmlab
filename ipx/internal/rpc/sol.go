@@ -213,6 +213,40 @@ func (c *Client) AccountInfo(ctx context.Context, pubkey *types.PublicKey, commi
 	return result.Value, nil
 }
 
+// GetMultipleAccounts reads several accounts in one round trip, keyed by
+// base58 rather than by *PublicKey: two different pointers to the same key
+// would otherwise land as separate map entries, and a request naming the
+// same account under two roles (from and fee_payer, say) is the ordinary
+// case this exists to batch, not an edge case to special-case away.
+//
+// A pubkey named more than once is only asked of the cluster once, but the
+// returned map still answers for every key passed in. A missing entry's
+// value is nil, the ordinary AccountInfo answer for an address nobody has
+// funded, not an error.
+func (c *Client) GetMultipleAccounts(ctx context.Context, pubkeys []*types.PublicKey, commitment Commitment) (map[string]*AccountInfo, error) {
+	unique := make([]string, 0, len(pubkeys))
+	seen := make(map[string]bool, len(pubkeys))
+	for _, pk := range pubkeys {
+		key := pk.Base58()
+		if !seen[key] {
+			seen[key] = true
+			unique = append(unique, key)
+		}
+	}
+
+	var result Result[[]*AccountInfo]
+	if err := c.Call(ctx, SOLGetMultipleAccounts(unique, commitment, &result)); err != nil {
+		return nil, err
+	}
+
+	accounts := make(map[string]*AccountInfo, len(unique))
+	for i, key := range unique {
+		accounts[key] = result.Value[i]
+	}
+
+	return accounts, nil
+}
+
 // Exists reports whether an account has been created at the key.
 func (c *Client) Exists(ctx context.Context, pubkey *types.PublicKey, commitment Commitment) (bool, error) {
 	info, err := c.AccountInfo(ctx, pubkey, commitment)

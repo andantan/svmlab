@@ -182,6 +182,8 @@ func run() error {
 			r.Post("/set-authority/owner/replace", tk.SetAccountOwnerReplace)
 			r.Post("/set-authority/close/replace", tk.SetCloseAuthorityReplace)
 			r.Post("/set-authority/close/clear", tk.SetCloseAuthorityClear)
+			r.Post("/freeze-account", tk.FreezeAccount)
+			r.Post("/thaw-account", tk.ThawAccount)
 		})
 	})
 

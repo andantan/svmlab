@@ -60,6 +60,22 @@ func (a *AccountInfo) Bytes() ([]byte, error) {
 	return codec.Base64.Decode(encoded)
 }
 
+// Exists reports whether an account was found at the key: a nil receiver is
+// the ordinary AccountInfo result for an address nobody has funded, not an
+// error, so this is safe to call on the result before checking it any other
+// way.
+func (a *AccountInfo) Exists() bool {
+	return a != nil
+}
+
+// IsNonceAccount reports whether this account is shaped like a nonce
+// account: owned by the System Program and sized for one. It does not check
+// whether the account is initialized — the data still has to be
+// deserialized for that.
+func (a *AccountInfo) IsNonceAccount() bool {
+	return a.Owner == core.System.ID().Base58() && a.Space == core.NonceAccountSpace
+}
+
 // KeyedAccount is an account together with the address it was found at.
 //
 // getAccountInfo takes the address as an argument and so does not repeat it;

@@ -43,6 +43,19 @@ func NewInstructions(ixs ...*Instruction) Instructions {
 	return ixs
 }
 
+// Append returns a new Instructions with ix added after the existing ones.
+func (i Instructions) Append(ix *Instruction) Instructions {
+	return append(append(Instructions{}, i...), ix)
+}
+
+// Prepend returns a new Instructions with ix added before the existing ones.
+//
+// A durable-nonce transaction's first instruction must consume the nonce, so
+// this is how that instruction gets there.
+func (i Instructions) Prepend(ix *Instruction) Instructions {
+	return append(Instructions{ix}, i...)
+}
+
 func (i *Instruction) IsNil() bool {
 	if i == nil || i.ProgramID.IsNil() {
 		return true

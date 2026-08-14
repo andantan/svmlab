@@ -140,15 +140,15 @@ opcodes. Gaps are Token-2022-only opcodes and must not be filled by guessing.
 |     45 | UnwrapLamports           | `token/unwrap-lamports`            | wrapped SOL — unverified |
 |    255 | Batch                    | `token/batch`                      | last — unverified        |
 
-Eleven of these have builders in `core` today. All but two have endpoints:
+Eleven of these have builders in `core` today, and every one now has an endpoint:
 
 ```text
  5  Revoke              live; encoding is a bare opcode, nothing to get wrong
  6  SetAuthority        live as seven endpoints; confirmed on devnet after the
                         option-encoding fix
  9  CloseAccount        live; confirmed against mainnet instructions
-10  FreezeAccount       core only, no endpoint yet
-11  ThawAccount         core only, no endpoint yet
+10  FreezeAccount       live; confirmed on devnet, signed and sent both ways
+11  ThawAccount         live; confirmed on devnet, signed and sent both ways
 12  TransferChecked     live; confirmed against mainnet instructions
 13  ApproveChecked      live; account order from the spec, not yet seen on chain
 14  MintToChecked       live; account order from the spec, not yet seen on chain
@@ -411,7 +411,7 @@ No `token/close-ata` was needed. `token/close-account` already takes any
 layout at a derived address; nothing about closing distinguishes how the
 address came to exist.
 
-### 5. Delegation and administration — done except freeze and thaw
+### 5. Delegation and administration — done
 
 Live:
 
@@ -422,13 +422,26 @@ token/set-authority/mint/replace     token/set-authority/mint/clear
 token/set-authority/freeze/replace   token/set-authority/freeze/clear
 token/set-authority/owner/replace
 token/set-authority/close/replace    token/set-authority/close/clear
+token/freeze-account
+token/thaw-account
 ```
 
-Pending: `freeze-account` and `thaw-account`. Both builders exist in `core`;
-only the endpoints are missing. Neither works on a mint that was initialized
-without a freeze authority, which `create-mint` has offered since it was
-written, and clearing that authority afterward is permanent — so a mint whose
-freeze authority is gone can never freeze a holder again.
+`freeze-account` and `thaw-account` check the same precondition
+`set-authority/freeze/*` does: the mint must have been initialized with a
+freeze authority, which `create-mint` has offered since it was written, and
+clearing that authority afterward is permanent, so a mint whose freeze
+authority is gone can never freeze a holder again. The authority is the mint's
+freeze authority, never the account's own owner or a delegate — freezing
+suspends any account holding the mint, which is a different axis from who may
+spend a given account's balance. Freezing an already-frozen account, or
+thawing one that is not frozen, is rejected rather than silently allowed
+through.
+
+Verified end to end on devnet: created an associated account, froze it,
+confirmed `frozen: true` through the read endpoint, confirmed a second freeze
+is rejected, confirmed thaw with the wrong key is rejected, thawed it with the
+mint's real freeze authority, confirmed `frozen: false`, confirmed a second
+thaw is rejected. Both directions were signed and sent, not just built.
 
 `approve-checked` grants a delegate up to an amount, and only the account's
 owner may grant it. An existing delegate cannot re-delegate onward, since that

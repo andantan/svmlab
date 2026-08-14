@@ -1078,6 +1078,63 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.FreezeAccountRequest:
+    properties:
+      account:
+        example: ""
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.FreezeAccountResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.MintToCheckedRequest:
     properties:
       amount:
@@ -2697,26 +2754,46 @@ definitions:
     type: object
   v2.SystemTransferRequest:
     properties:
-      amount:
-        example: "1000000"
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
         type: string
       fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as From.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       from:
+        description: |-
+          From is the account debited. It signs the transaction as the transfer
+          authority, whether or not it also pays the fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
-      nonce_account:
+      lamports:
+        description: Lamports is the raw amount moved from From to To.
+        example: "1000000"
+        type: string
+      recent_blockhash:
         description: |-
-          NonceAccount may be left empty, in which case a recent blockhash is
-          fetched and the transaction expires with it. Naming one builds against
-          the value that account stores instead, so the transaction never expires,
-          and prepends the advance that consumes it. The authority is not a field:
-          it is read from the account, since it is a fact about it rather than a
-          choice.
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
         example: ""
         type: string
       to:
+        description: To is the account credited. It is not required to exist yet.
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
@@ -2726,15 +2803,13 @@ definitions:
         items:
           type: string
         type: array
-      amount:
-        description: |-
-          Amount and Fee are strings for the same reason the request's amount is:
-          a JSON number is a float, so a lamport count past 2^53 would reach a
-          JavaScript client already rounded.
-        type: string
-      amount_sol:
-        type: string
       fee:
+        type: string
+      lamports:
+        description: |-
+          Lamports and Fee are strings for the same reason the request's lamports
+          is: a JSON number is a float, so a lamport count past 2^53 would reach a
+          JavaScript client already rounded.
         type: string
       message:
         type: string
@@ -2746,6 +2821,65 @@ definitions:
           not expire. It is reported because the request never named it: advancing
           the nonce is the first instruction and that key has to sign, and the
           server read it off the account.
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      sol:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.ThawAccountRequest:
+    properties:
+      account:
+        example: ""
+        type: string
+      authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      nonce_account:
+        example: ""
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+    type: object
+  v2.ThawAccountResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
         type: string
       recent_blockhash:
         type: string
@@ -4346,7 +4480,7 @@ paths:
             type: object
       summary: Build a System Program allocation
       tags:
-      - transaction
+      - v2-transaction-system-account
   /svm/v2/transaction/system/assign:
     post:
       consumes:
@@ -4394,7 +4528,7 @@ paths:
             type: object
       summary: Build a System Program ownership assignment
       tags:
-      - transaction
+      - v2-transaction-system-account
   /svm/v2/transaction/system/create-account:
     post:
       consumes:
@@ -4443,7 +4577,7 @@ paths:
             type: object
       summary: Build a System Program account creation
       tags:
-      - transaction
+      - v2-transaction-system-account
   /svm/v2/transaction/system/nonce/advance:
     post:
       consumes:
@@ -4491,7 +4625,7 @@ paths:
             type: object
       summary: Build a durable nonce advance
       tags:
-      - transaction
+      - v2-transaction-system-nonce
   /svm/v2/transaction/system/nonce/authorize:
     post:
       consumes:
@@ -4539,7 +4673,7 @@ paths:
             type: object
       summary: Build a durable nonce authority change
       tags:
-      - transaction
+      - v2-transaction-system-nonce
   /svm/v2/transaction/system/nonce/create-account:
     post:
       consumes:
@@ -4588,7 +4722,7 @@ paths:
             type: object
       summary: Build a durable nonce account creation
       tags:
-      - transaction
+      - v2-transaction-system-nonce
   /svm/v2/transaction/system/nonce/initialize:
     post:
       consumes:
@@ -4636,7 +4770,7 @@ paths:
             type: object
       summary: Build a durable nonce initialization on an existing account
       tags:
-      - transaction
+      - v2-transaction-system-nonce
   /svm/v2/transaction/system/nonce/upgrade:
     post:
       consumes:
@@ -4686,7 +4820,7 @@ paths:
             type: object
       summary: Build a Legacy nonce account migration
       tags:
-      - transaction
+      - v2-transaction-system-nonce
   /svm/v2/transaction/system/nonce/withdraw:
     post:
       consumes:
@@ -4734,7 +4868,7 @@ paths:
             type: object
       summary: Build a partial withdrawal from a durable nonce account
       tags:
-      - transaction
+      - v2-transaction-system-nonce
   /svm/v2/transaction/system/nonce/withdraw/max:
     post:
       consumes:
@@ -4784,7 +4918,7 @@ paths:
             type: object
       summary: Build a full withdrawal that closes a durable nonce account
       tags:
-      - transaction
+      - v2-transaction-system-nonce
   /svm/v2/transaction/system/seed/allocate:
     post:
       consumes:
@@ -4830,7 +4964,7 @@ paths:
             type: object
       summary: Build an allocation on a seed-derived address
       tags:
-      - transaction
+      - v2-transaction-system-seed
   /svm/v2/transaction/system/seed/assign:
     post:
       consumes:
@@ -4876,7 +5010,7 @@ paths:
             type: object
       summary: Build an ownership assignment on a seed-derived address
       tags:
-      - transaction
+      - v2-transaction-system-seed
   /svm/v2/transaction/system/seed/create-account:
     post:
       consumes:
@@ -4925,7 +5059,7 @@ paths:
             type: object
       summary: Build an account creation at a seed-derived address
       tags:
-      - transaction
+      - v2-transaction-system-seed
   /svm/v2/transaction/system/seed/transfer:
     post:
       consumes:
@@ -4971,7 +5105,7 @@ paths:
             type: object
       summary: Build a transfer out of a seed-derived address
       tags:
-      - transaction
+      - v2-transaction-system-seed
   /svm/v2/transaction/system/seed/transfer/max:
     post:
       consumes:
@@ -5018,21 +5152,25 @@ paths:
             type: object
       summary: Build a transfer of a seed-derived address's entire balance
       tags:
-      - transaction
+      - v2-transaction-system-seed
   /svm/v2/transaction/system/transfer:
     post:
       consumes:
       - application/json
       description: Assembles a System Program transfer and returns the same shape
-        as a v1 build, so sign and send accept it unchanged. The recent blockhash
-        is always fetched, and the recipient is not required to exist yet. To send
-        the sender's entire balance, use transfer/max instead. Naming nonce_account
-        builds the transaction against the value that durable nonce account stores
-        rather than a recent blockhash, so it never expires; the advance that consumes
-        it is prepended as the first instruction, and the response reports nonce_authority,
-        which has to sign as well.
+        as a v1 build, so sign and send accept it unchanged. recent_blockhash is always
+        required and is never fetched server-side. Left alone, it also builds the
+        message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it as the first instruction;
+        recent_blockhash then only prices the transaction, since a nonce is never
+        among the cluster's recent blockhashes. The response reports nonce_authority
+        in that case, which has to sign as well. The recipient is not required to
+        exist yet, but if it does not, lamports must be at least the rent-exemption
+        minimum, since the runtime will not create an account below it. To send the
+        sender's entire balance, use transfer/max instead.
       parameters:
-      - description: Sender, recipient, and amount
+      - description: Sender, recipient, and lamports
         in: body
         name: body
         required: true
@@ -5063,7 +5201,7 @@ paths:
             type: object
       summary: Build a native SOL transfer
       tags:
-      - transaction
+      - v2-transaction-system-transfer
   /svm/v2/transaction/system/transfer/batch:
     post:
       consumes:
@@ -5115,7 +5253,7 @@ paths:
             type: object
       summary: Build one transaction paying from several accounts
       tags:
-      - transaction
+      - v2-transaction-system-transfer
   /svm/v2/transaction/system/transfer/many:
     post:
       consumes:
@@ -5165,7 +5303,7 @@ paths:
             type: object
       summary: Build one transaction paying several recipients
       tags:
-      - transaction
+      - v2-transaction-system-transfer
   /svm/v2/transaction/system/transfer/max:
     post:
       consumes:
@@ -5211,7 +5349,7 @@ paths:
             type: object
       summary: Build a native SOL transfer of the sender's entire balance
       tags:
-      - transaction
+      - v2-transaction-system-transfer
   /svm/v2/transaction/token/approve-checked:
     post:
       consumes:
@@ -5503,6 +5641,48 @@ paths:
               type: string
             type: object
       summary: Fund and initialize an SPL Token mint
+      tags:
+      - transaction
+  /svm/v2/transaction/token/freeze-account:
+    post:
+      consumes:
+      - application/json
+      description: 'Freezes a token account, so it rejects transfer, burn, and approve
+        until thawed. The authority is the mint''s freeze authority, not the account''s
+        owner or any delegate: freezing is a mint-level power to suspend any account
+        holding it, on a different axis from who may spend a balance. Only works on
+        a mint that was initialized with a freeze authority.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Freeze parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.FreezeAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.FreezeAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Suspend a token account
       tags:
       - transaction
   /svm/v2/transaction/token/mint-to-checked:
@@ -5865,6 +6045,46 @@ paths:
               type: string
             type: object
       summary: Replace a token account's owner
+      tags:
+      - transaction
+  /svm/v2/transaction/token/thaw-account:
+    post:
+      consumes:
+      - application/json
+      description: Reverses FreezeAccount, letting transfer, burn, and approve resume
+        against the account. The authority is the mint's freeze authority, the same
+        rule FreezeAccount applies.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Thaw parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ThawAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ThawAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Resume a suspended token account
       tags:
       - transaction
   /svm/v2/transaction/token/transfer-checked:

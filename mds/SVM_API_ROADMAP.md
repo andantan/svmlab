@@ -12,16 +12,15 @@ account model -> deterministic addresses -> assets -> application state
 
 ## Current Status
 
-Core and endpoints are still tracked apart, because they keep coming apart:
-Token's freeze and thaw builders exist with nothing serving them, the same
-shape the first lifecycle was in before it shipped.
+Core and endpoints had come apart around Token's freeze and thaw builders, the
+same shape the first lifecycle was in before it shipped; that gap is closed.
 
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi and batch transfer |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts; first used by ATA   |
-| SPL Token classic         | done    | partial   | lifecycle, delegation, and 7 set-authority endpoints live; freeze/thaw next |
+| SPL Token classic         | done    | done      | lifecycle, delegation, 7 set-authority, freeze/thaw all live; compat next   |
 | Associated Token Account  | done    | done      | create, create-idempotent, transfer-to-wallet; recover-nested deferred      |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
@@ -36,7 +35,8 @@ System (done)
 -> PDA derivation (done)
 -> SPL Token classic first lifecycle (done)
 -> Associated Token Account (done)
--> SPL Token classic delegation (done) and administration  <- here: freeze/thaw
+-> SPL Token classic delegation and administration (done)
+-> SPL Token classic compatibility opcodes and multisig  <- here
 -> Vault custom program
 -> Compute Budget
 -> Address Lookup Table
@@ -146,18 +146,21 @@ changes, freezing, multisig, wrapped SOL, and return-data utilities.
 Core, the first lifecycle, and delegation are done: the three layouts parse,
 all 25 classic opcodes are declared, and create-mint, create-account,
 mint-to-checked, transfer-checked, burn-checked, close-account,
-approve-checked, revoke, and seven set-authority endpoints are live under
-`/svm/v2/transaction/token/`, alongside the reads at `/svm/token/mint`,
-`/svm/token/account`, and `/svm/account/tokens`. Every one of them checks
-what a live cluster would reject before building the instruction — decimals
-against the mint, an account's mint against the request's, frozen state,
-authority against owner or delegate (transfer, burn) or against the mint's
-own authority (mint-to), and close authority as its own separate axis — so a
-mismatch comes back as a 400 with the reason instead of a signed transaction
-failing on chain.
+approve-checked, revoke, seven set-authority endpoints, freeze-account, and
+thaw-account are live under `/svm/v2/transaction/token/`, alongside the reads
+at `/svm/token/mint`, `/svm/token/account`, and `/svm/account/tokens`. Every
+one of them checks what a live cluster would reject before building the
+instruction — decimals against the mint, an account's mint against the
+request's, frozen state, authority against owner or delegate (transfer, burn)
+or against the mint's own authority (mint-to, freeze, thaw), and close
+authority as its own separate axis — so a mismatch comes back as a 400 with
+the reason instead of a signed transaction failing on chain. freeze-account
+and thaw-account were the last builders sitting in `core` with nothing serving
+them, and were verified by signing and sending both directions on devnet
+rather than only building the transaction.
 
-Still open here: freeze-account and thaw-account, whose builders exist with
-no endpoint on them, and the compatibility opcodes. Detailed coverage:
+Still open here: the compatibility opcodes and multisig initialization.
+Detailed coverage:
 
 ~~~
 TOKEN_API_PROPOSAL.md
@@ -532,3 +535,268 @@ from normal application APIs.
 - treating Token-2022 accounts as classic fixed-size accounts
 - funding an unknown off-curve address without a recovery policy
 
+## Extended API Catalogue
+
+The following is the broad candidate catalogue beyond the APIs implemented so
+far. It intentionally includes both the recommended application path and
+lower-priority compatibility, inspection, and protocol-completeness APIs.
+
+### Token authority and wrapped SOL
+
+~~~text
+token/freeze-account
+token/thaw-account
+token/create-wrapped-sol
+token/wrap-sol
+token/sync-native
+token/unwrap-lamports
+~~~
+
+`token/close-account` already unwraps a normal wrapped-SOL account by closing
+it. `unwrap-lamports` should only be exposed after confirming the deployed
+program accepts it on Devnet.
+
+### Classic Token compatibility and low-level instructions
+
+~~~text
+token/transfer
+token/approve
+token/mint-to
+token/burn
+token/initialize-mint
+token/initialize-mint2
+token/initialize-account
+token/initialize-account2
+token/initialize-account3
+token/initialize-multisig
+token/initialize-multisig2
+token/initialize-immutable-owner
+token/account-data-size
+token/amount-to-ui
+token/ui-to-amount
+token/withdraw-excess-lamports
+token/batch
+~~~
+
+Checked variants remain the normal public path. This group is mainly for
+learning, backwards compatibility, and custom composition. Confirm unverified
+opcodes (`unwrap-lamports`, `withdraw-excess-lamports`, and `batch`) against a
+live cluster before documenting them as usable.
+
+### ATA helpers
+
+~~~text
+token/ata/derive
+token/ata/validate
+token/ata/recover-nested
+token/ata/get-or-create
+~~~
+
+`derive` returns the ATA and bump for wallet + mint + token program;
+`validate` checks a supplied address against that derivation. `recover-nested`
+is a low-frequency repair tool. `get-or-create` is a read-plus-transaction
+convenience endpoint, not a new ATA instruction.
+
+### PDA HTTP utilities
+
+~~~text
+pda/derive
+pda/find
+pda/validate
+pda/classify
+pda/derive/batch
+pda/seeds/encode
+pda/account
+~~~
+
+Typed seed encoding should cover UTF-8 strings, raw bytes, public keys, and
+little-endian u8/u16/u32/u64 values. These APIs make derivation inspectable;
+they never give an external caller the ability to sign for a PDA.
+
+### Transaction composition and Compute Budget
+
+~~~text
+transaction/build
+transaction/append-instruction
+transaction/compose
+transaction/decode
+transaction/inspect
+transaction/required-signers
+transaction/serialize
+transaction/deserialize
+transaction/refresh-blockhash
+transaction/add-nonce
+transaction/add-compute-budget
+transaction/size
+transaction/validate
+
+transaction/compute-budget
+transaction/compute-budget/limit
+transaction/compute-budget/price
+transaction/compute-budget/heap-frame
+transaction/compute-budget/loaded-accounts-data-size-limit
+transaction/estimate-compute
+transaction/recommend-priority-fee
+~~~
+
+The preferred design is a shared optional `compute_budget` object on typed
+builders, plus a composer for callers that need several typed instructions in
+one atomic transaction. Estimate APIs can use simulation; fee recommendation
+needs a cluster or provider data source.
+
+### Vault custom program
+
+~~~text
+vault/derive
+vault/create
+vault/get
+vault/deposit-sol
+vault/withdraw-sol
+vault/create-token-vault
+vault/deposit-token
+vault/withdraw-token
+vault/balance
+vault/authorize
+vault/close
+~~~
+
+Vault is the first deployed-program milestone. Its PDA becomes a real program
+signer through `invoke_signed`, and token withdrawal uses a Token Program CPI.
+It connects PDA, ATA, Token, authority, and composed transactions in one flow.
+
+### Address Lookup Tables and v0 transactions
+
+~~~text
+alt/create
+alt/extend
+alt/freeze
+alt/deactivate
+alt/close
+alt/get
+alt/list-addresses
+alt/derive
+transaction/v0/build
+transaction/v0/compile
+transaction/v0/resolve-lookups
+~~~
+
+This requires v0 message and lookup serialization as well as ALT instruction
+builders. It is most useful with large vault and batch transactions.
+
+### Token-2022 extensions
+
+~~~text
+token-2022/mint/extensions
+token-2022/account/extensions
+token-2022/account-data-size
+token-2022/create-mint
+token-2022/create-account
+token-2022/initialize-extension/*
+token-2022/transfer-fee/*
+token-2022/transfer-hook/*
+token-2022/default-account-state/*
+token-2022/permanent-delegate/*
+token-2022/non-transferable/*
+token-2022/interest-bearing/*
+token-2022/metadata-pointer/*
+token-2022/group-pointer/*
+token-2022/group-member-pointer/*
+token-2022/confidential-transfer/*
+token-2022/scaled-ui-amount/*
+token-2022/immutable-owner
+~~~
+
+Classic builders already reach Token-2022's shared instruction surface. This
+group begins where extensions change account size, initialization order,
+parsing, and transfer rules.
+
+### Metadata, NFT, and compressed NFT reads
+
+~~~text
+nft/mint
+nft/create-metadata
+nft/update-metadata
+nft/verify-collection
+nft/create-master-edition
+nft/mint-edition
+nft/transfer
+nft/burn
+nft/freeze
+nft/thaw
+nft/get
+nft/get-metadata
+nft/get-collection
+nft/compressed/*
+~~~
+
+Compressed-NFT discovery normally needs a DAS or indexer-backed read API in
+addition to standard Solana RPC.
+
+### Stake, vote, validator, and loader APIs
+
+~~~text
+stake/create-account
+stake/delegate
+stake/deactivate
+stake/withdraw
+stake/split
+stake/merge
+stake/authorize
+stake/lockup
+stake/get
+stake/list-by-authority
+stake/rewards
+
+vote/get
+vote/list
+vote/validators
+vote/leader-schedule
+vote/epoch-info
+vote/epoch-schedule
+vote/inflation-rewards
+vote/stake-activation
+
+program/get
+program/account
+program/buffer/create
+program/buffer/write
+program/deploy
+program/upgrade
+program/set-authority
+program/close
+program/programdata
+program/verify
+~~~
+
+### Other built-in and account-discovery APIs
+
+~~~text
+memo/create
+ed25519/verify
+secp256k1/verify
+secp256r1/verify
+system/transfer-with-seed
+account/nonces-by-authority
+account/program-accounts
+account/history
+~~~
+
+## Recommended expanded sequence
+
+~~~text
+Token compatibility opcodes and multisig
+-> wrapped SOL
+-> PDA HTTP utilities
+-> transaction composer and Compute Budget
+-> Vault program
+-> ALT
+-> Token-2022 extensions
+-> NFT / Metaplex
+-> Stake
+-> Loader / deployment
+~~~
+
+Vault may move ahead of the remaining legacy compatibility instructions when
+the goal is to exercise PDA signing in a real application. At the Token/Vault
+boundary, add Devnet E2E tests for complete flows; the current `go test` run
+compiles packages but does not yet execute repository test cases.

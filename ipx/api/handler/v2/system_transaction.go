@@ -22,11 +22,11 @@ func NewSystemTransactionHandler(cfg *config.Config) *SystemTransactionHandler {
 
 // SystemTransfer godoc
 // @Summary      Build a native SOL transfer
-// @Description  Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. The recent blockhash is always fetched, and the recipient is not required to exist yet. To send the sender's entire balance, use transfer/max instead. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Description  Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. The recipient is not required to exist yet, but if it does not, lamports must be at least the rent-exemption minimum, since the runtime will not create an account below it. To send the sender's entire balance, use transfer/max instead.
+// @Tags         v2-transaction-system-transfer
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemTransferRequest  true  "Sender, recipient, and amount"
+// @Param        body  body      SystemTransferRequest  true  "Sender, recipient, and lamports"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemTransferResponse
@@ -49,54 +49,40 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 		return
 	}
 
-	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
-		return
-	}
-
-	ix, err := core.System.Transfer(req.FromKey(), req.ToKey(), req.Lamports())
+	ix, err := core.System.Transfer(req.FromKey(), req.ToKey(), req.ToLamports())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	instructions := types.NewInstructions(ix)
+	ixs := types.NewInstructions(ix)
 
-	// Without a nonce the message is built against the blockhash just fetched
-	// and expires with it. With one it is built against the value that account
-	// stores and never expires, so which constructor runs is the whole
-	// difference between the two.
+	// Without a nonce the message is built against the blockhash resolved
+	// above and expires with it. With one it is built against the value that
+	// account stores and never expires, so which constructor runs is the
+	// whole difference between the two.
 	var (
 		message        *types.Message
 		priced         *types.Message
 		nonceAuthority *types.PublicKey
 	)
-	if req.NonceAccountKey().IsNil() {
-		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), ixs); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		priced = message
 	} else {
-		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		info, err := chain.Cli.AccountInfo(r.Context(), req.DurableNonceAccountKey(), rpc.CommitmentConfirmed)
 		if err != nil {
 			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
 			return
 		}
-		if info == nil {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
+		if !info.Exists() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s does not exist", req.DurableNonceAccountKey()))
 			return
 		}
-		if info.Owner != core.System.ID().Base58() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-				req.NonceAccountKey(), info.Owner))
-			return
-		}
-		if info.Space != core.NonceAccountSpace {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is %d bytes, and a nonce account is %d",
-				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+		if !info.IsNonceAccount() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s is not a nonce account", req.DurableNonceAccountKey()))
 			return
 		}
 
@@ -111,16 +97,16 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 			return
 		}
 		if !nonce.Initialized() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s is not initialized", req.DurableNonceAccountKey()))
 			return
 		}
 
-		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
 		if err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
-		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, ixs); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -129,7 +115,7 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 		// real message comes back as expired. The fee follows from the
 		// signature count and any compute budget instructions, never from the
 		// blockhash, so the same shape against a live one prices it exactly.
-		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, ixs); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -155,22 +141,35 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 		return
 	}
 
+	// A brand-new account is the same rule from the other side: the runtime
+	// will not create one below the rent-exemption minimum, so an amount that
+	// small is caught here instead of failing once sent.
+	toExists, err := chain.Cli.Exists(r.Context(), req.ToKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read recipient account: %s", err))
+		return
+	}
+	if !toExists && req.ToLamports() < minRent {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: %d is below the %d lamport rent-exemption minimum required to create %s", req.ToLamports(), minRent, req.ToKey()))
+		return
+	}
+
 	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance: %s", err))
 		return
 	}
 
-	spent := req.Lamports()
+	spent := req.ToLamports()
 	if req.FromKey().Equal(req.FeePayerKey()) {
 		spent += fee
 	}
 	if balance < spent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("amount: balance %d lamports does not cover %d lamports", balance, spent))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: balance %d does not cover %d", balance, spent))
 		return
 	}
-	if remaining := balance - spent; remaining != 0 && remaining < minRent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("amount: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FromKey(), remaining, minRent))
+	if !types.RentExemptAfter(balance, spent, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FromKey(), balance-spent, minRent))
 		return
 	}
 
@@ -184,8 +183,8 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
 			return
 		}
-		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
 			return
 		}
 	}
@@ -208,14 +207,13 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 		return
 	}
 
-	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
-	handler.WriteOK(w, NewSystemTransferResponse(tx, raw, messageBytes, nonceAuthority, req.Lamports(), fee))
+	handler.WriteOK(w, NewSystemTransferResponse(tx, raw, messageBytes, nonceAuthority, req.ToLamports(), fee))
 }
 
 // SystemTransferMax godoc
 // @Summary      Build a native SOL transfer of the sender's entire balance
 // @Description  Assembles a System Program transfer moving everything the sender can send. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-transfer
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemTransferMaxRequest  true  "Sender and recipient"
@@ -406,7 +404,7 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 // SystemTransferMany godoc
 // @Summary      Build one transaction paying several recipients
 // @Description  Assembles one Transfer instruction per recipient, all leaving the same account, in a single transaction. This is the first endpoint to carry an arbitrary number of instructions, so it is the first bounded by transaction size rather than by anything it checks: a transaction travels in one 1232-byte packet and cannot be split, which caps the list somewhere around twenty and is reported as size and size_limit. The account keys show fewer entries than instructions, since the sender and the System Program appear in every one and a compiled message lists each key once. There is no max variant, because sending everything one account holds does not say how to divide it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-transfer
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemTransferManyRequest  true  "Sender, recipients with amounts, and fee payer"
@@ -619,7 +617,7 @@ func (h *SystemTransactionHandler) SystemTransferMany(w http.ResponseWriter, r *
 // SystemTransferBatch godoc
 // @Summary      Build one transaction paying from several accounts
 // @Description  Assembles one Transfer instruction per entry, each with its own sender, in a single transaction. Every distinct sender signs, and a signature costs 64 bytes beside its 32 byte account key, so senders are three times as expensive as recipients and this fits far fewer transfers than transfer/many does. Naming a sender as the fee payer costs nothing, since it already signs; naming anyone else adds another 96 bytes. An entry may set max instead of amount to send whatever its sender still holds once its other entries and, if it is also the fee payer, the fee are taken out, which is a figure the request cannot state because the fee is not known until the transaction is priced. One max per sender, since everything an account holds cannot go to two places. Collecting a signature from every sender takes longer than a blockhash lasts, so naming nonce_account builds the transaction against the value that durable nonce account stores instead, and it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-transfer
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemTransferBatchRequest  true  "Transfers with their own senders, and a fee payer"
@@ -913,7 +911,7 @@ func (h *SystemTransactionHandler) SystemTransferBatch(w http.ResponseWriter, r 
 // SystemCreateAccount godoc
 // @Summary      Build a System Program account creation
 // @Description  Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account owned by a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside the funder, which is what has no EVM counterpart: an address does not exist until someone holding its private key authorizes its creation. Lamports must reach the rent-exempt minimum for the requested space, which this checks before returning. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-account
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemCreateAccountRequest  true  "Funder, new account, owner, lamports, and space"
@@ -1145,7 +1143,7 @@ func (h *SystemTransactionHandler) SystemCreateAccount(w http.ResponseWriter, r 
 // SystemAllocate godoc
 // @Summary      Build a System Program allocation
 // @Description  Reserves data space on an existing System-owned account. Only the owning program may size an account, so this works on an account the System Program still owns and not one already assigned elsewhere. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size rather than the old one. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-account
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemAllocateRequest  true  "Account and space"
@@ -1352,7 +1350,7 @@ func (h *SystemTransactionHandler) SystemAllocate(w http.ResponseWriter, r *http
 // SystemAssign godoc
 // @Summary      Build a System Program ownership assignment
 // @Description  Hands a System-owned account to another program, which is the step that puts an account under a program's control. Ownership is a field on the account rather than a mapping the program keeps, which is the inverse of an EVM contract holding balances for its users in its own storage. The owner must be executable: only the owning program may debit an account or write its data, so assigning to a plain address locks the account and its lamports permanently. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-account
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemAssignRequest  true  "Account and new owner"
@@ -1555,7 +1553,7 @@ func (h *SystemTransactionHandler) SystemAssign(w http.ResponseWriter, r *http.R
 // SystemSeedCreateAccount godoc
 // @Summary      Build an account creation at a seed-derived address
 // @Description  Creates an account at SHA256(base || seed || owner) and hands it to that owner in one instruction, so a program-owned account needs no separate allocate and assign. The owner must be executable, and it changes the address: the same base and seed derive somewhere else for a different owner. The derived account never signs, which is the difference from create-account: nobody holds a secret for it, so base signs in its place and whoever controls base controls every address derived from it. The address is derived rather than accepted, since the runtime recomputes it and rejects a mismatch. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-seed
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemSeedCreateAccountRequest  true  "Funder, base, seed, owner, lamports, and space"
@@ -1790,7 +1788,7 @@ func (h *SystemTransactionHandler) SystemSeedCreateAccount(w http.ResponseWriter
 // SystemSeedTransfer godoc
 // @Summary      Build a transfer out of a seed-derived address
 // @Description  Debits SHA256(base || seed || owner) without that account signing, since base signs for it. That is what makes a derived address usable as a holding account: anyone can fund it, and only the holder of base can spend it. The account must still be System-owned for a system transfer to debit it, which is checked before returning. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-seed
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemSeedTransferRequest  true  "Base, seed, owner, recipient, and amount"
@@ -1992,7 +1990,7 @@ func (h *SystemTransactionHandler) SystemSeedTransfer(w http.ResponseWriter, r *
 // SystemSeedAllocate godoc
 // @Summary      Build an allocation on a seed-derived address
 // @Description  Reserves data space on SHA256(base || seed || owner) with base signing in the account's place. Allocation still requires the account to be System-owned, so this is the step taken before assigning it away, on an address derived for its eventual owner from the start. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-seed
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemSeedAllocateRequest  true  "Base, seed, owner, and space"
@@ -2200,7 +2198,7 @@ func (h *SystemTransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *
 // SystemSeedAssign godoc
 // @Summary      Build an ownership assignment on a seed-derived address
 // @Description  Hands SHA256(base || seed || owner) to that same owner. There is no separate new-owner field, because one owner does both jobs: it is what the address is derived from and what the account is assigned to, so an account can only be handed to the program its own address already encodes. The owner must be executable, since assigning to a plain address locks the account permanently. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-seed
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemSeedAssignRequest  true  "Base, seed, and owner"
@@ -2403,7 +2401,7 @@ func (h *SystemTransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *ht
 // SystemSeedTransferMax godoc
 // @Summary      Build a transfer of a seed-derived address's entire balance
 // @Description  Sends everything SHA256(base || seed || owner) holds. The amount is the whole balance with nothing held back, because a derived address can never pay the fee: a fee payer has to sign, and this account cannot. That also means no probe is needed to price the message first, since the amount does not depend on the fee here the way it does for a plain transfer. Emptying the account lets the runtime reclaim it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
-// @Tags         transaction
+// @Tags         v2-transaction-system-seed
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemSeedTransferMaxRequest  true  "Base, seed, owner, and recipient"
@@ -2607,7 +2605,7 @@ func (h *SystemTransactionHandler) SystemSeedTransferMax(w http.ResponseWriter, 
 // SystemNonceCreate godoc
 // @Summary      Build a durable nonce account creation
 // @Description  Creates the account and initializes it as a durable nonce in one transaction, which is the first v2 endpoint to carry more than one instruction. The nonce account appears twice: it signs for the creation, since an address does not exist until its key authorizes it, and is only writable for the initialization, which needs no authority. Message compilation lists it once with the union of both, which is why it shows up among the signers. Size and funding are not fields, since a nonce account is always the same size and has to hold exactly the rent-exempt minimum for it. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
-// @Tags         transaction
+// @Tags         v2-transaction-system-nonce
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemNonceCreateRequest  true  "Funder, new nonce account, and authority"
@@ -2822,7 +2820,7 @@ func (h *SystemTransactionHandler) SystemNonceCreate(w http.ResponseWriter, r *h
 // SystemNonceInitialize godoc
 // @Summary      Build a durable nonce initialization on an existing account
 // @Description  Initializes an account that already exists and is already the right size. nonce/create-account does this and the creation together, so this is for an address that can no longer be created: CreateAccount refuses one that already holds lamports, which is what happens when someone funds the address first. The account is writable but does not sign, since initializing it needs no authority of its own; it gains the authority named here. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
-// @Tags         transaction
+// @Tags         v2-transaction-system-nonce
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemNonceInitializeRequest  true  "New nonce account and authority"
@@ -3048,7 +3046,7 @@ func (h *SystemTransactionHandler) SystemNonceInitialize(w http.ResponseWriter, 
 // SystemNonceAdvance godoc
 // @Summary      Build a durable nonce advance
 // @Description  Replaces the stored nonce with the current blockhash. Advancing is what consumes a nonce: a transaction built against one carries it in place of a recent blockhash and runs this as its first instruction, so the value it was built for is gone by the time it finishes and it cannot land twice. Run on its own, this simply invalidates anything already built against the account. The authority signs, and the stored authority is checked here rather than left to fail on chain. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
-// @Tags         transaction
+// @Tags         v2-transaction-system-nonce
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemNonceAdvanceRequest  true  "Target nonce account and authority"
@@ -3262,7 +3260,7 @@ func (h *SystemTransactionHandler) SystemNonceAdvance(w http.ResponseWriter, r *
 // SystemNonceWithdraw godoc
 // @Summary      Build a partial withdrawal from a durable nonce account
 // @Description  Moves part of a nonce account's balance out. What stays has to keep the account rent exempt at its size, since an account below that floor is subject to removal while still holding a nonce something may have been built against. Taking the whole balance closes the account and carries a further rule, so that has its own endpoint. The authority signs, and the stored authority is checked here rather than left to fail on chain. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
-// @Tags         transaction
+// @Tags         v2-transaction-system-nonce
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemNonceWithdrawRequest  true  "Target nonce account, authority, recipient, and amount"
@@ -3500,7 +3498,7 @@ func (h *SystemTransactionHandler) SystemNonceWithdraw(w http.ResponseWriter, r 
 // SystemNonceWithdrawMax godoc
 // @Summary      Build a full withdrawal that closes a durable nonce account
 // @Description  Takes the whole balance, which closes the account. The rent-exempt floor that constrains a partial withdrawal does not apply, since nothing is left to keep exempt. One rule replaces it and is not checked here: the runtime refuses to close an account whose stored nonce is still the blockhash the transaction executes against, so closing in the same block the nonce was last advanced or initialized fails with NonceBlockhashNotExpired. That cannot be decided before submitting, because the blockhash it is compared against is the one at execution rather than any this build could see. Waiting a block and rebuilding is the fix. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
-// @Tags         transaction
+// @Tags         v2-transaction-system-nonce
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemNonceWithdrawMaxRequest  true  "Target nonce account, authority, and recipient"
@@ -3727,7 +3725,7 @@ func (h *SystemTransactionHandler) SystemNonceWithdrawMax(w http.ResponseWriter,
 // SystemNonceAuthorize godoc
 // @Summary      Build a durable nonce authority change
 // @Description  Hands control of a nonce account to another key. The stored nonce and the balance are untouched, so only who may advance and withdraw changes. That also invalidates anything the old authority signed but never submitted, since such a transaction advances the nonce as its first instruction and that now needs a signature the old authority cannot give. If the reason for changing is a leaked key, the old authority's pending transaction and this one race, so pair it with an advance. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
-// @Tags         transaction
+// @Tags         v2-transaction-system-nonce
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemNonceAuthorizeRequest  true  "Target nonce account, current authority, and new authority"
@@ -3941,7 +3939,7 @@ func (h *SystemTransactionHandler) SystemNonceAuthorize(w http.ResponseWriter, r
 // SystemNonceUpgrade godoc
 // @Summary      Build a Legacy nonce account migration
 // @Description  Rewrites a Legacy nonce account as the current version. Legacy accounts stored the blockhash itself, which could collide with a real one; the current version stores a value derived from it that cannot. Nothing signs, since this is not a privileged operation, so anyone willing to pay the fee may upgrade anyone's account. No account this project creates can be upgraded: initialize has written the current version for a long time, only accounts predating that change are Legacy, and no instruction can produce one now. The check below rejects a current account before it reaches the chain. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well. It has to be an account other than the one this endpoint acts on.
-// @Tags         transaction
+// @Tags         v2-transaction-system-nonce
 // @Accept       json
 // @Produce      json
 // @Param        body  body      SystemNonceUpgradeRequest  true  "Target nonce account"

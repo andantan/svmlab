@@ -135,3 +135,14 @@ func trimTrailingFractionZeros(s string) string {
 
 	return s
 }
+
+// RentExemptAfter reports whether paying spent out of balance leaves a
+// remainder the runtime accepts: exactly zero, since an account can be fully
+// drained, or at or above minRent. Anything in between is a stranded balance
+// the runtime rejects outright.
+//
+// balance must already cover spent; this only judges the remainder.
+func RentExemptAfter(balance, spent, minRent uint64) bool {
+	remaining := balance - spent
+	return remaining == 0 || remaining >= minRent
+}

@@ -12,80 +12,112 @@ import (
 )
 
 type SystemTransferRequest struct {
-	From     string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	To       string `json:"to"   example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
-	Amount   string `json:"amount" example:"1000000"`
+	// From is the account debited. It signs the transaction as the transfer
+	// authority, whether or not it also pays the fee.
+	From string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// To is the account credited. It is not required to exist yet.
+	To string `json:"to"   example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+
+	// Lamports is the raw amount moved from From to To.
+	Lamports string `json:"lamports" example:"1000000"`
+
+	// FeePayer signs and pays the transaction fee. It may be the same
+	// account as From.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires,
-	// and prepends the advance that consumes it. The authority is not a field:
-	// it is read from the account, since it is a fact about it rather than a
-	// choice.
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	from         *types.PublicKey
-	to           *types.PublicKey
-	feePayer     *types.PublicKey
-	nonceAccount *types.PublicKey
-	amount       uint64
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	f   *types.PublicKey
+	t   *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
+	l   uint64
 }
 
 func (r *SystemTransferRequest) ValidateRequest() error {
 	var err error
-	if r.from, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
+	if r.f, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
 		return errors.New("from: " + err.Error())
 	}
-	if r.to, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.To)); err != nil {
+	if r.t, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.To)); err != nil {
 		return errors.New("to: " + err.Error())
 	}
-	if r.from.Equal(r.to) {
+	if r.f.Equal(r.t) {
 		return errors.New("from and to are the same account")
 	}
 
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
-	amount := strings.TrimSpace(r.Amount)
-	if amount == "" {
-		return errors.New("amount is required")
+	l := strings.TrimSpace(r.Lamports)
+	if l == "" {
+		return errors.New("lamports is required")
 	}
-	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
-		return errors.New("amount: must be a decimal lamport count")
+	if r.l, err = strconv.ParseUint(l, 10, 64); err != nil {
+		return errors.New("lamports: must be a decimal lamport count")
 	}
-	if r.amount == 0 {
-		return errors.New("amount: must be greater than zero")
+	if r.l == 0 {
+		return errors.New("lamports: must be greater than zero")
 	}
 
 	return nil
 }
 
-func (r *SystemTransferRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
-}
-
 func (r *SystemTransferRequest) FromKey() *types.PublicKey {
-	return r.from
+	return r.f
 }
 
 func (r *SystemTransferRequest) ToKey() *types.PublicKey {
-	return r.to
+	return r.t
+}
+
+func (r *SystemTransferRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemTransferRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemTransferRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
-func (r *SystemTransferRequest) Lamports() uint64 {
-	return r.amount
+func (r *SystemTransferRequest) ToLamports() uint64 {
+	return r.l
 }
 
 type SystemTransferMaxRequest struct {
@@ -668,15 +700,15 @@ type SystemTransferResponse struct {
 	// server read it off the account.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	// Amount and Fee are strings for the same reason the request's amount is:
-	// a JSON number is a float, so a lamport count past 2^53 would reach a
+	// Lamports and Fee are strings for the same reason the request's lamports
+	// is: a JSON number is a float, so a lamport count past 2^53 would reach a
 	// JavaScript client already rounded.
-	Amount    string `json:"amount"`
-	AmountSOL string `json:"amount_sol"`
-	Fee       string `json:"fee"`
+	Lamports string `json:"lamports"`
+	SOL      string `json:"sol"`
+	Fee      string `json:"fee"`
 }
 
-func NewSystemTransferResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, amount, fee uint64) *SystemTransferResponse {
+func NewSystemTransferResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, lamports, fee uint64) *SystemTransferResponse {
 	// Empty unless the transaction was built against a nonce, which is what
 	// makes the field double as the signal that it was.
 	authority := ""
@@ -701,8 +733,8 @@ func NewSystemTransferResponse(tx *types.Transaction, raw, message []byte, nonce
 		AccountKeys:     keys,
 		Signers:         signers,
 		NonceAuthority:  authority,
-		Amount:          strconv.FormatUint(amount, 10),
-		AmountSOL:       types.LamportsToSol(amount),
+		Lamports:        strconv.FormatUint(lamports, 10),
+		SOL:             types.LamportsToSol(lamports),
 		Fee:             strconv.FormatUint(fee, 10),
 	}
 }

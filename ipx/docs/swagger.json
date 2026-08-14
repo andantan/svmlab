@@ -1921,7 +1921,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-account"
                 ],
                 "summary": "Build a System Program allocation",
                 "parameters": [
@@ -1978,7 +1978,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-account"
                 ],
                 "summary": "Build a System Program ownership assignment",
                 "parameters": [
@@ -2035,7 +2035,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-account"
                 ],
                 "summary": "Build a System Program account creation",
                 "parameters": [
@@ -2092,7 +2092,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-nonce"
                 ],
                 "summary": "Build a durable nonce advance",
                 "parameters": [
@@ -2149,7 +2149,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-nonce"
                 ],
                 "summary": "Build a durable nonce authority change",
                 "parameters": [
@@ -2206,7 +2206,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-nonce"
                 ],
                 "summary": "Build a durable nonce account creation",
                 "parameters": [
@@ -2263,7 +2263,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-nonce"
                 ],
                 "summary": "Build a durable nonce initialization on an existing account",
                 "parameters": [
@@ -2320,7 +2320,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-nonce"
                 ],
                 "summary": "Build a Legacy nonce account migration",
                 "parameters": [
@@ -2377,7 +2377,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-nonce"
                 ],
                 "summary": "Build a partial withdrawal from a durable nonce account",
                 "parameters": [
@@ -2434,7 +2434,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-nonce"
                 ],
                 "summary": "Build a full withdrawal that closes a durable nonce account",
                 "parameters": [
@@ -2491,7 +2491,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-seed"
                 ],
                 "summary": "Build an allocation on a seed-derived address",
                 "parameters": [
@@ -2548,7 +2548,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-seed"
                 ],
                 "summary": "Build an ownership assignment on a seed-derived address",
                 "parameters": [
@@ -2605,7 +2605,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-seed"
                 ],
                 "summary": "Build an account creation at a seed-derived address",
                 "parameters": [
@@ -2662,7 +2662,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-seed"
                 ],
                 "summary": "Build a transfer out of a seed-derived address",
                 "parameters": [
@@ -2719,7 +2719,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-seed"
                 ],
                 "summary": "Build a transfer of a seed-derived address's entire balance",
                 "parameters": [
@@ -2768,7 +2768,7 @@
         },
         "/svm/v2/transaction/system/transfer": {
             "post": {
-                "description": "Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. The recent blockhash is always fetched, and the recipient is not required to exist yet. To send the sender's entire balance, use transfer/max instead. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
+                "description": "Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. The recipient is not required to exist yet, but if it does not, lamports must be at least the rent-exemption minimum, since the runtime will not create an account below it. To send the sender's entire balance, use transfer/max instead.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2776,12 +2776,12 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-transfer"
                 ],
                 "summary": "Build a native SOL transfer",
                 "parameters": [
                     {
-                        "description": "Sender, recipient, and amount",
+                        "description": "Sender, recipient, and lamports",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2833,7 +2833,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-transfer"
                 ],
                 "summary": "Build one transaction paying from several accounts",
                 "parameters": [
@@ -2890,7 +2890,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-transfer"
                 ],
                 "summary": "Build one transaction paying several recipients",
                 "parameters": [
@@ -2947,7 +2947,7 @@
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-system-transfer"
                 ],
                 "summary": "Build a native SOL transfer of the sender's entire balance",
                 "parameters": [
@@ -3379,6 +3379,63 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.CreateMintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/freeze-account": {
+            "post": {
+                "description": "Freezes a token account, so it rejects transfer, burn, and approve until thawed. The authority is the mint's freeze authority, not the account's owner or any delegate: freezing is a mint-level power to suspend any account holding it, on a different axis from who may spend a balance. Only works on a mint that was initialized with a freeze authority.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Suspend a token account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Freeze parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.FreezeAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.FreezeAccountResponse"
                         }
                     },
                     "400": {
@@ -3892,6 +3949,63 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.SetAccountOwnerReplaceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/thaw-account": {
+            "post": {
+                "description": "Reverses FreezeAccount, letting transfer, burn, and approve resume against the account. The authority is the mint's freeze authority, the same rule FreezeAccount applies.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "transaction"
+                ],
+                "summary": "Resume a suspended token account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Thaw parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ThawAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ThawAccountResponse"
                         }
                     },
                     "400": {
@@ -5556,6 +5670,86 @@
                     "type": "string"
                 },
                 "rent_exempt": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.FreezeAccountRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.FreezeAccountResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
                     "type": "string"
                 },
                 "signers": {
@@ -7625,24 +7819,33 @@
         "v2.SystemTransferRequest": {
             "type": "object",
             "properties": {
-                "amount": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
-                    "example": "1000000"
+                    "example": ""
                 },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as From.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "from": {
+                    "description": "From is the account debited. It signs the transaction as the transfer\nauthority, whether or not it also pays the fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "nonce_account": {
-                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires,\nand prepends the advance that consumes it. The authority is not a field:\nit is read from the account, since it is a fact about it rather than a\nchoice.",
+                "lamports": {
+                    "description": "Lamports is the raw amount moved from From to To.",
+                    "type": "string",
+                    "example": "1000000"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
                     "example": ""
                 },
                 "to": {
+                    "description": "To is the account credited. It is not required to exist yet.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
@@ -7657,11 +7860,86 @@
                         "type": "string"
                     }
                 },
-                "amount": {
-                    "description": "Amount and Fee are strings for the same reason the request's amount is:\na JSON number is a float, so a lamport count past 2^53 would reach a\nJavaScript client already rounded.",
+                "fee": {
                     "type": "string"
                 },
-                "amount_sol": {
+                "lamports": {
+                    "description": "Lamports and Fee are strings for the same reason the request's lamports\nis: a JSON number is a float, so a lamport count past 2^53 would reach a\nJavaScript client already rounded.",
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries\na stored value rather than a fetched blockhash and the transaction does\nnot expire. It is reported because the request never named it: advancing\nthe nonce is the first instruction and that key has to sign, and the\nserver read it off the account.",
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sol": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ThawAccountRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "authority": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "v2.ThawAccountResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
                     "type": "string"
                 },
                 "fee": {
@@ -7670,8 +7948,13 @@
                 "message": {
                     "type": "string"
                 },
+                "mint": {
+                    "type": "string"
+                },
                 "nonce_authority": {
-                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries\na stored value rather than a fetched blockhash and the transaction does\nnot expire. It is reported because the request never named it: advancing\nthe nonce is the first instruction and that key has to sign, and the\nserver read it off the account.",
+                    "type": "string"
+                },
+                "program": {
                     "type": "string"
                 },
                 "recent_blockhash": {

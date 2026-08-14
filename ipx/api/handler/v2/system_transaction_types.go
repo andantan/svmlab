@@ -121,60 +121,95 @@ func (r *SystemTransferRequest) ToLamports() uint64 {
 }
 
 type SystemTransferMaxRequest struct {
-	From     string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	To       string `json:"to"   example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	// From is the account drained. It signs the transaction as the transfer
+	// authority, whether or not it also pays the fee.
+	From string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// To is the account credited. It is not required to exist yet, but if it
+	// does not, the drained amount must be at least the rent-exemption
+	// minimum, since the runtime will not create an account below it.
+	To string `json:"to"   example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+
+	// FeePayer signs and pays the transaction fee. It may be the same
+	// account as From, in which case the fee is deducted from what is sent.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	from         *types.PublicKey
-	to           *types.PublicKey
-	feePayer     *types.PublicKey
-	nonceAccount *types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	f   *types.PublicKey
+	t   *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
 }
 
 func (r *SystemTransferMaxRequest) ValidateRequest() error {
 	var err error
-	if r.from, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
+	if r.f, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
 		return errors.New("from: " + err.Error())
 	}
-	if r.to, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.To)); err != nil {
+	if r.t, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.To)); err != nil {
 		return errors.New("to: " + err.Error())
 	}
-	if r.from.Equal(r.to) {
+	if r.f.Equal(r.t) {
 		return errors.New("from and to are the same account")
 	}
 
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
 	return nil
 }
 
-func (r *SystemTransferMaxRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+func (r *SystemTransferMaxRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemTransferMaxRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemTransferMaxRequest) FromKey() *types.PublicKey {
-	return r.from
+	return r.f
 }
 
 func (r *SystemTransferMaxRequest) ToKey() *types.PublicKey {
-	return r.to
+	return r.t
 }
 
 func (r *SystemTransferMaxRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 // SystemTransferManyTarget is one recipient and what they receive.
@@ -184,19 +219,24 @@ func (r *SystemTransferMaxRequest) FeePayerKey() *types.PublicKey {
 // limit. There is no per-entry sender: every transfer here leaves the same
 // account, which is what keeps the signer count at one or two.
 type SystemTransferManyTarget struct {
-	To     string `json:"to" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
-	Amount string `json:"amount" example:"100000000"`
+	// To is the account credited. It is not required to exist yet, but if it
+	// does not, Lamports must be at least the rent-exemption minimum, since
+	// the runtime will not create an account below it.
+	To string `json:"to" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
-	to     *types.PublicKey
-	amount uint64
+	// Lamports is the raw amount moved from the request's From to To.
+	Lamports string `json:"lamports" example:"100000000"`
+
+	t *types.PublicKey
+	l uint64
 }
 
 func (t *SystemTransferManyTarget) ToKey() *types.PublicKey {
-	return t.to
+	return t.t
 }
 
-func (t *SystemTransferManyTarget) Lamports() uint64 {
-	return t.amount
+func (t *SystemTransferManyTarget) ToLamports() uint64 {
+	return t.l
 }
 
 // SystemTransferManyRequest moves lamports from one account to several in a
@@ -206,33 +246,66 @@ func (t *SystemTransferManyTarget) Lamports() uint64 {
 // amount, and there is no reading of how it should be divided among several
 // recipients.
 type SystemTransferManyRequest struct {
-	From      string                     `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	// From is the account debited for every transfer. It signs the
+	// transaction as the transfer authority, whether or not it also pays the
+	// fee.
+	From string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Transfers lists the recipients and their amounts, in the order the
+	// instructions are executed and the response echoes them back. There is
+	// no upper bound here beyond what fits in one transaction.
 	Transfers []SystemTransferManyTarget `json:"transfers"`
-	FeePayer  string                     `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	NonceAccount string `json:"nonce_account" example:""`
+	// FeePayer signs and pays the transaction fee. It may be the same
+	// account as From, in which case the fee is deducted from its balance
+	// alongside every transfer.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	from         *types.PublicKey
-	feePayer     *types.PublicKey
-	nonceAccount *types.PublicKey
-	total        uint64
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	f   *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
+	tot uint64
 }
 
 func (r *SystemTransferManyRequest) ValidateRequest() error {
 	var err error
-	if r.from, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
+	if r.f, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
 		return errors.New("from: " + err.Error())
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -252,51 +325,55 @@ func (r *SystemTransferManyRequest) ValidateRequest() error {
 	for i := range r.Transfers {
 		t := &r.Transfers[i]
 
-		if t.to, err = types.NewPublicKeyFromBase58(strings.TrimSpace(t.To)); err != nil {
+		if t.t, err = types.NewPublicKeyFromBase58(strings.TrimSpace(t.To)); err != nil {
 			return fmt.Errorf("transfers[%d].to: %s", i, err)
 		}
-		if r.from.Equal(t.to) {
+		if r.f.Equal(t.t) {
 			return fmt.Errorf("transfers[%d].to: is the sender", i)
 		}
-		if first, ok := seen[t.to.Base58()]; ok {
+		if first, ok := seen[t.t.Base58()]; ok {
 			return fmt.Errorf("transfers[%d].to: already named by transfers[%d]", i, first)
 		}
-		seen[t.to.Base58()] = i
+		seen[t.t.Base58()] = i
 
-		amount := strings.TrimSpace(t.Amount)
-		if amount == "" {
-			return fmt.Errorf("transfers[%d].amount is required", i)
+		lamports := strings.TrimSpace(t.Lamports)
+		if lamports == "" {
+			return fmt.Errorf("transfers[%d].lamports is required", i)
 		}
-		if t.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
-			return fmt.Errorf("transfers[%d].amount: must be a decimal lamport count", i)
+		if t.l, err = strconv.ParseUint(lamports, 10, 64); err != nil {
+			return fmt.Errorf("transfers[%d].lamports: must be a decimal lamport count", i)
 		}
-		if t.amount == 0 {
-			return fmt.Errorf("transfers[%d].amount: must be greater than zero", i)
+		if t.l == 0 {
+			return fmt.Errorf("transfers[%d].lamports: must be greater than zero", i)
 		}
 
 		// The total is what the balance is checked against, so it has to be a
 		// real sum. Every other endpoint moves one amount and cannot overflow;
 		// this one adds up to sixty-four and would wrap into a total small
 		// enough to pass, leaving the runtime to fail what looked fundable.
-		if r.total+t.amount < r.total {
-			return fmt.Errorf("transfers[%d].amount: the total exceeds what a u64 can hold", i)
+		if r.tot+t.l < r.tot {
+			return fmt.Errorf("transfers[%d].lamports: the total exceeds what a u64 can hold", i)
 		}
-		r.total += t.amount
+		r.tot += t.l
 	}
 
 	return nil
 }
 
-func (r *SystemTransferManyRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+func (r *SystemTransferManyRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemTransferManyRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemTransferManyRequest) FromKey() *types.PublicKey {
-	return r.from
+	return r.f
 }
 
 func (r *SystemTransferManyRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 func (r *SystemTransferManyRequest) Targets() []SystemTransferManyTarget {
@@ -306,219 +383,15 @@ func (r *SystemTransferManyRequest) Targets() []SystemTransferManyTarget {
 // Total is the sum of every amount, resolved during validation because that is
 // where the overflow it could hide was ruled out.
 func (r *SystemTransferManyRequest) Total() uint64 {
-	return r.total
-}
-
-// SystemTransferBatchTransfer is one transfer with its own sender.
-//
-// Exactly one of Amount and Max is given. Max means this transfer carries
-// whatever the sender still holds once its other transfers and, if it is also
-// the fee payer, the fee are taken out. That figure cannot be stated in the
-// request because the fee is not known until the transaction is priced, which
-// is why it is a flag rather than a number.
-type SystemTransferBatchTransfer struct {
-	From   string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	To     string `json:"to" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
-	Amount string `json:"amount" example:"100000000"`
-	Max    bool   `json:"max"`
-
-	from   *types.PublicKey
-	to     *types.PublicKey
-	amount uint64
-}
-
-func (t *SystemTransferBatchTransfer) FromKey() *types.PublicKey {
-	return t.from
-}
-
-func (t *SystemTransferBatchTransfer) ToKey() *types.PublicKey {
-	return t.to
-}
-
-// Lamports is zero on a max transfer until the handler resolves it, since
-// nothing before the fee is known can say what everything amounts to.
-func (t *SystemTransferBatchTransfer) Lamports() uint64 {
-	return t.amount
-}
-
-func (t *SystemTransferBatchTransfer) SetLamports(amount uint64) {
-	t.amount = amount
-}
-
-func (t *SystemTransferBatchTransfer) IsMax() bool {
-	return t.Max
-}
-
-// SystemTransferBatchSender is what one account spends across the batch.
-//
-// The same key may appear in several transfers, and what it can afford is a
-// question about the account rather than about any one of them, so the entries
-// are grouped here while the request is validated. Fixed is what its stated
-// amounts come to; MaxIndex points at its one max transfer, or is negative
-// when it has none.
-type SystemTransferBatchSender struct {
-	key      *types.PublicKey
-	fixed    uint64
-	maxIndex int
-}
-
-func (s *SystemTransferBatchSender) Key() *types.PublicKey {
-	return s.key
-}
-
-func (s *SystemTransferBatchSender) Fixed() uint64 {
-	return s.fixed
-}
-
-func (s *SystemTransferBatchSender) MaxIndex() int {
-	return s.maxIndex
-}
-
-func (s *SystemTransferBatchSender) HasMax() bool {
-	return s.maxIndex >= 0
-}
-
-// SystemTransferBatchRequest moves lamports from several accounts to several
-// others in a single transaction.
-//
-// Every distinct sender signs, and a signature costs 64 bytes beside its 32
-// byte account key, so senders are three times as expensive as recipients and
-// this fits far fewer transfers than transfer/many does.
-type SystemTransferBatchRequest struct {
-	Transfers []SystemTransferBatchTransfer `json:"transfers"`
-	FeePayer  string                        `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	// Collecting a signature from every sender takes longer than a blockhash
-	// lasts, so this is the endpoint a durable nonce exists for.
-	NonceAccount string `json:"nonce_account" example:""`
-
-	feePayer     *types.PublicKey
-	nonceAccount *types.PublicKey
-	senders      []*SystemTransferBatchSender
-}
-
-func (r *SystemTransferBatchRequest) ValidateRequest() error {
-	var err error
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
-		return errors.New("fee_payer: " + err.Error())
-	}
-
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
-		}
-	}
-
-	// There is no upper bound here. How many transfers fit is a question of
-	// bytes rather than of count, and serialization answers it exactly against
-	// types.MaxTransactionSize once the transaction is assembled.
-	if len(r.Transfers) == 0 {
-		return errors.New("transfers is required")
-	}
-
-	// A pair rather than a recipient, unlike transfer/many, since two senders
-	// paying the same address is the ordinary way to pool funds and only the
-	// same sender paying the same address twice reads as a mistake.
-	pairs := make(map[string]int, len(r.Transfers))
-	senders := make(map[string]int, len(r.Transfers))
-
-	for i := range r.Transfers {
-		t := &r.Transfers[i]
-
-		if t.from, err = types.NewPublicKeyFromBase58(strings.TrimSpace(t.From)); err != nil {
-			return fmt.Errorf("transfers[%d].from: %s", i, err)
-		}
-		if t.to, err = types.NewPublicKeyFromBase58(strings.TrimSpace(t.To)); err != nil {
-			return fmt.Errorf("transfers[%d].to: %s", i, err)
-		}
-		if t.from.Equal(t.to) {
-			return fmt.Errorf("transfers[%d]: from and to are the same account", i)
-		}
-
-		pair := t.from.Base58() + ":" + t.to.Base58()
-		if first, ok := pairs[pair]; ok {
-			return fmt.Errorf("transfers[%d]: transfers[%d] already sends from %s to %s", i, first, t.from, t.to)
-		}
-		pairs[pair] = i
-
-		amount := strings.TrimSpace(t.Amount)
-		if t.Max && amount != "" {
-			return fmt.Errorf("transfers[%d]: names both amount and max", i)
-		}
-		if !t.Max {
-			if amount == "" {
-				return fmt.Errorf("transfers[%d]: names neither amount nor max", i)
-			}
-			if t.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
-				return fmt.Errorf("transfers[%d].amount: must be a decimal lamport count", i)
-			}
-			if t.amount == 0 {
-				return fmt.Errorf("transfers[%d].amount: must be greater than zero", i)
-			}
-		}
-
-		pos, ok := senders[t.from.Base58()]
-		if !ok {
-			pos = len(r.senders)
-			r.senders = append(r.senders, &SystemTransferBatchSender{key: t.from, maxIndex: -1})
-			senders[t.from.Base58()] = pos
-		}
-		s := r.senders[pos]
-
-		if t.Max {
-			// Two max transfers from one account have no answer: everything it
-			// holds cannot go to two places.
-			if s.HasMax() {
-				return fmt.Errorf("transfers[%d]: transfers[%d] already sends everything %s holds", i, s.maxIndex, t.from)
-			}
-			s.maxIndex = i
-
-			continue
-		}
-
-		// What a sender spends is checked against its balance, so it has to be
-		// a real sum. Adding several amounts could wrap into a figure small
-		// enough to look affordable.
-		if s.fixed+t.amount < s.fixed {
-			return fmt.Errorf("transfers[%d].amount: what %s sends exceeds what a u64 can hold", i, t.from)
-		}
-		s.fixed += t.amount
-	}
-
-	return nil
-}
-
-func (r *SystemTransferBatchRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
-}
-
-func (r *SystemTransferBatchRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
-}
-
-func (r *SystemTransferBatchRequest) Targets() []SystemTransferBatchTransfer {
-	return r.Transfers
-}
-
-// Senders lists each distinct sender once, in the order it first appears, so
-// that what a balance check reports does not depend on map iteration.
-func (r *SystemTransferBatchRequest) Senders() []*SystemTransferBatchSender {
-	return r.senders
+	return r.tot
 }
 
 // SystemTransferManyTargetResponse echoes one recipient with its amount in SOL
 // beside the lamport count.
-//
-// Nothing here was worked out by the server, unlike the batch equivalent where
-// a max amount is. It is reported so that the two endpoints answer in the same
-// shape, which matters more than the redundancy costs.
 type SystemTransferManyTargetResponse struct {
-	To        string `json:"to"`
-	Amount    string `json:"amount"`
-	AmountSOL string `json:"amount_sol"`
+	To       string `json:"to"`
+	Lamports string `json:"lamports"`
+	SOL      string `json:"sol"`
 }
 
 type SystemTransferManyResponse struct {
@@ -540,10 +413,10 @@ type SystemTransferManyResponse struct {
 	// stored value rather than a fetched blockhash.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Transfers []SystemTransferManyTargetResponse `json:"transfers"`
-	Total     string                             `json:"total"`
-	TotalSOL  string                             `json:"total_sol"`
-	Fee       string                             `json:"fee"`
+	Transfers     []SystemTransferManyTargetResponse `json:"transfers"`
+	TotalLamports string                             `json:"total_lamports"`
+	TotalSOL      string                             `json:"total_sol"`
+	Fee           string                             `json:"fee"`
 
 	// Size and SizeLimit are what bounds this endpoint. A transaction travels
 	// in one packet and cannot be split, so the recipient count is really a
@@ -572,9 +445,9 @@ func NewSystemTransferManyResponse(tx *types.Transaction, raw, message []byte, n
 	transfers := make([]SystemTransferManyTargetResponse, len(targets))
 	for i := range targets {
 		transfers[i] = SystemTransferManyTargetResponse{
-			To:        targets[i].ToKey().Base58(),
-			Amount:    strconv.FormatUint(targets[i].Lamports(), 10),
-			AmountSOL: types.LamportsToSol(targets[i].Lamports()),
+			To:       targets[i].ToKey().Base58(),
+			Lamports: strconv.FormatUint(targets[i].ToLamports(), 10),
+			SOL:      types.LamportsToSol(targets[i].ToLamports()),
 		}
 	}
 
@@ -586,96 +459,7 @@ func NewSystemTransferManyResponse(tx *types.Transaction, raw, message []byte, n
 		Signers:         signers,
 		NonceAuthority:  authority,
 		Transfers:       transfers,
-		Total:           strconv.FormatUint(total, 10),
-		TotalSOL:        types.LamportsToSol(total),
-		Fee:             strconv.FormatUint(fee, 10),
-		Size:            len(raw),
-		SizeLimit:       types.MaxTransactionSize,
-	}
-}
-
-// SystemTransferBatchTransferResponse echoes one transfer with its amount
-// settled.
-//
-// transfer/many drops its recipients from the response because they arrived
-// with the request. These are reported for the opposite reason: a max transfer
-// was worked out here from the sender's balance and the fee, so the request
-// has no way to know what it turned out to be. Max is kept alongside so that
-// which amounts were stated and which were derived stays visible.
-type SystemTransferBatchTransferResponse struct {
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Amount    string `json:"amount"`
-	AmountSOL string `json:"amount_sol"`
-	Max       bool   `json:"max"`
-}
-
-type SystemTransferBatchResponse struct {
-	Transaction     string `json:"transaction"`
-	Message         string `json:"message"`
-	RecentBlockhash string `json:"recent_blockhash"`
-
-	// AccountKeys is shorter than the transfers imply, since a sender paying
-	// two addresses and the System Program in every instruction are each one
-	// key here. Signers holds every distinct sender, and the fee payer beside
-	// them when it is not one of them.
-	AccountKeys []string `json:"account_keys"`
-
-	Signers []string `json:"signers"`
-
-	// NonceAuthority is present only when the transaction was built against a
-	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
-	// stored value rather than a fetched blockhash.
-	NonceAuthority string `json:"nonce_authority,omitempty"`
-
-	Transfers []SystemTransferBatchTransferResponse `json:"transfers"`
-	Total     string                                `json:"total"`
-	TotalSOL  string                                `json:"total_sol"`
-	Fee       string                                `json:"fee"`
-
-	// Size and SizeLimit bind harder here than anywhere else. Each sender
-	// costs a 64 byte signature beside its 32 byte account key, so a batch
-	// runs out of room after far fewer transfers than transfer/many does.
-	Size      int `json:"size"`
-	SizeLimit int `json:"size_limit"`
-}
-
-func NewSystemTransferBatchResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, targets []SystemTransferBatchTransfer, total, fee uint64) *SystemTransferBatchResponse {
-	authority := ""
-	if !nonceAuthority.IsNil() {
-		authority = nonceAuthority.Base58()
-	}
-
-	keys := make([]string, len(tx.Message.AccountKeys))
-	for i, k := range tx.Message.AccountKeys {
-		keys[i] = k.Base58()
-	}
-
-	signers := make([]string, tx.Message.NumSigners())
-	for i, k := range tx.Message.Signers() {
-		signers[i] = k.Base58()
-	}
-
-	transfers := make([]SystemTransferBatchTransferResponse, len(targets))
-	for i := range targets {
-		transfers[i] = SystemTransferBatchTransferResponse{
-			From:      targets[i].FromKey().Base58(),
-			To:        targets[i].ToKey().Base58(),
-			Amount:    strconv.FormatUint(targets[i].Lamports(), 10),
-			AmountSOL: types.LamportsToSol(targets[i].Lamports()),
-			Max:       targets[i].IsMax(),
-		}
-	}
-
-	return &SystemTransferBatchResponse{
-		Transaction:     codec.Base64.Encode(raw),
-		Message:         codec.Base64.Encode(message),
-		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:     keys,
-		Signers:         signers,
-		NonceAuthority:  authority,
-		Transfers:       transfers,
-		Total:           strconv.FormatUint(total, 10),
+		TotalLamports:   strconv.FormatUint(total, 10),
 		TotalSOL:        types.LamportsToSol(total),
 		Fee:             strconv.FormatUint(fee, 10),
 		Size:            len(raw),
@@ -751,12 +535,12 @@ type SystemTransferMaxResponse struct {
 	// stored value rather than a fetched blockhash.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Amount    string `json:"amount"`
-	AmountSOL string `json:"amount_sol"`
-	Fee       string `json:"fee"`
+	Lamports string `json:"lamports"`
+	SOL      string `json:"sol"`
+	Fee      string `json:"fee"`
 }
 
-func NewSystemTransferMaxResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, amount, fee uint64) *SystemTransferMaxResponse {
+func NewSystemTransferMaxResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, lamports, fee uint64) *SystemTransferMaxResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
@@ -779,8 +563,8 @@ func NewSystemTransferMaxResponse(tx *types.Transaction, raw, message []byte, no
 		AccountKeys:     keys,
 		Signers:         signers,
 		NonceAuthority:  authority,
-		Amount:          strconv.FormatUint(amount, 10),
-		AmountSOL:       types.LamportsToSol(amount),
+		Lamports:        strconv.FormatUint(lamports, 10),
+		SOL:             types.LamportsToSol(lamports),
 		Fee:             strconv.FormatUint(fee, 10),
 	}
 }

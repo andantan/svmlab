@@ -76,6 +76,32 @@ func (a *AccountInfo) IsNonceAccount() bool {
 	return a.Owner == core.System.ID().Base58() && a.Space == core.NonceAccountSpace
 }
 
+// NonceAccount decodes this account as a durable nonce account, returning a
+// descriptive error if it does not exist, is not shaped like one, or exists
+// but has not been initialized.
+func (a *AccountInfo) NonceAccount() (*core.NonceAccount, error) {
+	if !a.Exists() {
+		return nil, fmt.Errorf("is not found")
+	}
+	if !a.IsNonceAccount() {
+		return nil, fmt.Errorf("is not a nonce account")
+	}
+
+	data, err := a.Bytes()
+	if err != nil {
+		return nil, err
+	}
+	nonce, err := core.DeserializeNonceAccount(data)
+	if err != nil {
+		return nil, err
+	}
+	if !nonce.Initialized() {
+		return nil, fmt.Errorf("is not initialized")
+	}
+
+	return nonce, nil
+}
+
 // KeyedAccount is an account together with the address it was found at.
 //
 // getAccountInfo takes the address as an argument and so does not repeat it;

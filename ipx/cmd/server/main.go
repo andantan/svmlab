@@ -105,6 +105,7 @@ func run() error {
 		accountHandler := account.NewAccountHandler()
 		r.Post("/state", accountHandler.State)
 		r.Post("/owner", accountHandler.Owner)
+		r.Post("/authority", accountHandler.Authority)
 		r.Post("/balance", accountHandler.Balance)
 		r.Post("/airdrop", accountHandler.Airdrop)
 		r.Post("/nonce", accountHandler.Nonce)

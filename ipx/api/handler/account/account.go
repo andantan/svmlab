@@ -127,6 +127,49 @@ func (h *AccountHandler) Owner(w http.ResponseWriter, r *http.Request) {
 	handler.WriteOK(w, NewAccountOwnerResponse(req.ToPublicKey(), info))
 }
 
+// Authority godoc
+// @Summary      Read the authority-bearing fields of an account
+// @Description  Reports the authority for whichever kind of account public_key names: a durable nonce account's authority, a mint's mint_authority and freeze_authority, a token account's token_owner, delegate, and close_authority, or a multisig's m, n, and signers. type says which of these applies, and is system_account for a plain account with none of them, or unknown for a program-owned account this endpoint has no parser for.
+// @Tags         account
+// @Accept       json
+// @Produce      json
+// @Param        body  body      AccountAuthorityRequest  true  "Account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  AccountAuthorityResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/account/authority [post]
+func (h *AccountHandler) Authority(w http.ResponseWriter, r *http.Request) {
+	req := new(AccountAuthorityRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	info, err := chain.Cli.AccountInfo(r.Context(), req.ToPublicKey(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+
+	resp, err := NewAccountAuthorityResponse(req.ToPublicKey(), info)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, resp)
+}
+
 // Tokens godoc
 // @Summary      List the token accounts a wallet owns
 // @Description  Lists token accounts owned by a wallet under both the classic Token Program and Token-2022. The response keeps the program on each account because the two programs own separate accounts and no single token instruction can touch both at once.

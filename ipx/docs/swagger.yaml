@@ -1,12 +1,62 @@
 basePath: /
 definitions:
-  api_handler_account.AccountOwnerRequest:
+  account.AccountAuthorityRequest:
     properties:
       public_key:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_account.AccountOwnerResponse:
+  account.AccountAuthorityResponse:
+    properties:
+      close_authority:
+        type: string
+      delegate:
+        type: string
+      exists:
+        type: boolean
+      freeze_authority:
+        type: string
+      m:
+        description: M, N, and Signers are set only when Type is multisig.
+        type: integer
+      mint_authority:
+        description: |-
+          MintAuthority and FreezeAuthority are set only when Type is mint.
+          Either may still be empty: both are optional on a mint, and removing
+          one is one-way.
+        type: string
+      "n":
+        type: integer
+      nonce_authority:
+        description: |-
+          NonceAuthority is set only when Type is nonce_account and it is
+          initialized; an account sized for a nonce but never initialized reports
+          the type with this left empty.
+        type: string
+      owner:
+        type: string
+      public_key:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_owner:
+        description: |-
+          TokenOwner, Delegate, and CloseAuthority are set only when Type is
+          token_account. Delegate and CloseAuthority are both optional; close
+          authority only exists at all under Token-2022.
+        type: string
+      type:
+        type: string
+    type: object
+  account.AccountOwnerRequest:
+    properties:
+      public_key:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  account.AccountOwnerResponse:
     properties:
       exists:
         type: boolean
@@ -17,13 +67,13 @@ definitions:
       system_owned:
         type: boolean
     type: object
-  api_handler_account.AccountRequest:
+  account.AccountRequest:
     properties:
       public_key:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_account.AccountResponse:
+  account.AccountResponse:
     properties:
       data:
         type: string
@@ -42,12 +92,12 @@ definitions:
       space:
         type: integer
     type: object
-  api_handler_account.AirdropRequest:
+  account.AirdropRequest:
     properties:
       public_key:
         type: string
     type: object
-  api_handler_account.AirdropResponse:
+  account.AirdropResponse:
     properties:
       lamports:
         type: string
@@ -56,7 +106,7 @@ definitions:
       sol:
         type: string
     type: object
-  api_handler_account.BalanceResponse:
+  account.BalanceResponse:
     properties:
       lamports:
         type: string
@@ -65,13 +115,13 @@ definitions:
       sol:
         type: string
     type: object
-  api_handler_account.NonceRequest:
+  account.NonceRequest:
     properties:
       public_key:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_account.NonceResponse:
+  account.NonceResponse:
     properties:
       authority:
         type: string
@@ -90,7 +140,7 @@ definitions:
       version:
         type: integer
     type: object
-  api_handler_account.TokenAccountResponse:
+  account.TokenAccountResponse:
     properties:
       amount:
         type: string
@@ -119,69 +169,69 @@ definitions:
       state:
         type: string
     type: object
-  api_handler_account.TokensRequest:
+  account.TokensRequest:
     properties:
       public_key:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_account.TokensResponse:
+  account.TokensResponse:
     properties:
       accounts:
         items:
-          $ref: '#/definitions/api_handler_account.TokenAccountResponse'
+          $ref: '#/definitions/account.TokenAccountResponse'
         type: array
       count:
         type: integer
       public_key:
         type: string
     type: object
-  api_handler_misc.BatchCall:
+  misc.BatchCall:
     properties:
       method:
         type: string
       params: {}
     type: object
-  api_handler_misc.BatchRequest:
+  misc.BatchRequest:
     properties:
       calls:
         items:
-          $ref: '#/definitions/api_handler_misc.BatchCall'
+          $ref: '#/definitions/misc.BatchCall'
         type: array
     type: object
-  api_handler_misc.BlockhashResponse:
+  misc.BlockhashResponse:
     properties:
       blockhash:
         type: string
       last_valid_block_height:
         type: integer
     type: object
-  api_handler_misc.ConvertBase58To64Request:
+  misc.ConvertBase58To64Request:
     properties:
       value:
         type: string
     type: object
-  api_handler_misc.ConvertBase58To64Response:
+  misc.ConvertBase58To64Response:
     properties:
       base64:
         type: string
     type: object
-  api_handler_misc.ConvertBase64To58Request:
+  misc.ConvertBase64To58Request:
     properties:
       value:
         type: string
     type: object
-  api_handler_misc.ConvertBase64To58Response:
+  misc.ConvertBase64To58Response:
     properties:
       base58:
         type: string
     type: object
-  api_handler_misc.FeeRequest:
+  misc.FeeRequest:
     properties:
       message:
         type: string
     type: object
-  api_handler_misc.FeeResponse:
+  misc.FeeResponse:
     properties:
       lamports:
         type: string
@@ -190,14 +240,14 @@ definitions:
       valid:
         type: boolean
     type: object
-  api_handler_misc.GenerateKeypairResponse:
+  misc.GenerateKeypairResponse:
     properties:
       private_key:
         type: string
       public_key:
         type: string
     type: object
-  api_handler_misc.GenesisHashResponse:
+  misc.GenesisHashResponse:
     properties:
       configured:
         type: string
@@ -206,24 +256,24 @@ definitions:
       matches:
         type: boolean
     type: object
-  api_handler_misc.HealthResponse:
+  misc.HealthResponse:
     properties:
       health:
         type: string
     type: object
-  api_handler_misc.RawRequest:
+  misc.RawRequest:
     properties:
       method:
         example: getEpochInfo
         type: string
       params: {}
     type: object
-  api_handler_misc.RefreshBlockhashRequest:
+  misc.RefreshBlockhashRequest:
     properties:
       transaction:
         type: string
     type: object
-  api_handler_misc.RefreshBlockhashResponse:
+  misc.RefreshBlockhashResponse:
     properties:
       blockhash:
         type: string
@@ -232,7 +282,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_misc.RentExemptionMintResponse:
+  misc.RentExemptionMintResponse:
     properties:
       lamports:
         type: string
@@ -241,7 +291,7 @@ definitions:
       space:
         type: integer
     type: object
-  api_handler_misc.RentExemptionNonceResponse:
+  misc.RentExemptionNonceResponse:
     properties:
       lamports:
         type: string
@@ -250,13 +300,13 @@ definitions:
       space:
         type: integer
     type: object
-  api_handler_misc.RentExemptionPublicKeyRequest:
+  misc.RentExemptionPublicKeyRequest:
     properties:
       public_key:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_misc.RentExemptionPublicKeyResponse:
+  misc.RentExemptionPublicKeyResponse:
     properties:
       lamports:
         type: string
@@ -267,13 +317,13 @@ definitions:
       space:
         type: integer
     type: object
-  api_handler_misc.RentExemptionSpaceRequest:
+  misc.RentExemptionSpaceRequest:
     properties:
       space:
         example: "165"
         type: string
     type: object
-  api_handler_misc.RentExemptionSpaceResponse:
+  misc.RentExemptionSpaceResponse:
     properties:
       lamports:
         type: string
@@ -282,7 +332,7 @@ definitions:
       space:
         type: integer
     type: object
-  api_handler_misc.RentExemptionStakeResponse:
+  misc.RentExemptionStakeResponse:
     properties:
       lamports:
         type: string
@@ -291,7 +341,7 @@ definitions:
       space:
         type: integer
     type: object
-  api_handler_misc.RentExemptionSystemResponse:
+  misc.RentExemptionSystemResponse:
     properties:
       lamports:
         type: string
@@ -300,7 +350,7 @@ definitions:
       space:
         type: integer
     type: object
-  api_handler_misc.RentExemptionTokenResponse:
+  misc.RentExemptionTokenResponse:
     properties:
       lamports:
         type: string
@@ -309,7 +359,7 @@ definitions:
       space:
         type: integer
     type: object
-  api_handler_misc.RentExemptionVoteResponse:
+  misc.RentExemptionVoteResponse:
     properties:
       lamports:
         type: string
@@ -318,14 +368,14 @@ definitions:
       space:
         type: integer
     type: object
-  api_handler_misc.ReplaceBlockhashWithNonceRequest:
+  misc.ReplaceBlockhashWithNonceRequest:
     properties:
       nonce_account:
         type: string
       transaction:
         type: string
     type: object
-  api_handler_misc.ReplaceBlockhashWithNonceResponse:
+  misc.ReplaceBlockhashWithNonceResponse:
     properties:
       account_keys:
         items:
@@ -356,17 +406,17 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_misc.SendTransactionRequest:
+  misc.SendTransactionRequest:
     properties:
       transaction:
         type: string
     type: object
-  api_handler_misc.SendTransactionResponse:
+  misc.SendTransactionResponse:
     properties:
       signature:
         type: string
     type: object
-  api_handler_misc.SignRequest:
+  misc.SignRequest:
     properties:
       message:
         type: string
@@ -374,14 +424,14 @@ definitions:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_misc.SignResponse:
+  misc.SignResponse:
     properties:
       public_key:
         type: string
       signature:
         type: string
     type: object
-  api_handler_misc.SignTransactionRequest:
+  misc.SignTransactionRequest:
     properties:
       private_keys:
         items:
@@ -396,7 +446,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_misc.SignTransactionResponse:
+  misc.SignTransactionResponse:
     properties:
       fully_signed:
         type: boolean
@@ -409,12 +459,12 @@ definitions:
       transaction_id:
         type: string
     type: object
-  api_handler_misc.SignatureStatusRequest:
+  misc.SignatureStatusRequest:
     properties:
       signature:
         type: string
     type: object
-  api_handler_misc.SignatureStatusResponse:
+  misc.SignatureStatusResponse:
     properties:
       confirmation_status:
         type: string
@@ -431,12 +481,12 @@ definitions:
       slot:
         type: integer
     type: object
-  api_handler_misc.SimulateTransactionRequest:
+  misc.SimulateTransactionRequest:
     properties:
       transaction:
         type: string
     type: object
-  api_handler_misc.SimulateTransactionResponse:
+  misc.SimulateTransactionResponse:
     properties:
       err:
         type: string
@@ -449,12 +499,12 @@ definitions:
       units_consumed:
         type: integer
     type: object
-  api_handler_misc.SlotResponse:
+  misc.SlotResponse:
     properties:
       slot:
         type: integer
     type: object
-  api_handler_misc.VerifyRequest:
+  misc.VerifyRequest:
     properties:
       message:
         type: string
@@ -464,24 +514,24 @@ definitions:
       signature:
         type: string
     type: object
-  api_handler_misc.VerifyResponse:
+  misc.VerifyResponse:
     properties:
       valid:
         type: boolean
     type: object
-  api_handler_misc.VersionResponse:
+  misc.VersionResponse:
     properties:
       version:
         additionalProperties: {}
         type: object
     type: object
-  api_handler_token.AccountRequest:
+  token.AccountRequest:
     properties:
       token_account:
         example: 4qRgcVrSqs43Jy9n8w7H5EJh8FnRiTFnABjE37Dd3Ae5
         type: string
     type: object
-  api_handler_token.AccountResponse:
+  token.AccountResponse:
     properties:
       amount:
         type: string
@@ -514,13 +564,13 @@ definitions:
       state:
         type: string
     type: object
-  api_handler_token.MintRequest:
+  token.MintRequest:
     properties:
       mint_account:
         example: EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v
         type: string
     type: object
-  api_handler_token.MintResponse:
+  token.MintResponse:
     properties:
       decimals:
         type: integer
@@ -545,7 +595,7 @@ definitions:
       supply_ui:
         type: string
     type: object
-  api_handler_v1.Account:
+  v1.Account:
     properties:
       is_signer:
         example: true
@@ -557,14 +607,14 @@ definitions:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_v1.BuildTransactionRequest:
+  v1.BuildTransactionRequest:
     properties:
       fee_payer:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       instructions:
         items:
-          $ref: '#/definitions/api_handler_v1.Instruction'
+          $ref: '#/definitions/v1.Instruction'
         type: array
       recent_blockhash:
         description: |-
@@ -574,14 +624,14 @@ definitions:
         example: ""
         type: string
     type: object
-  api_handler_v1.BuildTransactionResponse:
+  v1.BuildTransactionResponse:
     properties:
       account_keys:
         items:
           type: string
         type: array
       header:
-        $ref: '#/definitions/api_handler_v1.Header'
+        $ref: '#/definitions/v1.Header'
       message:
         type: string
       recent_blockhash:
@@ -595,7 +645,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v1.Header:
+  v1.Header:
     properties:
       num_readonly_signed_accounts:
         type: integer
@@ -604,11 +654,11 @@ definitions:
       num_required_signatures:
         type: integer
     type: object
-  api_handler_v1.Instruction:
+  v1.Instruction:
     properties:
       accounts:
         items:
-          $ref: '#/definitions/api_handler_v1.Account'
+          $ref: '#/definitions/v1.Account'
         type: array
       data:
         example: AgAAAECcAAAAAAAA
@@ -617,7 +667,7 @@ definitions:
         example: "11111111111111111111111111111111"
         type: string
     type: object
-  api_handler_v2.ApproveCheckedRequest:
+  v2.ApproveCheckedRequest:
     properties:
       account:
         example: ""
@@ -654,7 +704,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.ApproveCheckedResponse:
+  v2.ApproveCheckedResponse:
     properties:
       account:
         type: string
@@ -689,7 +739,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.BurnCheckedRequest:
+  v2.BurnCheckedRequest:
     properties:
       account:
         example: ""
@@ -723,7 +773,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.BurnCheckedResponse:
+  v2.BurnCheckedResponse:
     properties:
       account:
         type: string
@@ -756,7 +806,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.CloseAccountRequest:
+  v2.CloseAccountRequest:
     properties:
       account:
         example: ""
@@ -784,7 +834,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.CloseAccountResponse:
+  v2.CloseAccountResponse:
     properties:
       account:
         type: string
@@ -820,7 +870,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.CreateATAIdempotentRequest:
+  v2.CreateATAIdempotentRequest:
     properties:
       fee_payer:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -841,7 +891,7 @@ definitions:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
-  api_handler_v2.CreateATAIdempotentResponse:
+  v2.CreateATAIdempotentResponse:
     properties:
       account:
         type: string
@@ -874,7 +924,7 @@ definitions:
       wallet:
         type: string
     type: object
-  api_handler_v2.CreateATARequest:
+  v2.CreateATARequest:
     properties:
       fee_payer:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -908,7 +958,7 @@ definitions:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
-  api_handler_v2.CreateATAResponse:
+  v2.CreateATAResponse:
     properties:
       account:
         type: string
@@ -941,7 +991,7 @@ definitions:
       wallet:
         type: string
     type: object
-  api_handler_v2.CreateAccountRequest:
+  v2.CreateAccountRequest:
     properties:
       account:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
@@ -970,7 +1020,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.CreateAccountResponse:
+  v2.CreateAccountResponse:
     properties:
       account:
         type: string
@@ -1001,7 +1051,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.CreateMintRequest:
+  v2.CreateMintRequest:
     properties:
       decimals:
         example: 6
@@ -1041,7 +1091,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.CreateMintResponse:
+  v2.CreateMintResponse:
     properties:
       account_keys:
         items:
@@ -1078,7 +1128,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.FreezeAccountRequest:
+  v2.FreezeAccountRequest:
     properties:
       account:
         example: ""
@@ -1106,7 +1156,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.FreezeAccountResponse:
+  v2.FreezeAccountResponse:
     properties:
       account:
         type: string
@@ -1135,7 +1185,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.MintToCheckedRequest:
+  v2.MintToCheckedRequest:
     properties:
       amount:
         example: "1000000"
@@ -1169,7 +1219,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.MintToCheckedResponse:
+  v2.MintToCheckedResponse:
     properties:
       account_keys:
         items:
@@ -1202,7 +1252,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.RevokeRequest:
+  v2.RevokeRequest:
     properties:
       account:
         example: ""
@@ -1227,7 +1277,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.RevokeResponse:
+  v2.RevokeResponse:
     properties:
       account:
         type: string
@@ -1254,7 +1304,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SetAccountOwnerReplaceRequest:
+  v2.SetAccountOwnerReplaceRequest:
     properties:
       account:
         example: ""
@@ -1282,7 +1332,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.SetAccountOwnerReplaceResponse:
+  v2.SetAccountOwnerReplaceResponse:
     properties:
       account:
         type: string
@@ -1311,7 +1361,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SetCloseAuthorityClearRequest:
+  v2.SetCloseAuthorityClearRequest:
     properties:
       account:
         example: ""
@@ -1336,7 +1386,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.SetCloseAuthorityClearResponse:
+  v2.SetCloseAuthorityClearResponse:
     properties:
       account:
         type: string
@@ -1365,7 +1415,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SetCloseAuthorityReplaceRequest:
+  v2.SetCloseAuthorityReplaceRequest:
     properties:
       account:
         example: ""
@@ -1393,7 +1443,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.SetCloseAuthorityReplaceResponse:
+  v2.SetCloseAuthorityReplaceResponse:
     properties:
       account:
         type: string
@@ -1422,7 +1472,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SetFreezeAuthorityClearRequest:
+  v2.SetFreezeAuthorityClearRequest:
     properties:
       authority:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -1447,7 +1497,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.SetFreezeAuthorityClearResponse:
+  v2.SetFreezeAuthorityClearResponse:
     properties:
       account_keys:
         items:
@@ -1476,7 +1526,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SetFreezeAuthorityReplaceRequest:
+  v2.SetFreezeAuthorityReplaceRequest:
     properties:
       authority:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -1504,7 +1554,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.SetFreezeAuthorityReplaceResponse:
+  v2.SetFreezeAuthorityReplaceResponse:
     properties:
       account_keys:
         items:
@@ -1533,7 +1583,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SetMintAuthorityClearRequest:
+  v2.SetMintAuthorityClearRequest:
     properties:
       authority:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -1558,7 +1608,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.SetMintAuthorityClearResponse:
+  v2.SetMintAuthorityClearResponse:
     properties:
       account_keys:
         items:
@@ -1587,7 +1637,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SetMintAuthorityReplaceRequest:
+  v2.SetMintAuthorityReplaceRequest:
     properties:
       authority:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -1615,7 +1665,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.SetMintAuthorityReplaceResponse:
+  v2.SetMintAuthorityReplaceResponse:
     properties:
       account_keys:
         items:
@@ -1644,7 +1694,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemAllocateRequest:
+  v2.SystemAllocateRequest:
     properties:
       account:
         description: |-
@@ -1696,14 +1746,14 @@ definitions:
         example: "128"
         type: string
     type: object
-  api_handler_v2.SystemAllocateResponse:
+  v2.SystemAllocateResponse:
     properties:
       account_keys:
         items:
           type: string
         type: array
       fee:
-        $ref: '#/definitions/api_handler_v2.SystemPayer'
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       nonce_authority:
@@ -1716,7 +1766,7 @@ definitions:
         type: string
       rent:
         allOf:
-        - $ref: '#/definitions/api_handler_v2.SystemPayer'
+        - $ref: '#/definitions/v2.SystemPayer'
         description: |-
           Rent reports RentPayer and the shortfall it covered. Its lamports are
           zero, and no transfer was actually prepended, when Account's balance
@@ -1730,7 +1780,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemAssignRequest:
+  v2.SystemAssignRequest:
     properties:
       account:
         description: |-
@@ -1773,14 +1823,14 @@ definitions:
         example: ""
         type: string
     type: object
-  api_handler_v2.SystemAssignResponse:
+  v2.SystemAssignResponse:
     properties:
       account_keys:
         items:
           type: string
         type: array
       fee:
-        $ref: '#/definitions/api_handler_v2.SystemPayer'
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       nonce_authority:
@@ -1800,7 +1850,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemCreateAccountRequest:
+  v2.SystemCreateAccountRequest:
     properties:
       durable_nonce_account:
         description: |-
@@ -1848,14 +1898,14 @@ definitions:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_v2.SystemCreateAccountResponse:
+  v2.SystemCreateAccountResponse:
     properties:
       account_keys:
         items:
           type: string
         type: array
       fee:
-        $ref: '#/definitions/api_handler_v2.SystemPayer'
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       nonce_authority:
@@ -1868,7 +1918,7 @@ definitions:
         type: string
       rent:
         allOf:
-        - $ref: '#/definitions/api_handler_v2.SystemPayer'
+        - $ref: '#/definitions/v2.SystemPayer'
         description: |-
           Rent reports what funds CreateAccount itself. Its lamports are always
           exactly the rent-exemption minimum for a zero-byte account, never more
@@ -1880,7 +1930,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemNonceAdvanceRequest:
+  v2.SystemNonceAdvanceRequest:
     properties:
       authority:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -1906,7 +1956,7 @@ definitions:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
-  api_handler_v2.SystemNonceAdvanceResponse:
+  v2.SystemNonceAdvanceResponse:
     properties:
       account_keys:
         items:
@@ -1941,7 +1991,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemNonceAuthorizeRequest:
+  v2.SystemNonceAuthorizeRequest:
     properties:
       authority:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -1970,7 +2020,7 @@ definitions:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
-  api_handler_v2.SystemNonceAuthorizeResponse:
+  v2.SystemNonceAuthorizeResponse:
     properties:
       account_keys:
         items:
@@ -2001,7 +2051,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemNonceCreateRequest:
+  v2.SystemNonceCreateRequest:
     properties:
       authority:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -2029,7 +2079,7 @@ definitions:
         example: ""
         type: string
     type: object
-  api_handler_v2.SystemNonceCreateResponse:
+  v2.SystemNonceCreateResponse:
     properties:
       account_keys:
         items:
@@ -2064,7 +2114,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemNonceInitializeRequest:
+  v2.SystemNonceInitializeRequest:
     properties:
       authority:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -2089,7 +2139,7 @@ definitions:
         example: ""
         type: string
     type: object
-  api_handler_v2.SystemNonceInitializeResponse:
+  v2.SystemNonceInitializeResponse:
     properties:
       account_keys:
         items:
@@ -2118,7 +2168,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemNonceUpgradeRequest:
+  v2.SystemNonceUpgradeRequest:
     properties:
       fee_payer:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -2141,7 +2191,7 @@ definitions:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
-  api_handler_v2.SystemNonceUpgradeResponse:
+  v2.SystemNonceUpgradeResponse:
     properties:
       account_keys:
         items:
@@ -2170,7 +2220,7 @@ definitions:
       version:
         type: integer
     type: object
-  api_handler_v2.SystemNonceWithdrawMaxRequest:
+  v2.SystemNonceWithdrawMaxRequest:
     properties:
       authority:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -2199,7 +2249,7 @@ definitions:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_v2.SystemNonceWithdrawMaxResponse:
+  v2.SystemNonceWithdrawMaxResponse:
     properties:
       account_keys:
         items:
@@ -2232,7 +2282,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemNonceWithdrawRequest:
+  v2.SystemNonceWithdrawRequest:
     properties:
       amount:
         example: "1000000"
@@ -2264,7 +2314,7 @@ definitions:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_v2.SystemNonceWithdrawResponse:
+  v2.SystemNonceWithdrawResponse:
     properties:
       account_keys:
         items:
@@ -2302,7 +2352,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemPayer:
+  v2.SystemPayer:
     properties:
       lamports:
         type: string
@@ -2311,7 +2361,7 @@ definitions:
       sol:
         type: string
     type: object
-  api_handler_v2.SystemSeedAllocateRequest:
+  v2.SystemSeedAllocateRequest:
     properties:
       base:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -2336,7 +2386,7 @@ definitions:
         example: "165"
         type: string
     type: object
-  api_handler_v2.SystemSeedAllocateResponse:
+  v2.SystemSeedAllocateResponse:
     properties:
       account_keys:
         items:
@@ -2367,7 +2417,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemSeedAssignRequest:
+  v2.SystemSeedAssignRequest:
     properties:
       base:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -2389,7 +2439,7 @@ definitions:
         example: vault-1
         type: string
     type: object
-  api_handler_v2.SystemSeedAssignResponse:
+  v2.SystemSeedAssignResponse:
     properties:
       account_keys:
         items:
@@ -2418,38 +2468,57 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemSeedCreateAccountRequest:
+  v2.SystemSeedCreateAccountRequest:
     properties:
       base:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-      fee_payer:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-      from:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-      lamports:
-        example: "890880"
-        type: string
-      nonce_account:
         description: |-
-          NonceAccount may be left empty, in which case a recent blockhash is
-          fetched and the transaction expires with it. Naming one builds against
-          the value that account stores instead, so the transaction never expires.
+          Base signs in the derived account's place: nobody holds a secret for
+          SHA256(base || seed || owner), so whoever controls base controls every
+          address derived from it.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
         example: ""
         type: string
-      owner:
-        example: "11111111111111111111111111111111"
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds the derived account's creation for exactly the
+          rent-exemption minimum for a zero-byte account — always, and only that
+          amount. There is no way to fund it beyond that minimum here: this
+          endpoint only ever brings a plain account into existence, empty, and
+          topping up its balance further is a separate transfer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       seed:
         example: vault-1
         type: string
-      space:
-        example: "0"
-        type: string
     type: object
-  api_handler_v2.SystemSeedCreateAccountResponse:
+  v2.SystemSeedCreateAccountResponse:
     properties:
       account_keys:
         items:
@@ -2457,16 +2526,12 @@ definitions:
         type: array
       derived_address:
         description: |-
-          DerivedAddress is what base, seed, and owner produce. It is the account
-          being created, and it is absent from signers because nobody holds a
-          secret for it.
+          DerivedAddress is what base, seed, and the System Program produce. It
+          is the account being created, and it is absent from signers because
+          nobody holds a secret for it.
         type: string
       fee:
-        type: string
-      lamports:
-        type: string
-      lamports_sol:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       nonce_authority:
@@ -2475,60 +2540,81 @@ definitions:
           durable nonce, so it doubles as the signal that RecentBlockhash carries a
           stored value rather than a fetched blockhash.
         type: string
-      owner:
-        type: string
       recent_blockhash:
         type: string
-      rent_exempt:
-        type: string
+      rent:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Rent reports what funds CreateAccountWithSeed itself. Its lamports are
+          always exactly the rent-exemption minimum for a zero-byte account,
+          never more or less.
       signers:
         items:
           type: string
         type: array
-      space:
-        type: integer
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemSeedTransferMaxRequest:
+  v2.SystemSeedTransferMaxRequest:
     properties:
       base:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
-      fee_payer:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-      nonce_account:
+      durable_nonce_account:
         description: |-
-          NonceAccount may be left empty, in which case a recent blockhash is
-          fetched and the transaction expires with it. Naming one builds against
-          the value that account stores instead, so the transaction never expires.
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
         example: ""
         type: string
-      owner:
-        example: "11111111111111111111111111111111"
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as Base, but not the same account as the derived address,
+          which has no key to sign with.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
-      seed:
-        example: vault-1
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
         type: string
-      to:
+      recipient_account:
+        description: |-
+          RecipientAccount is the account credited. It must already exist: this
+          is a plain transfer between two accounts, not a way to bring a new one
+          into existence.
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
+      seed:
+        example: vault-1
+        type: string
     type: object
-  api_handler_v2.SystemSeedTransferMaxResponse:
+  v2.SystemSeedTransferMaxResponse:
     properties:
       account_keys:
         items:
           type: string
         type: array
-      amount:
-        type: string
-      amount_sol:
-        type: string
-      derived_address:
-        type: string
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
+      funding:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Funding reports the transfer itself: the derived account drained, and
+          how much that turned out to be.
       message:
         type: string
       nonce_authority:
@@ -2546,48 +2632,71 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemSeedTransferRequest:
+  v2.SystemSeedTransferRequest:
     properties:
-      amount:
+      base:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as Base, but not the same account as the derived address,
+          which has no key to sign with.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      lamports:
+        description: |-
+          Lamports is the raw amount moved from the derived account to
+          RecipientAccount.
         example: "1000000"
         type: string
-      base:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-      fee_payer:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-      nonce_account:
+      recent_blockhash:
         description: |-
-          NonceAccount may be left empty, in which case a recent blockhash is
-          fetched and the transaction expires with it. Naming one builds against
-          the value that account stores instead, so the transaction never expires.
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
         example: ""
         type: string
-      owner:
-        example: "11111111111111111111111111111111"
+      recipient_account:
+        description: |-
+          RecipientAccount is the account credited. It must already exist: this
+          is a plain transfer between two accounts, not a way to bring a new one
+          into existence.
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
       seed:
         example: vault-1
         type: string
-      to:
-        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
-        type: string
     type: object
-  api_handler_v2.SystemSeedTransferResponse:
+  v2.SystemSeedTransferResponse:
     properties:
       account_keys:
         items:
           type: string
         type: array
-      amount:
-        type: string
-      amount_sol:
-        type: string
-      derived_address:
-        type: string
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
+      funding:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Funding reports the transfer itself: the derived account debited, and
+          how much.
       message:
         type: string
       nonce_authority:
@@ -2605,7 +2714,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemTransferMaxRequest:
+  v2.SystemTransferMaxRequest:
     properties:
       durable_nonce_account:
         description: |-
@@ -2650,16 +2759,16 @@ definitions:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
-  api_handler_v2.SystemTransferMaxResponse:
+  v2.SystemTransferMaxResponse:
     properties:
       account_keys:
         items:
           type: string
         type: array
       fee:
-        $ref: '#/definitions/api_handler_v2.SystemPayer'
+        $ref: '#/definitions/v2.SystemPayer'
       funding:
-        $ref: '#/definitions/api_handler_v2.SystemPayer'
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       nonce_authority:
@@ -2677,7 +2786,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemTransferRequest:
+  v2.SystemTransferRequest:
     properties:
       durable_nonce_account:
         description: |-
@@ -2725,17 +2834,17 @@ definitions:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
-  api_handler_v2.SystemTransferResponse:
+  v2.SystemTransferResponse:
     properties:
       account_keys:
         items:
           type: string
         type: array
       fee:
-        $ref: '#/definitions/api_handler_v2.SystemPayer'
+        $ref: '#/definitions/v2.SystemPayer'
       funding:
         allOf:
-        - $ref: '#/definitions/api_handler_v2.SystemPayer'
+        - $ref: '#/definitions/v2.SystemPayer'
         description: 'Funding reports the transfer itself: who sent it and how much.'
       message:
         type: string
@@ -2757,7 +2866,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.SystemTransferSpreadRequest:
+  v2.SystemTransferSpreadRequest:
     properties:
       durable_nonce_account:
         description: |-
@@ -2801,10 +2910,10 @@ definitions:
           instructions are executed and the response echoes them back. There is
           no upper bound here beyond what fits in one transaction.
         items:
-          $ref: '#/definitions/api_handler_v2.SystemTransferSpreadTarget'
+          $ref: '#/definitions/v2.SystemTransferSpreadTarget'
         type: array
     type: object
-  api_handler_v2.SystemTransferSpreadResponse:
+  v2.SystemTransferSpreadResponse:
     properties:
       account_keys:
         description: |-
@@ -2817,10 +2926,10 @@ definitions:
           type: string
         type: array
       fee:
-        $ref: '#/definitions/api_handler_v2.SystemPayer'
+        $ref: '#/definitions/v2.SystemPayer'
       funding:
         allOf:
-        - $ref: '#/definitions/api_handler_v2.SystemPayer'
+        - $ref: '#/definitions/v2.SystemPayer'
         description: Funding is the funding_payer's total spend across every transfer.
       message:
         type: string
@@ -2849,10 +2958,10 @@ definitions:
         type: string
       transfers:
         items:
-          $ref: '#/definitions/api_handler_v2.SystemTransferSpreadTargetResponse'
+          $ref: '#/definitions/v2.SystemTransferSpreadTargetResponse'
         type: array
     type: object
-  api_handler_v2.SystemTransferSpreadTarget:
+  v2.SystemTransferSpreadTarget:
     properties:
       lamports:
         description: |-
@@ -2868,7 +2977,7 @@ definitions:
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
-  api_handler_v2.SystemTransferSpreadTargetResponse:
+  v2.SystemTransferSpreadTargetResponse:
     properties:
       lamports:
         type: string
@@ -2877,7 +2986,7 @@ definitions:
       sol:
         type: string
     type: object
-  api_handler_v2.ThawAccountRequest:
+  v2.ThawAccountRequest:
     properties:
       account:
         example: ""
@@ -2905,7 +3014,7 @@ definitions:
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
     type: object
-  api_handler_v2.ThawAccountResponse:
+  v2.ThawAccountResponse:
     properties:
       account:
         type: string
@@ -2934,7 +3043,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.TransferCheckedRequest:
+  v2.TransferCheckedRequest:
     properties:
       amount:
         example: "250000"
@@ -2971,7 +3080,7 @@ definitions:
         example: ""
         type: string
     type: object
-  api_handler_v2.TransferCheckedResponse:
+  v2.TransferCheckedResponse:
     properties:
       account_keys:
         items:
@@ -3006,7 +3115,7 @@ definitions:
       transaction:
         type: string
     type: object
-  api_handler_v2.TransferToWalletRequest:
+  v2.TransferToWalletRequest:
     properties:
       account:
         description: |-
@@ -3061,7 +3170,7 @@ definitions:
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
-  api_handler_v2.TransferToWalletResponse:
+  v2.TransferToWalletResponse:
     properties:
       account:
         type: string
@@ -3130,7 +3239,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_account.AirdropRequest'
+          $ref: '#/definitions/account.AirdropRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3147,7 +3256,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_account.AirdropResponse'
+            $ref: '#/definitions/account.AirdropResponse'
         "400":
           description: Bad Request
           schema:
@@ -3155,6 +3264,49 @@ paths:
               type: string
             type: object
       summary: Fund an account on devnet or testnet
+      tags:
+      - account
+  /svm/account/authority:
+    post:
+      consumes:
+      - application/json
+      description: 'Reports the authority for whichever kind of account public_key
+        names: a durable nonce account''s authority, a mint''s mint_authority and
+        freeze_authority, a token account''s token_owner, delegate, and close_authority,
+        or a multisig''s m, n, and signers. type says which of these applies, and
+        is system_account for a plain account with none of them, or unknown for a
+        program-owned account this endpoint has no parser for.'
+      parameters:
+      - description: Account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/account.AccountAuthorityRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/account.AccountAuthorityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Read the authority-bearing fields of an account
       tags:
       - account
   /svm/account/balance:
@@ -3167,7 +3319,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_account.AccountRequest'
+          $ref: '#/definitions/account.AccountRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3184,7 +3336,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_account.BalanceResponse'
+            $ref: '#/definitions/account.BalanceResponse'
         "400":
           description: Bad Request
           schema:
@@ -3210,7 +3362,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_account.NonceRequest'
+          $ref: '#/definitions/account.NonceRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3227,7 +3379,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_account.NonceResponse'
+            $ref: '#/definitions/account.NonceResponse'
         "400":
           description: Bad Request
           schema:
@@ -3251,7 +3403,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_account.AccountOwnerRequest'
+          $ref: '#/definitions/account.AccountOwnerRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3268,7 +3420,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_account.AccountOwnerResponse'
+            $ref: '#/definitions/account.AccountOwnerResponse'
         "400":
           description: Bad Request
           schema:
@@ -3291,7 +3443,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_account.AccountRequest'
+          $ref: '#/definitions/account.AccountRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3308,7 +3460,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_account.AccountResponse'
+            $ref: '#/definitions/account.AccountResponse'
         "400":
           description: Bad Request
           schema:
@@ -3332,7 +3484,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_account.TokensRequest'
+          $ref: '#/definitions/account.TokensRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3349,7 +3501,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_account.TokensResponse'
+            $ref: '#/definitions/account.TokensResponse'
         "400":
           description: Bad Request
           schema:
@@ -3382,7 +3534,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.BlockhashResponse'
+            $ref: '#/definitions/misc.BlockhashResponse'
         "400":
           description: Bad Request
           schema:
@@ -3415,7 +3567,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.GenesisHashResponse'
+            $ref: '#/definitions/misc.GenesisHashResponse'
         "400":
           description: Bad Request
           schema:
@@ -3444,7 +3596,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.HealthResponse'
+            $ref: '#/definitions/misc.HealthResponse'
         "400":
           description: Bad Request
           schema:
@@ -3473,7 +3625,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.SlotResponse'
+            $ref: '#/definitions/misc.SlotResponse'
         "400":
           description: Bad Request
           schema:
@@ -3496,7 +3648,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.FeeRequest'
+          $ref: '#/definitions/misc.FeeRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3513,7 +3665,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.FeeResponse'
+            $ref: '#/definitions/misc.FeeResponse'
         "400":
           description: Bad Request
           schema:
@@ -3538,7 +3690,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.RefreshBlockhashRequest'
+          $ref: '#/definitions/misc.RefreshBlockhashRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3555,7 +3707,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.RefreshBlockhashResponse'
+            $ref: '#/definitions/misc.RefreshBlockhashResponse'
         "400":
           description: Bad Request
           schema:
@@ -3586,7 +3738,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.ReplaceBlockhashWithNonceRequest'
+          $ref: '#/definitions/misc.ReplaceBlockhashWithNonceRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3603,7 +3755,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.ReplaceBlockhashWithNonceResponse'
+            $ref: '#/definitions/misc.ReplaceBlockhashWithNonceResponse'
         "400":
           description: Bad Request
           schema:
@@ -3628,7 +3780,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.SendTransactionRequest'
+          $ref: '#/definitions/misc.SendTransactionRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3645,7 +3797,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.SendTransactionResponse'
+            $ref: '#/definitions/misc.SendTransactionResponse'
         "400":
           description: Bad Request
           schema:
@@ -3671,7 +3823,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.SimulateTransactionRequest'
+          $ref: '#/definitions/misc.SimulateTransactionRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3688,7 +3840,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.SimulateTransactionResponse'
+            $ref: '#/definitions/misc.SimulateTransactionResponse'
         "400":
           description: Bad Request
           schema:
@@ -3710,7 +3862,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.SignatureStatusRequest'
+          $ref: '#/definitions/misc.SignatureStatusRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3727,7 +3879,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.SignatureStatusResponse'
+            $ref: '#/definitions/misc.SignatureStatusResponse'
         "400":
           description: Bad Request
           schema:
@@ -3756,7 +3908,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.VersionResponse'
+            $ref: '#/definitions/misc.VersionResponse'
         "400":
           description: Bad Request
           schema:
@@ -3785,7 +3937,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.RentExemptionMintResponse'
+            $ref: '#/definitions/misc.RentExemptionMintResponse'
         "400":
           description: Bad Request
           schema:
@@ -3817,7 +3969,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.RentExemptionNonceResponse'
+            $ref: '#/definitions/misc.RentExemptionNonceResponse'
         "400":
           description: Bad Request
           schema:
@@ -3840,7 +3992,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.RentExemptionPublicKeyRequest'
+          $ref: '#/definitions/misc.RentExemptionPublicKeyRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3857,7 +4009,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.RentExemptionPublicKeyResponse'
+            $ref: '#/definitions/misc.RentExemptionPublicKeyResponse'
         "400":
           description: Bad Request
           schema:
@@ -3879,7 +4031,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.RentExemptionSpaceRequest'
+          $ref: '#/definitions/misc.RentExemptionSpaceRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -3896,7 +4048,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.RentExemptionSpaceResponse'
+            $ref: '#/definitions/misc.RentExemptionSpaceResponse'
         "400":
           description: Bad Request
           schema:
@@ -3925,7 +4077,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.RentExemptionStakeResponse'
+            $ref: '#/definitions/misc.RentExemptionStakeResponse'
         "400":
           description: Bad Request
           schema:
@@ -3957,7 +4109,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.RentExemptionSystemResponse'
+            $ref: '#/definitions/misc.RentExemptionSystemResponse'
         "400":
           description: Bad Request
           schema:
@@ -3988,7 +4140,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.RentExemptionTokenResponse'
+            $ref: '#/definitions/misc.RentExemptionTokenResponse'
         "400":
           description: Bad Request
           schema:
@@ -4017,7 +4169,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.RentExemptionVoteResponse'
+            $ref: '#/definitions/misc.RentExemptionVoteResponse'
         "400":
           description: Bad Request
           schema:
@@ -4039,7 +4191,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.RawRequest'
+          $ref: '#/definitions/misc.RawRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4077,7 +4229,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.BatchRequest'
+          $ref: '#/definitions/misc.BatchRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4120,7 +4272,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.SignRequest'
+          $ref: '#/definitions/misc.SignRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4137,7 +4289,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.SignResponse'
+            $ref: '#/definitions/misc.SignResponse'
         "400":
           description: Bad Request
           schema:
@@ -4169,7 +4321,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.SignTransactionRequest'
+          $ref: '#/definitions/misc.SignTransactionRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4186,7 +4338,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.SignTransactionResponse'
+            $ref: '#/definitions/misc.SignTransactionResponse'
         "400":
           description: Bad Request
           schema:
@@ -4209,7 +4361,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.VerifyRequest'
+          $ref: '#/definitions/misc.VerifyRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4226,7 +4378,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.VerifyResponse'
+            $ref: '#/definitions/misc.VerifyResponse'
         "400":
           description: Bad Request
           schema:
@@ -4253,7 +4405,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_token.AccountRequest'
+          $ref: '#/definitions/token.AccountRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4270,7 +4422,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_token.AccountResponse'
+            $ref: '#/definitions/token.AccountResponse'
         "400":
           description: Bad Request
           schema:
@@ -4298,7 +4450,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_token.MintRequest'
+          $ref: '#/definitions/token.MintRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4315,7 +4467,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_token.MintResponse'
+            $ref: '#/definitions/token.MintResponse'
         "400":
           description: Bad Request
           schema:
@@ -4338,7 +4490,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.ConvertBase58To64Request'
+          $ref: '#/definitions/misc.ConvertBase58To64Request'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4355,7 +4507,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.ConvertBase58To64Response'
+            $ref: '#/definitions/misc.ConvertBase58To64Response'
         "400":
           description: Bad Request
           schema:
@@ -4378,7 +4530,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_misc.ConvertBase64To58Request'
+          $ref: '#/definitions/misc.ConvertBase64To58Request'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4395,7 +4547,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.ConvertBase64To58Response'
+            $ref: '#/definitions/misc.ConvertBase64To58Response'
         "400":
           description: Bad Request
           schema:
@@ -4429,7 +4581,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_misc.GenerateKeypairResponse'
+            $ref: '#/definitions/misc.GenerateKeypairResponse'
         "500":
           description: Internal Server Error
           schema:
@@ -4452,7 +4604,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v1.BuildTransactionRequest'
+          $ref: '#/definitions/v1.BuildTransactionRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4469,7 +4621,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v1.BuildTransactionResponse'
+            $ref: '#/definitions/v1.BuildTransactionResponse'
         "400":
           description: Bad Request
           schema:
@@ -4504,7 +4656,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemAllocateRequest'
+          $ref: '#/definitions/v2.SystemAllocateRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4521,7 +4673,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemAllocateResponse'
+            $ref: '#/definitions/v2.SystemAllocateResponse'
         "400":
           description: Bad Request
           schema:
@@ -4542,21 +4694,24 @@ paths:
         must already exist and already be owned by the System Program: only the current
         owner may reassign an account. The owner must be executable: only the owning
         program may debit an account or write its data, so assigning to a plain address
-        locks the account and its lamports permanently. Assign moves no lamports of
-        its own, so fee_payer is the only role this endpoint charges. recent_blockhash
-        is always required and is never fetched server-side. Left alone, it also builds
-        the message and expires whenever the runtime says it does. Naming durable_nonce_account
-        builds the message against the value that account stores instead, so the transaction
-        never expires, and prepends the advance that consumes it; recent_blockhash
-        then only prices the transaction. The response reports nonce_authority in
-        that case, which has to sign as well.'
+        locks the account and its lamports permanently. Assign itself has no notion
+        of size: whether account''s byte count matches what the new owner expects
+        is that program''s own concern, checked only when its initialization instruction
+        runs, not here. Assign moves no lamports of its own, so fee_payer is the only
+        role this endpoint charges. recent_blockhash is always required and is never
+        fetched server-side. Left alone, it also builds the message and expires whenever
+        the runtime says it does. Naming durable_nonce_account builds the message
+        against the value that account stores instead, so the transaction never expires,
+        and prepends the advance that consumes it; recent_blockhash then only prices
+        the transaction. The response reports nonce_authority in that case, which
+        has to sign as well.'
       parameters:
       - description: Account, new owner, and fee payer
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemAssignRequest'
+          $ref: '#/definitions/v2.SystemAssignRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4573,7 +4728,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemAssignResponse'
+            $ref: '#/definitions/v2.SystemAssignResponse'
         "400":
           description: Bad Request
           schema:
@@ -4608,7 +4763,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemCreateAccountRequest'
+          $ref: '#/definitions/v2.SystemCreateAccountRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4625,7 +4780,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemCreateAccountResponse'
+            $ref: '#/definitions/v2.SystemCreateAccountResponse'
         "400":
           description: Bad Request
           schema:
@@ -4656,7 +4811,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemNonceAdvanceRequest'
+          $ref: '#/definitions/v2.SystemNonceAdvanceRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4673,7 +4828,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemNonceAdvanceResponse'
+            $ref: '#/definitions/v2.SystemNonceAdvanceResponse'
         "400":
           description: Bad Request
           schema:
@@ -4704,7 +4859,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemNonceAuthorizeRequest'
+          $ref: '#/definitions/v2.SystemNonceAuthorizeRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4721,7 +4876,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemNonceAuthorizeResponse'
+            $ref: '#/definitions/v2.SystemNonceAuthorizeResponse'
         "400":
           description: Bad Request
           schema:
@@ -4753,7 +4908,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemNonceCreateRequest'
+          $ref: '#/definitions/v2.SystemNonceCreateRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4770,7 +4925,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemNonceCreateResponse'
+            $ref: '#/definitions/v2.SystemNonceCreateResponse'
         "400":
           description: Bad Request
           schema:
@@ -4801,7 +4956,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemNonceInitializeRequest'
+          $ref: '#/definitions/v2.SystemNonceInitializeRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4818,7 +4973,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemNonceInitializeResponse'
+            $ref: '#/definitions/v2.SystemNonceInitializeResponse'
         "400":
           description: Bad Request
           schema:
@@ -4851,7 +5006,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemNonceUpgradeRequest'
+          $ref: '#/definitions/v2.SystemNonceUpgradeRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4868,7 +5023,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemNonceUpgradeResponse'
+            $ref: '#/definitions/v2.SystemNonceUpgradeResponse'
         "400":
           description: Bad Request
           schema:
@@ -4899,7 +5054,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemNonceWithdrawRequest'
+          $ref: '#/definitions/v2.SystemNonceWithdrawRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4916,7 +5071,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemNonceWithdrawResponse'
+            $ref: '#/definitions/v2.SystemNonceWithdrawResponse'
         "400":
           description: Bad Request
           schema:
@@ -4949,7 +5104,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemNonceWithdrawMaxRequest'
+          $ref: '#/definitions/v2.SystemNonceWithdrawMaxRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -4966,7 +5121,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemNonceWithdrawMaxResponse'
+            $ref: '#/definitions/v2.SystemNonceWithdrawMaxResponse'
         "400":
           description: Bad Request
           schema:
@@ -4995,7 +5150,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemSeedAllocateRequest'
+          $ref: '#/definitions/v2.SystemSeedAllocateRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -5012,7 +5167,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemSeedAllocateResponse'
+            $ref: '#/definitions/v2.SystemSeedAllocateResponse'
         "400":
           description: Bad Request
           schema:
@@ -5041,7 +5196,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemSeedAssignRequest'
+          $ref: '#/definitions/v2.SystemSeedAssignRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -5058,7 +5213,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemSeedAssignResponse'
+            $ref: '#/definitions/v2.SystemSeedAssignResponse'
         "400":
           description: Bad Request
           schema:
@@ -5072,25 +5227,28 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Creates an account at SHA256(base || seed || owner) and hands
-        it to that owner in one instruction, so a program-owned account needs no separate
-        allocate and assign. The owner must be executable, and it changes the address:
-        the same base and seed derive somewhere else for a different owner. The derived
-        account never signs, which is the difference from create-account: nobody holds
-        a secret for it, so base signs in its place and whoever controls base controls
-        every address derived from it. The address is derived rather than accepted,
-        since the runtime recomputes it and rejects a mismatch. Naming nonce_account
-        builds the transaction against the value that durable nonce account stores
-        rather than a recent blockhash, so it never expires; the advance that consumes
-        it is prepended as the first instruction, and the response reports nonce_authority,
-        which has to sign as well.'
+      description: 'Creates a zero-byte account at SHA256(base || seed || System Program)
+        and funds it for exactly the rent-exemption minimum, the same split as create-account,
+        allocate, and assign for a keypair account: this endpoint only ever brings
+        the derived account into existence, empty; reserving space is a separate call
+        to seed/allocate, and handing it to another program is a separate call to
+        seed/assign. The derived account never signs, which is the difference from
+        create-account: nobody holds a secret for it, so base signs in its place and
+        whoever controls base controls every address derived from it. The address
+        is derived rather than accepted, since the runtime recomputes it and rejects
+        a mismatch. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.'
       parameters:
-      - description: Funder, base, seed, owner, lamports, and space
+      - description: Base, seed, fee payer, and rent payer
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemSeedCreateAccountRequest'
+          $ref: '#/definitions/v2.SystemSeedCreateAccountRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -5107,7 +5265,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemSeedCreateAccountResponse'
+            $ref: '#/definitions/v2.SystemSeedCreateAccountResponse'
         "400":
           description: Bad Request
           schema:
@@ -5121,22 +5279,25 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Debits SHA256(base || seed || owner) without that account signing,
-        since base signs for it. That is what makes a derived address usable as a
-        holding account: anyone can fund it, and only the holder of base can spend
-        it. The account must still be System-owned for a system transfer to debit
-        it, which is checked before returning. Naming nonce_account builds the transaction
-        against the value that durable nonce account stores rather than a recent blockhash,
-        so it never expires; the advance that consumes it is prepended as the first
-        instruction, and the response reports nonce_authority, which has to sign as
-        well.'
+      description: 'Debits SHA256(base || seed || System Program) without that account
+        signing, since base signs for it. That is what makes a derived address usable
+        as a holding account: anyone can fund it, and only the holder of base can
+        spend it. The account must still be System-owned for a system transfer to
+        debit it, and recipient_account must already exist: this is a plain transfer
+        between two accounts, not a way to bring a new one into existence. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
       parameters:
-      - description: Base, seed, owner, recipient, and amount
+      - description: Base, seed, recipient, lamports, and fee payer
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemSeedTransferRequest'
+          $ref: '#/definitions/v2.SystemSeedTransferRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -5153,7 +5314,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemSeedTransferResponse'
+            $ref: '#/definitions/v2.SystemSeedTransferResponse'
         "400":
           description: Bad Request
           schema:
@@ -5167,23 +5328,26 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Sends everything SHA256(base || seed || owner) holds. The amount
-        is the whole balance with nothing held back, because a derived address can
-        never pay the fee: a fee payer has to sign, and this account cannot. That
-        also means no probe is needed to price the message first, since the amount
+      description: 'Sends everything SHA256(base || seed || System Program) holds.
+        The amount is the whole balance with nothing held back, because a derived
+        address can never pay the fee: a fee payer has to sign, and this account cannot.
+        That also means no probe is needed to price the message first, since the amount
         does not depend on the fee here the way it does for a plain transfer. Emptying
-        the account lets the runtime reclaim it. Naming nonce_account builds the transaction
-        against the value that durable nonce account stores rather than a recent blockhash,
-        so it never expires; the advance that consumes it is prepended as the first
-        instruction, and the response reports nonce_authority, which has to sign as
-        well.'
+        the account lets the runtime reclaim it. recipient_account must already exist:
+        this is a plain transfer between two accounts, not a way to bring a new one
+        into existence. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.'
       parameters:
-      - description: Base, seed, owner, and recipient
+      - description: Base, seed, recipient, and fee payer
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemSeedTransferMaxRequest'
+          $ref: '#/definitions/v2.SystemSeedTransferMaxRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -5200,7 +5364,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemSeedTransferMaxResponse'
+            $ref: '#/definitions/v2.SystemSeedTransferMaxResponse'
         "400":
           description: Bad Request
           schema:
@@ -5232,7 +5396,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemTransferRequest'
+          $ref: '#/definitions/v2.SystemTransferRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -5249,7 +5413,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemTransferResponse'
+            $ref: '#/definitions/v2.SystemTransferResponse'
         "400":
           description: Bad Request
           schema:
@@ -5283,7 +5447,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemTransferMaxRequest'
+          $ref: '#/definitions/v2.SystemTransferMaxRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -5300,7 +5464,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemTransferMaxResponse'
+            $ref: '#/definitions/v2.SystemTransferMaxResponse'
         "400":
           description: Bad Request
           schema:
@@ -5337,7 +5501,7 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SystemTransferSpreadRequest'
+          $ref: '#/definitions/v2.SystemTransferSpreadRequest'
       - description: Chain name, e.g. solana
         in: header
         name: X-Chain-Name
@@ -5354,7 +5518,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SystemTransferSpreadResponse'
+            $ref: '#/definitions/v2.SystemTransferSpreadResponse'
         "400":
           description: Bad Request
           schema:
@@ -5391,14 +5555,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.ApproveCheckedRequest'
+          $ref: '#/definitions/v2.ApproveCheckedRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.ApproveCheckedResponse'
+            $ref: '#/definitions/v2.ApproveCheckedResponse'
         "400":
           description: Bad Request
           schema:
@@ -5434,14 +5598,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.BurnCheckedRequest'
+          $ref: '#/definitions/v2.BurnCheckedRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.BurnCheckedResponse'
+            $ref: '#/definitions/v2.BurnCheckedResponse'
         "400":
           description: Bad Request
           schema:
@@ -5475,14 +5639,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.CloseAccountRequest'
+          $ref: '#/definitions/v2.CloseAccountRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.CloseAccountResponse'
+            $ref: '#/definitions/v2.CloseAccountResponse'
         "400":
           description: Bad Request
           schema:
@@ -5515,14 +5679,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.CreateAccountRequest'
+          $ref: '#/definitions/v2.CreateAccountRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.CreateAccountResponse'
+            $ref: '#/definitions/v2.CreateAccountResponse'
         "400":
           description: Bad Request
           schema:
@@ -5558,14 +5722,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.CreateATARequest'
+          $ref: '#/definitions/v2.CreateATARequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.CreateATAResponse'
+            $ref: '#/definitions/v2.CreateATAResponse'
         "400":
           description: Bad Request
           schema:
@@ -5600,14 +5764,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.CreateATAIdempotentRequest'
+          $ref: '#/definitions/v2.CreateATAIdempotentRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.CreateATAIdempotentResponse'
+            $ref: '#/definitions/v2.CreateATAIdempotentResponse'
         "400":
           description: Bad Request
           schema:
@@ -5640,14 +5804,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.CreateMintRequest'
+          $ref: '#/definitions/v2.CreateMintRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.CreateMintResponse'
+            $ref: '#/definitions/v2.CreateMintResponse'
         "400":
           description: Bad Request
           schema:
@@ -5682,14 +5846,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.FreezeAccountRequest'
+          $ref: '#/definitions/v2.FreezeAccountRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.FreezeAccountResponse'
+            $ref: '#/definitions/v2.FreezeAccountResponse'
         "400":
           description: Bad Request
           schema:
@@ -5723,14 +5887,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.MintToCheckedRequest'
+          $ref: '#/definitions/v2.MintToCheckedRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.MintToCheckedResponse'
+            $ref: '#/definitions/v2.MintToCheckedResponse'
         "400":
           description: Bad Request
           schema:
@@ -5765,14 +5929,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.RevokeRequest'
+          $ref: '#/definitions/v2.RevokeRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.RevokeResponse'
+            $ref: '#/definitions/v2.RevokeResponse'
         "400":
           description: Bad Request
           schema:
@@ -5805,14 +5969,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SetCloseAuthorityClearRequest'
+          $ref: '#/definitions/v2.SetCloseAuthorityClearRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SetCloseAuthorityClearResponse'
+            $ref: '#/definitions/v2.SetCloseAuthorityClearResponse'
         "400":
           description: Bad Request
           schema:
@@ -5845,14 +6009,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SetCloseAuthorityReplaceRequest'
+          $ref: '#/definitions/v2.SetCloseAuthorityReplaceRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SetCloseAuthorityReplaceResponse'
+            $ref: '#/definitions/v2.SetCloseAuthorityReplaceResponse'
         "400":
           description: Bad Request
           schema:
@@ -5884,14 +6048,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SetFreezeAuthorityClearRequest'
+          $ref: '#/definitions/v2.SetFreezeAuthorityClearRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SetFreezeAuthorityClearResponse'
+            $ref: '#/definitions/v2.SetFreezeAuthorityClearResponse'
         "400":
           description: Bad Request
           schema:
@@ -5923,14 +6087,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SetFreezeAuthorityReplaceRequest'
+          $ref: '#/definitions/v2.SetFreezeAuthorityReplaceRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SetFreezeAuthorityReplaceResponse'
+            $ref: '#/definitions/v2.SetFreezeAuthorityReplaceResponse'
         "400":
           description: Bad Request
           schema:
@@ -5963,14 +6127,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SetMintAuthorityClearRequest'
+          $ref: '#/definitions/v2.SetMintAuthorityClearRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SetMintAuthorityClearResponse'
+            $ref: '#/definitions/v2.SetMintAuthorityClearResponse'
         "400":
           description: Bad Request
           schema:
@@ -6003,14 +6167,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SetMintAuthorityReplaceRequest'
+          $ref: '#/definitions/v2.SetMintAuthorityReplaceRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SetMintAuthorityReplaceResponse'
+            $ref: '#/definitions/v2.SetMintAuthorityReplaceResponse'
         "400":
           description: Bad Request
           schema:
@@ -6044,14 +6208,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.SetAccountOwnerReplaceRequest'
+          $ref: '#/definitions/v2.SetAccountOwnerReplaceRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.SetAccountOwnerReplaceResponse'
+            $ref: '#/definitions/v2.SetAccountOwnerReplaceResponse'
         "400":
           description: Bad Request
           schema:
@@ -6084,14 +6248,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.ThawAccountRequest'
+          $ref: '#/definitions/v2.ThawAccountRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.ThawAccountResponse'
+            $ref: '#/definitions/v2.ThawAccountResponse'
         "400":
           description: Bad Request
           schema:
@@ -6126,14 +6290,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.TransferCheckedRequest'
+          $ref: '#/definitions/v2.TransferCheckedRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.TransferCheckedResponse'
+            $ref: '#/definitions/v2.TransferCheckedResponse'
         "400":
           description: Bad Request
           schema:
@@ -6174,14 +6338,14 @@ paths:
         name: body
         required: true
         schema:
-          $ref: '#/definitions/api_handler_v2.TransferToWalletRequest'
+          $ref: '#/definitions/v2.TransferToWalletRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/api_handler_v2.TransferToWalletResponse'
+            $ref: '#/definitions/v2.TransferToWalletResponse'
         "400":
           description: Bad Request
           schema:

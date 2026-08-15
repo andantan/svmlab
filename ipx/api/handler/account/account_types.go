@@ -2,6 +2,7 @@ package account
 
 import (
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -220,6 +221,25 @@ func (r *AccountOwnerRequest) ToPublicKey() *types.PublicKey {
 	return r.publicKey
 }
 
+type AccountAuthorityRequest struct {
+	PublicKey string `json:"public_key" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	publicKey *types.PublicKey
+}
+
+func (r *AccountAuthorityRequest) ValidateRequest() error {
+	var err error
+	if r.publicKey, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.PublicKey)); err != nil {
+		return errors.New("public_key: " + err.Error())
+	}
+
+	return nil
+}
+
+func (r *AccountAuthorityRequest) ToPublicKey() *types.PublicKey {
+	return r.publicKey
+}
+
 // AccountOwnerResponse reports who owns an account, and whether that leaves it
 // spendable.
 //
@@ -341,4 +361,126 @@ func NewNonceResponse(k *types.PublicKey, n *core.NonceAccount) *NonceResponse {
 		Nonce:                n.Nonce.Base58(),
 		LamportsPerSignature: strconv.FormatUint(n.LamportsPerSignature, 10),
 	}
+}
+
+// AccountAuthorityResponse reports the authority-bearing fields for whichever
+// kind of account public_key names. Where that authority lives is entirely
+// different by kind — a nonce account, a mint, a token account, and a
+// multisig each keep it somewhere else, and a plain System account has none
+// at all — so Type says what was actually decoded before any of the
+// type-specific fields are read: system_account, nonce_account, mint,
+// token_account, multisig, or unknown for a program-owned account this
+// endpoint has no parser for.
+type AccountAuthorityResponse struct {
+	PublicKey string `json:"public_key"`
+	Exists    bool   `json:"exists"`
+	Owner     string `json:"owner"`
+	Type      string `json:"type"`
+
+	// NonceAuthority is set only when Type is nonce_account and it is
+	// initialized; an account sized for a nonce but never initialized reports
+	// the type with this left empty.
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	// MintAuthority and FreezeAuthority are set only when Type is mint.
+	// Either may still be empty: both are optional on a mint, and removing
+	// one is one-way.
+	MintAuthority   string `json:"mint_authority,omitempty"`
+	FreezeAuthority string `json:"freeze_authority,omitempty"`
+
+	// TokenOwner, Delegate, and CloseAuthority are set only when Type is
+	// token_account. Delegate and CloseAuthority are both optional; close
+	// authority only exists at all under Token-2022.
+	TokenOwner     string `json:"token_owner,omitempty"`
+	Delegate       string `json:"delegate,omitempty"`
+	CloseAuthority string `json:"close_authority,omitempty"`
+
+	// M, N, and Signers are set only when Type is multisig.
+	M       uint8    `json:"m,omitempty"`
+	N       uint8    `json:"n,omitempty"`
+	Signers []string `json:"signers,omitempty"`
+}
+
+func NewAccountAuthorityResponse(k *types.PublicKey, info *rpc.AccountInfo) (*AccountAuthorityResponse, error) {
+	if !info.Exists() {
+		return &AccountAuthorityResponse{PublicKey: k.Base58()}, nil
+	}
+
+	resp := &AccountAuthorityResponse{
+		PublicKey: k.Base58(),
+		Exists:    true,
+		Owner:     info.Owner,
+	}
+
+	owner, err := types.NewPublicKeyFromBase58(info.Owner)
+	if err != nil {
+		return nil, fmt.Errorf("owner: %w", err)
+	}
+
+	if owner.Equal(core.System.ID()) {
+		resp.Type = "system_account"
+		if info.Space != core.NonceAccountSpace {
+			return resp, nil
+		}
+
+		data, err := info.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode account data: %w", err)
+		}
+		nonce, err := core.DeserializeNonceAccount(data)
+		if err != nil {
+			return nil, err
+		}
+
+		resp.Type = "nonce_account"
+		if nonce.Initialized() {
+			resp.NonceAuthority = nonce.Authority.Base58()
+		}
+		return resp, nil
+	}
+
+	if _, err := core.TokenProgram(owner); err == nil {
+		data, err := info.Bytes()
+		if err != nil {
+			return nil, fmt.Errorf("failed to decode account data: %w", err)
+		}
+
+		if mint, mErr := core.DecodeMint(owner, data); mErr == nil {
+			resp.Type = "mint"
+			if !mint.MintAuthority.IsNil() {
+				resp.MintAuthority = mint.MintAuthority.Base58()
+			}
+			if !mint.FreezeAuthority.IsNil() {
+				resp.FreezeAuthority = mint.FreezeAuthority.Base58()
+			}
+			return resp, nil
+		}
+
+		if account, aErr := core.DecodeTokenAccount(owner, data); aErr == nil {
+			resp.Type = "token_account"
+			resp.TokenOwner = account.Owner.Base58()
+			if !account.Delegate.IsNil() {
+				resp.Delegate = account.Delegate.Base58()
+			}
+			if !account.CloseAuthority.IsNil() {
+				resp.CloseAuthority = account.CloseAuthority.Base58()
+			}
+			return resp, nil
+		}
+
+		if multisig, msErr := core.DecodeMultisig(owner, data); msErr == nil {
+			resp.Type = "multisig"
+			resp.M = multisig.M
+			resp.N = multisig.N
+			signers := make([]string, len(multisig.Signers))
+			for i, s := range multisig.Signers {
+				signers[i] = s.Base58()
+			}
+			resp.Signers = signers
+			return resp, nil
+		}
+	}
+
+	resp.Type = "unknown"
+	return resp, nil
 }

@@ -3110,7 +3110,7 @@
         },
         "/svm/v2/transaction/token/burn-checked": {
             "post": {
-                "description": "Reduces the mint's total supply and the account's balance together. decimals is checked against the mint rather than filled in from it, catching a client that formatted amount against the wrong decimals as a 400 instead of an on-chain failure. authority must be the account's owner, or its delegate for no more than the delegated amount — the mint's own authority has no say over what a holder chooses to burn.",
+                "description": "Reduces the mint's total supply and token_account's balance together. decimals is checked against the mint rather than filled in from it, catching a client that formatted amount against the wrong decimals as a 400 instead of an on-chain failure. token_account_authority must be token_account's owner, or its delegate for no more than the delegated amount — the mint's own authority has no say over what a holder chooses to burn. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4079,7 +4079,7 @@
         },
         "/svm/v2/transaction/token/transfer-checked": {
             "post": {
-                "description": "Transfers between token accounts, never to a wallet address directly. decimals is checked against the mint rather than filled in from it, catching a client that formatted amount against the wrong decimals as a 400 instead of an on-chain failure. authority must be the source account's owner, or its delegate for no more than the delegated amount.",
+                "description": "Transfers between token accounts, never to a wallet address directly. decimals is checked against the mint rather than filled in from it, catching a client that formatted amount against the wrong decimals as a 400 instead of an on-chain failure. source_token_account_authority must be source_token_account's owner, or its delegate for no more than the delegated amount. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5293,27 +5293,28 @@
         "v2.BurnCheckedRequest": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string",
-                    "example": ""
-                },
                 "amount": {
+                    "description": "Amount is the raw base-unit count to destroy, not a UI decimal string.",
                     "type": "string",
                     "example": "1000"
                 },
-                "authority": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "decimals": {
+                    "description": "Decimals is checked against Mint's own stored value rather than\ntrusted, which is the whole point of the checked variant: catching a\nclient that formatted Amount against the wrong decimals as a 400\ninstead of an on-chain failure.",
                     "type": "integer",
                     "example": 6
                 },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. Burning moves no lamports\nof its own, so this is the only balance this endpoint ever checks.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
+                    "description": "Mint is what TokenAccount must hold, and is the source of the decimals\nchecked against.",
                     "type": "string",
                     "example": ""
                 },
@@ -5324,22 +5325,31 @@
                         "type": "string"
                     }
                 },
-                "nonce_account": {
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever, and it must agree\nwith the mint's own owning program or the instruction fails on chain.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
                     "example": ""
                 },
-                "program": {
+                "token_account": {
+                    "description": "TokenAccount is debited and never credited elsewhere: burning destroys\nsupply rather than moving it. It must already exist and hold Mint.",
                     "type": "string",
-                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    "example": ""
+                },
+                "token_account_authority": {
+                    "description": "TokenAccountAuthority is TokenAccount's owner, or its delegate for no\nmore than what was delegated. Burning spends a balance, so it is the\nholder's to authorize, not the mint's — unlike minting, which checks\nthe mint's own authority instead.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
         "v2.BurnCheckedResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
@@ -5349,14 +5359,11 @@
                 "amount": {
                     "type": "string"
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "decimals": {
                     "type": "integer"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -5378,6 +5385,12 @@
                     "items": {
                         "type": "string"
                     }
+                },
+                "token_account": {
+                    "type": "string"
+                },
+                "token_account_authority": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -8253,26 +8266,32 @@
             "type": "object",
             "properties": {
                 "amount": {
+                    "description": "Amount is the raw base-unit count to move, not a UI decimal string.",
                     "type": "string",
                     "example": "250000"
                 },
-                "authority": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "decimals": {
+                    "description": "Decimals is checked against Mint's own stored value rather than\ntrusted, which is the whole point of the checked variant: catching a\nclient that formatted Amount against the wrong decimals as a 400\ninstead of an on-chain failure.",
                     "type": "integer",
                     "example": 6
                 },
-                "destination": {
+                "destination_token_account": {
+                    "description": "DestinationTokenAccount is credited. It must already exist, hold Mint,\nand not be frozen: a transfer moves between *token accounts*, never to\na wallet address directly, and a caller with only a wallet address\nneeds the recipient's associated token account created first.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. A transfer moves no\nlamports of its own, so this is the only balance this endpoint ever\nchecks.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
+                    "description": "Mint is what both token accounts must hold, and is the source of the\ndecimals checked against.",
                     "type": "string",
                     "example": ""
                 },
@@ -8283,17 +8302,25 @@
                         "type": "string"
                     }
                 },
-                "nonce_account": {
-                    "type": "string",
-                    "example": ""
-                },
                 "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever, and it must agree\nwith the mint's own owning program or the instruction fails on chain.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
                 },
-                "source": {
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
                     "example": ""
+                },
+                "source_token_account": {
+                    "description": "SourceTokenAccount is debited. It must already exist, hold Mint, and\nnot be frozen.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_token_account_authority": {
+                    "description": "SourceTokenAccountAuthority is SourceTokenAccount's owner, or its\ndelegate for no more than what was delegated. A transfer spends a\nbalance, so it is the holder's to authorize, not the mint's — unlike\nminting, which checks the mint's own authority instead.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
@@ -8309,17 +8336,14 @@
                 "amount": {
                     "type": "string"
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "decimals": {
                     "type": "integer"
                 },
-                "destination": {
+                "destination_token_account": {
                     "type": "string"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -8342,7 +8366,10 @@
                         "type": "string"
                     }
                 },
-                "source": {
+                "source_token_account": {
+                    "type": "string"
+                },
+                "source_token_account_authority": {
                     "type": "string"
                 },
                 "transaction": {

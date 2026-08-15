@@ -166,7 +166,7 @@ func run() error {
 		tk := v2.NewTokenTransactionHandler(cfg)
 		r.Route("/transaction/token", func(r chi.Router) {
 			r.Post("/create-mint", tk.CreateMint)
-			r.Post("/create-account", tk.CreateAccount)
+			r.Post("/create-kta", tk.CreateKTA)
 			r.Post("/mint-to-checked", tk.MintToChecked)
 			r.Post("/transfer-checked", tk.TransferChecked)
 			r.Post("/burn-checked", tk.BurnChecked)

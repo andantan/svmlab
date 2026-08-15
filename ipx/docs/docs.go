@@ -3067,7 +3067,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-delegate"
                 ],
                 "summary": "Grant a delegate limited spending rights over a token account",
                 "parameters": [
@@ -3124,7 +3124,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-supply"
                 ],
                 "summary": "Destroy supply held by a token account",
                 "parameters": [
@@ -3181,7 +3181,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-token-account"
                 ],
                 "summary": "Close a token account and reclaim its rent",
                 "parameters": [
@@ -3228,63 +3228,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/token/create-account": {
-            "post": {
-                "description": "System CreateAccount and InitializeAccount3 as one transaction. An uninitialized Token-owned account initialized by somebody else names their wallet as owner, which is why the two never exist as separate endpoints.",
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "transaction"
-                ],
-                "summary": "Fund and initialize an SPL Token holder account",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Cluster name",
-                        "name": "X-Chain-Name",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "type": "string",
-                        "description": "Cluster network",
-                        "name": "X-Chain-Network",
-                        "in": "header",
-                        "required": true
-                    },
-                    {
-                        "description": "Token account parameters",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/v2.CreateAccountRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/v2.CreateAccountResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "Bad Request",
-                        "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "string"
-                            }
-                        }
-                    }
-                }
-            }
-        },
         "/svm/v2/transaction/token/create-ata": {
             "post": {
                 "description": "Derives the associated token address and creates it. The address is not a request field: it follows from wallet, mint, and program, so nothing generates a keypair for it and nothing has to remember it. The account itself does not sign, unlike a keypair token account, because a program derived address has no private key. Fails if the account already exists; use create-ata-idempotent when that is not known in advance.",
@@ -3295,7 +3238,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-ata"
                 ],
                 "summary": "Create the canonical token account for a wallet and mint",
                 "parameters": [
@@ -3352,7 +3295,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-ata"
                 ],
                 "summary": "Create the canonical token account, succeeding if it exists",
                 "parameters": [
@@ -3399,9 +3342,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/token/create-mint": {
+        "/svm/v2/transaction/token/create-kta": {
             "post": {
-                "description": "System CreateAccount and InitializeMint2 as one transaction. An uninitialized Token-owned account can be initialized by anybody else before its intended owner does, so the two never exist as separate endpoints.",
+                "description": "System CreateAccount and InitializeAccount3 as one transaction. An uninitialized Token-owned account initialized by somebody else names their wallet as owner, which is why the two never exist as separate endpoints. This produces a plain keypair account rather than an associated one (see create-ata): the address is whatever key was generated for it, and nothing can rediscover it from the wallet and mint the way an associated token account can be. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3409,7 +3352,64 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-token-account"
+                ],
+                "summary": "Fund and initialize a keypair SPL Token holder account (KTA)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Token account parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.CreateKTARequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.CreateKTAResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/create-mint": {
+            "post": {
+                "description": "System CreateAccount and InitializeMint2 as one transaction. An uninitialized Token-owned account can be initialized by anybody else before its intended owner does, so the two never exist as separate endpoints. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-mint-account"
                 ],
                 "summary": "Fund and initialize an SPL Token mint",
                 "parameters": [
@@ -3466,7 +3466,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-freeze"
                 ],
                 "summary": "Suspend a token account",
                 "parameters": [
@@ -3515,7 +3515,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/mint-to-checked": {
             "post": {
-                "description": "Creates new supply and credits an existing token account. decimals is checked against the mint rather than filled in from it, which is what catches a client that formatted amount against the wrong decimals as a 400 instead of an on-chain failure.",
+                "description": "Creates new supply and credits an existing token account. decimals is checked against the mint rather than filled in from it, which is what catches a client that formatted amount against the wrong decimals as a 400 instead of an on-chain failure. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3523,7 +3523,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-supply"
                 ],
                 "summary": "Mint new supply into a token account",
                 "parameters": [
@@ -3580,7 +3580,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-delegate"
                 ],
                 "summary": "Clear whatever delegation an account currently has",
                 "parameters": [
@@ -3637,7 +3637,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-authority"
                 ],
                 "summary": "Remove a token account's close authority",
                 "parameters": [
@@ -3694,7 +3694,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-authority"
                 ],
                 "summary": "Replace a token account's close authority",
                 "parameters": [
@@ -3751,7 +3751,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-authority"
                 ],
                 "summary": "Remove a mint's freeze authority permanently",
                 "parameters": [
@@ -3808,7 +3808,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-authority"
                 ],
                 "summary": "Replace a mint's freeze authority",
                 "parameters": [
@@ -3865,7 +3865,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-authority"
                 ],
                 "summary": "Remove a mint's mint authority permanently",
                 "parameters": [
@@ -3922,7 +3922,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-authority"
                 ],
                 "summary": "Replace a mint's mint authority",
                 "parameters": [
@@ -3979,7 +3979,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-authority"
                 ],
                 "summary": "Replace a token account's owner",
                 "parameters": [
@@ -4036,7 +4036,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-freeze"
                 ],
                 "summary": "Resume a suspended token account",
                 "parameters": [
@@ -4093,7 +4093,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-transfer"
                 ],
                 "summary": "Move a balance between two token accounts of the same mint",
                 "parameters": [
@@ -4150,7 +4150,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "transaction"
+                    "v2-transaction-token-ata"
                 ],
                 "summary": "Move a balance between the associated token accounts of two wallets",
                 "parameters": [
@@ -5635,30 +5635,26 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.CreateAccountRequest": {
+        "v2.CreateKTARequest": {
             "type": "object",
             "properties": {
-                "account": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
-                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                    "example": ""
                 },
                 "fee_payer": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "from": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as RentPayer.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
-                    "type": "string",
-                    "example": ""
-                },
-                "nonce_account": {
+                    "description": "Mint is the token TokenAccount is initialized to hold, and must already\nexist.",
                     "type": "string",
                     "example": ""
                 },
                 "owner": {
+                    "description": "Owner is who can transfer, burn, or otherwise authorize spending from\nTokenAccount. It need not be RentPayer or FeePayer, and is not required\nto sign this transaction: InitializeAccount3 only records it, it does\nnot check it against a signer, which is exactly the risk that keeps\nthis endpoint from splitting into two.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -5666,15 +5662,27 @@ const docTemplate = `{
                     "description": "Program names the account to send the instructions to: classic Token\nor Token-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever, and it must agree\nwith the mint's own owning program or the instruction fails on chain.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "rent_payer": {
+                    "description": "RentPayer funds TokenAccount's creation for exactly the rent-exemption\nminimum for a 165-byte account, and is a separate balance from\nFeePayer.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "token_account": {
+                    "description": "TokenAccount is created and initialized as a holder account for Mint.\nIt signs alongside RentPayer, since an address does not exist until\nwhoever holds its private key authorizes its creation. It must not\nalready exist.",
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
             }
         },
-        "v2.CreateAccountResponse": {
+        "v2.CreateKTAResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
@@ -5682,7 +5690,7 @@ const docTemplate = `{
                     }
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -5702,14 +5710,22 @@ const docTemplate = `{
                 "recent_blockhash": {
                     "type": "string"
                 },
-                "rent_exempt": {
-                    "type": "string"
+                "rent": {
+                    "description": "Rent reports what funds CreateAccount itself. Its lamports are always\nexactly the rent-exemption minimum for a 165-byte account, never more\nor less.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
                 },
                 "signers": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "token_account": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -5720,38 +5736,49 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "decimals": {
+                    "description": "Decimals fixes how the raw integer amount this mint moves is displayed\nas a UI amount, and cannot be changed after creation.",
                     "type": "integer",
                     "example": 6
                 },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as RentPayer.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "freeze_authority": {
+                    "description": "FreezeAuthority may be left empty, in which case the mint is created\nwith no freeze authority at all, permanently: there is no separate flag\nhere the way SetAuthority needs one, since a mint that does not exist\nyet has no prior authority a typo could accidentally clear.",
                     "type": "string",
                     "example": ""
                 },
-                "from": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "mint": {
+                    "description": "Mint is the account created and initialized. It signs alongside\nRentPayer, since an address does not exist until whoever holds its\nprivate key authorizes its creation. It must not already exist.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
                 "mint_authority": {
+                    "description": "MintAuthority is who can mint new supply going forward. It need not be\nRentPayer or FeePayer, and is not required to sign this transaction:\nInitializeMint2 only records it, it does not check it against a signer.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "nonce_account": {
-                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never\nexpires.",
-                    "type": "string",
-                    "example": ""
                 },
                 "program": {
                     "description": "Program names the account to send the instructions to: classic Token\nor Token-2022. It is required rather than defaulted, since a mint\nbelongs to exactly one of the two forever and defaulting would make\npicking wrong silent. It is an address rather than a name because that\nis what actually selects the program on chain: Token-2022 is not an\nenum value, it is a different account, and a third Token\nimplementation would need no change here to be reachable.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "rent_payer": {
+                    "description": "RentPayer funds Mint's creation for exactly the rent-exemption minimum\nfor an 82-byte account, and is a separate balance from FeePayer.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
@@ -5768,7 +5795,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "freeze_authority": {
                     "type": "string"
@@ -5792,8 +5819,13 @@ const docTemplate = `{
                 "recent_blockhash": {
                     "type": "string"
                 },
-                "rent_exempt": {
-                    "type": "string"
+                "rent": {
+                    "description": "Rent reports what funds CreateMint itself. Its lamports are always\nexactly the rent-exemption minimum for an 82-byte account, never more\nor less.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
                 },
                 "signers": {
                     "type": "array",
@@ -5890,28 +5922,34 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "amount": {
+                    "description": "Amount is the raw base-unit count to mint, not a UI decimal string.",
                     "type": "string",
                     "example": "1000000"
                 },
-                "authority": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "decimals": {
+                    "description": "Decimals is checked against Mint's own stored value rather than\ntrusted, which is the whole point of the checked variant: catching a\nclient that formatted Amount against the wrong decimals as a 400\ninstead of an on-chain failure.",
                     "type": "integer",
                     "example": 6
                 },
-                "destination": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. Minting moves no lamports\nof its own, so this is the only balance this endpoint ever checks.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
+                    "description": "Mint is the token whose supply grows. It must already exist, and its\nown MintAuthority is what this request has to name to be honored.",
                     "type": "string",
                     "example": ""
+                },
+                "mint_authority": {
+                    "description": "MintAuthority is Mint's mint authority, not TokenAccount's owner or\ndelegate: minting checks who is allowed to create new supply, not who\nis allowed to move what already exists.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "multisig_signers": {
                     "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
@@ -5920,13 +5958,20 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "nonce_account": {
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever, and it must agree\nwith the mint's own owning program or the instruction fails on chain.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
                     "example": ""
                 },
-                "program": {
+                "token_account": {
+                    "description": "TokenAccount is credited with the newly minted supply. It must already\nexist and hold Mint.",
                     "type": "string",
-                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    "example": ""
                 }
             }
         },
@@ -5942,22 +5987,19 @@ const docTemplate = `{
                 "amount": {
                     "type": "string"
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "decimals": {
                     "type": "integer"
                 },
-                "destination": {
-                    "type": "string"
-                },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
                 },
                 "mint": {
+                    "type": "string"
+                },
+                "mint_authority": {
                     "type": "string"
                 },
                 "nonce_authority": {
@@ -5974,6 +6016,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "token_account": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"

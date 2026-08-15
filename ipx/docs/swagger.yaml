@@ -991,24 +991,38 @@ definitions:
       wallet:
         type: string
     type: object
-  v2.CreateAccountRequest:
+  v2.CreateKTARequest:
     properties:
-      account:
-        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
         type: string
       fee_payer:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-      from:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       mint:
-        example: ""
-        type: string
-      nonce_account:
+        description: |-
+          Mint is the token TokenAccount is initialized to hold, and must already
+          exist.
         example: ""
         type: string
       owner:
+        description: |-
+          Owner is who can transfer, burn, or otherwise authorize spending from
+          TokenAccount. It need not be RentPayer or FeePayer, and is not required
+          to sign this transaction: InitializeAccount3 only records it, it does
+          not check it against a signer, which is exactly the risk that keeps
+          this endpoint from splitting into two.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       program:
@@ -1019,17 +1033,41 @@ definitions:
           with the mint's own owning program or the instruction fails on chain.
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
-    type: object
-  v2.CreateAccountResponse:
-    properties:
-      account:
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
         type: string
+      rent_payer:
+        description: |-
+          RentPayer funds TokenAccount's creation for exactly the rent-exemption
+          minimum for a 165-byte account, and is a separate balance from
+          FeePayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      token_account:
+        description: |-
+          TokenAccount is created and initialized as a holder account for Mint.
+          It signs alongside RentPayer, since an address does not exist until
+          whoever holds its private key authorizes its creation. It must not
+          already exist.
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.CreateKTAResponse:
+    properties:
       account_keys:
         items:
           type: string
         type: array
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       mint:
@@ -1042,42 +1080,68 @@ definitions:
         type: string
       recent_blockhash:
         type: string
-      rent_exempt:
-        type: string
+      rent:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Rent reports what funds CreateAccount itself. Its lamports are always
+          exactly the rent-exemption minimum for a 165-byte account, never more
+          or less.
       signers:
         items:
           type: string
         type: array
+      token_account:
+        type: string
       transaction:
         type: string
     type: object
   v2.CreateMintRequest:
     properties:
       decimals:
+        description: |-
+          Decimals fixes how the raw integer amount this mint moves is displayed
+          as a UI amount, and cannot be changed after creation.
         example: 6
         type: integer
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
       fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       freeze_authority:
+        description: |-
+          FreezeAuthority may be left empty, in which case the mint is created
+          with no freeze authority at all, permanently: there is no separate flag
+          here the way SetAuthority needs one, since a mint that does not exist
+          yet has no prior authority a typo could accidentally clear.
         example: ""
         type: string
-      from:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
       mint:
+        description: |-
+          Mint is the account created and initialized. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
       mint_authority:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
-      nonce_account:
         description: |-
-          NonceAccount may be left empty, in which case a recent blockhash is
-          fetched and the transaction expires with it. Naming one builds against
-          the value that account stores instead, so the transaction never
-          expires.
-        example: ""
+          MintAuthority is who can mint new supply going forward. It need not be
+          RentPayer or FeePayer, and is not required to sign this transaction:
+          InitializeMint2 only records it, it does not check it against a signer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       program:
         description: |-
@@ -1090,6 +1154,23 @@ definitions:
           implementation would need no change here to be reachable.
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
         type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds Mint's creation for exactly the rent-exemption minimum
+          for an 82-byte account, and is a separate balance from FeePayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
     type: object
   v2.CreateMintResponse:
     properties:
@@ -1100,7 +1181,7 @@ definitions:
       decimals:
         type: integer
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
       freeze_authority:
         type: string
       message:
@@ -1119,8 +1200,13 @@ definitions:
         type: string
       recent_blockhash:
         type: string
-      rent_exempt:
-        type: string
+      rent:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Rent reports what funds CreateMint itself. Its lamports are always
+          exactly the rent-exemption minimum for an 82-byte account, never more
+          or less.
       signers:
         items:
           type: string
@@ -1188,22 +1274,46 @@ definitions:
   v2.MintToCheckedRequest:
     properties:
       amount:
+        description: Amount is the raw base-unit count to mint, not a UI decimal string.
         example: "1000000"
         type: string
-      authority:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
       decimals:
+        description: |-
+          Decimals is checked against Mint's own stored value rather than
+          trusted, which is the whole point of the checked variant: catching a
+          client that formatted Amount against the wrong decimals as a 400
+          instead of an on-chain failure.
         example: 6
         type: integer
-      destination:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
         example: ""
         type: string
       fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. Minting moves no lamports
+          of its own, so this is the only balance this endpoint ever checks.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       mint:
+        description: |-
+          Mint is the token whose supply grows. It must already exist, and its
+          own MintAuthority is what this request has to name to be honored.
         example: ""
+        type: string
+      mint_authority:
+        description: |-
+          MintAuthority is Mint's mint authority, not TokenAccount's owner or
+          delegate: minting checks who is allowed to create new supply, not who
+          is allowed to move what already exists.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       multisig_signers:
         description: |-
@@ -1212,11 +1322,30 @@ definitions:
         items:
           type: string
         type: array
-      nonce_account:
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a token
+          account belongs to exactly one of the two forever, and it must agree
+          with the mint's own owning program or the instruction fails on chain.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
         example: ""
         type: string
-      program:
-        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+      token_account:
+        description: |-
+          TokenAccount is credited with the newly minted supply. It must already
+          exist and hold Mint.
+        example: ""
         type: string
     type: object
   v2.MintToCheckedResponse:
@@ -1227,17 +1356,15 @@ definitions:
         type: array
       amount:
         type: string
-      authority:
-        type: string
       decimals:
         type: integer
-      destination:
-        type: string
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       mint:
+        type: string
+      mint_authority:
         type: string
       nonce_authority:
         type: string
@@ -1249,6 +1376,8 @@ definitions:
         items:
           type: string
         type: array
+      token_account:
+        type: string
       transaction:
         type: string
     type: object
@@ -6001,7 +6130,7 @@ paths:
             type: object
       summary: Grant a delegate limited spending rights over a token account
       tags:
-      - transaction
+      - v2-transaction-token-delegate
   /svm/v2/transaction/token/burn-checked:
     post:
       consumes:
@@ -6044,7 +6173,7 @@ paths:
             type: object
       summary: Destroy supply held by a token account
       tags:
-      - transaction
+      - v2-transaction-token-supply
   /svm/v2/transaction/token/close-account:
     post:
       consumes:
@@ -6085,47 +6214,7 @@ paths:
             type: object
       summary: Close a token account and reclaim its rent
       tags:
-      - transaction
-  /svm/v2/transaction/token/create-account:
-    post:
-      consumes:
-      - application/json
-      description: System CreateAccount and InitializeAccount3 as one transaction.
-        An uninitialized Token-owned account initialized by somebody else names their
-        wallet as owner, which is why the two never exist as separate endpoints.
-      parameters:
-      - description: Cluster name
-        in: header
-        name: X-Chain-Name
-        required: true
-        type: string
-      - description: Cluster network
-        in: header
-        name: X-Chain-Network
-        required: true
-        type: string
-      - description: Token account parameters
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/v2.CreateAccountRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/v2.CreateAccountResponse'
-        "400":
-          description: Bad Request
-          schema:
-            additionalProperties:
-              type: string
-            type: object
-      summary: Fund and initialize an SPL Token holder account
-      tags:
-      - transaction
+      - v2-transaction-token-token-account
   /svm/v2/transaction/token/create-ata:
     post:
       consumes:
@@ -6168,7 +6257,7 @@ paths:
             type: object
       summary: Create the canonical token account for a wallet and mint
       tags:
-      - transaction
+      - v2-transaction-token-ata
   /svm/v2/transaction/token/create-ata-idempotent:
     post:
       consumes:
@@ -6210,14 +6299,69 @@ paths:
             type: object
       summary: Create the canonical token account, succeeding if it exists
       tags:
-      - transaction
+      - v2-transaction-token-ata
+  /svm/v2/transaction/token/create-kta:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount and InitializeAccount3 as one transaction.
+        An uninitialized Token-owned account initialized by somebody else names their
+        wallet as owner, which is why the two never exist as separate endpoints. This
+        produces a plain keypair account rather than an associated one (see create-ata):
+        the address is whatever key was generated for it, and nothing can rediscover
+        it from the wallet and mint the way an associated token account can be. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Token account parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.CreateKTARequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.CreateKTAResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund and initialize a keypair SPL Token holder account (KTA)
+      tags:
+      - v2-transaction-token-token-account
   /svm/v2/transaction/token/create-mint:
     post:
       consumes:
       - application/json
       description: System CreateAccount and InitializeMint2 as one transaction. An
         uninitialized Token-owned account can be initialized by anybody else before
-        its intended owner does, so the two never exist as separate endpoints.
+        its intended owner does, so the two never exist as separate endpoints. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
       parameters:
       - description: Cluster name
         in: header
@@ -6250,7 +6394,7 @@ paths:
             type: object
       summary: Fund and initialize an SPL Token mint
       tags:
-      - transaction
+      - v2-transaction-token-mint-account
   /svm/v2/transaction/token/freeze-account:
     post:
       consumes:
@@ -6292,7 +6436,7 @@ paths:
             type: object
       summary: Suspend a token account
       tags:
-      - transaction
+      - v2-transaction-token-freeze
   /svm/v2/transaction/token/mint-to-checked:
     post:
       consumes:
@@ -6300,7 +6444,13 @@ paths:
       description: Creates new supply and credits an existing token account. decimals
         is checked against the mint rather than filled in from it, which is what catches
         a client that formatted amount against the wrong decimals as a 400 instead
-        of an on-chain failure.
+        of an on-chain failure. recent_blockhash is always required and is never fetched
+        server-side. Left alone, it also builds the message and expires whenever the
+        runtime says it does. Naming durable_nonce_account builds the message against
+        the value that account stores instead, so the transaction never expires, and
+        prepends the advance that consumes it; recent_blockhash then only prices the
+        transaction. The response reports nonce_authority in that case, which has
+        to sign as well.
       parameters:
       - description: Cluster name
         in: header
@@ -6333,7 +6483,7 @@ paths:
             type: object
       summary: Mint new supply into a token account
       tags:
-      - transaction
+      - v2-transaction-token-supply
   /svm/v2/transaction/token/revoke:
     post:
       consumes:
@@ -6375,7 +6525,7 @@ paths:
             type: object
       summary: Clear whatever delegation an account currently has
       tags:
-      - transaction
+      - v2-transaction-token-delegate
   /svm/v2/transaction/token/set-authority/close/clear:
     post:
       consumes:
@@ -6415,7 +6565,7 @@ paths:
             type: object
       summary: Remove a token account's close authority
       tags:
-      - transaction
+      - v2-transaction-token-authority
   /svm/v2/transaction/token/set-authority/close/replace:
     post:
       consumes:
@@ -6455,7 +6605,7 @@ paths:
             type: object
       summary: Replace a token account's close authority
       tags:
-      - transaction
+      - v2-transaction-token-authority
   /svm/v2/transaction/token/set-authority/freeze/clear:
     post:
       consumes:
@@ -6494,7 +6644,7 @@ paths:
             type: object
       summary: Remove a mint's freeze authority permanently
       tags:
-      - transaction
+      - v2-transaction-token-authority
   /svm/v2/transaction/token/set-authority/freeze/replace:
     post:
       consumes:
@@ -6533,7 +6683,7 @@ paths:
             type: object
       summary: Replace a mint's freeze authority
       tags:
-      - transaction
+      - v2-transaction-token-authority
   /svm/v2/transaction/token/set-authority/mint/clear:
     post:
       consumes:
@@ -6573,7 +6723,7 @@ paths:
             type: object
       summary: Remove a mint's mint authority permanently
       tags:
-      - transaction
+      - v2-transaction-token-authority
   /svm/v2/transaction/token/set-authority/mint/replace:
     post:
       consumes:
@@ -6613,7 +6763,7 @@ paths:
             type: object
       summary: Replace a mint's mint authority
       tags:
-      - transaction
+      - v2-transaction-token-authority
   /svm/v2/transaction/token/set-authority/owner/replace:
     post:
       consumes:
@@ -6654,7 +6804,7 @@ paths:
             type: object
       summary: Replace a token account's owner
       tags:
-      - transaction
+      - v2-transaction-token-authority
   /svm/v2/transaction/token/thaw-account:
     post:
       consumes:
@@ -6694,7 +6844,7 @@ paths:
             type: object
       summary: Resume a suspended token account
       tags:
-      - transaction
+      - v2-transaction-token-freeze
   /svm/v2/transaction/token/transfer-checked:
     post:
       consumes:
@@ -6736,7 +6886,7 @@ paths:
             type: object
       summary: Move a balance between two token accounts of the same mint
       tags:
-      - transaction
+      - v2-transaction-token-transfer
   /svm/v2/transaction/token/transfer-to-wallet:
     post:
       consumes:
@@ -6784,5 +6934,5 @@ paths:
             type: object
       summary: Move a balance between the associated token accounts of two wallets
       tags:
-      - transaction
+      - v2-transaction-token-ata
 swagger: "2.0"

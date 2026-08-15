@@ -1557,11 +1557,11 @@ func (h *SystemTransactionHandler) SystemSeedTransfer(w http.ResponseWriter, r *
 
 // SystemSeedAllocate godoc
 // @Summary      Build an allocation on a seed-derived address
-// @Description  Reserves data space on SHA256(base || seed || owner) with base signing in the account's place. Allocation still requires the account to be System-owned, so this is the step taken before assigning it away, on an address derived for its eventual owner from the start. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
+// @Description  Reserves data space on SHA256(base || seed || System Program) with base signing in the account's place. The account must already exist, be System-owned, and not already be allocated space — Allocate only ever sets a size once. Growing an account raises its rent-exemption floor, so the balance is checked against the minimum for the new size rather than the old one; rent_payer is always required and covers exactly that shortfall with a transfer prepended ahead of the allocation, even though nothing is built and rent reports zero when the derived account already holds enough. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-system-seed
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemSeedAllocateRequest  true  "Base, seed, owner, and space"
+// @Param        body  body      SystemSeedAllocateRequest  true  "Base, seed, space, fee payer, and rent payer"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemSeedAllocateResponse
@@ -1584,79 +1584,112 @@ func (h *SystemTransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *
 		return
 	}
 
-	derived, err := types.CreateWithSeed(req.BaseKey(), req.Seed, req.OwnerKey())
+	// Growing an account raises its rent-exemption floor, so this is worked
+	// out before anything else: it decides whether rent_payer's transfer is
+	// needed at all.
+	rentExempt, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), req.ToSpace(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	// Every account this handler ever needs is read in one round trip.
+	lookups := []*types.PublicKey{
+		req.DerivedKey(),
+		req.RentPayerKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	// One lookup answers everything the runtime will check: whether the
+	// derived account exists, who owns it, whether it is already sized, and
+	// what it holds.
+	derivedInfo := accounts[req.DerivedKey().Base58()]
+	if !derivedInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s does not exist", req.DerivedKey()))
+		return
+	}
+	if derivedInfo.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s is owned by %s, and only the owning program may size an account", req.DerivedKey(), derivedInfo.Owner))
+		return
+	}
+	if derivedInfo.Space != 0 {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s is already allocated %d bytes", req.DerivedKey(), derivedInfo.Space))
+		return
+	}
+
+	// Allocate itself moves no lamports, so whatever the derived account is
+	// short of the new floor has to come from rent_payer, named for exactly
+	// that shortfall ahead of the allocation.
+	var shortfall uint64
+	if derivedInfo.Lamports < rentExempt {
+		shortfall = rentExempt - derivedInfo.Lamports
+	}
+
+	// A shortfall has nowhere to come from when rent_payer names the derived
+	// account itself: it would have to fund the gap out of the very balance
+	// that is already short of it.
+	if shortfall > 0 && req.RentPayerKey().Equal(req.DerivedKey()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s holds %d lamports, below the %d lamport rent-exemption minimum for %d bytes; rent_payer is the same account and cannot cover its own shortfall", req.DerivedKey(), derivedInfo.Lamports, rentExempt, req.ToSpace()))
+		return
+	}
+
+	var ixs []*types.Instruction
+	if shortfall > 0 {
+		// Transfer's `from` is rejected by the runtime outright if it carries
+		// any data, regardless of who owns it — checked here rather than
+		// unconditionally, since rent_payer is only ever this transfer's
+		// source when there is a shortfall to cover.
+		if accounts[req.RentPayerKey().Base58()].CarriesData() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("rent_payer: %s carries data and cannot be the source of a transfer", req.RentPayerKey()))
+			return
+		}
+
+		rentIx, err := core.System.Transfer(req.RentPayerKey(), req.DerivedKey(), shortfall)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		ixs = append(ixs, rentIx)
+	}
+	allocateIx, err := core.System.AllocateWithSeed(req.BaseKey(), req.Seed, core.System.ID(), req.ToSpace())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	ixs = append(ixs, allocateIx)
+	instructions := types.NewInstructions(ixs...)
 
-	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
-		return
-	}
-
-	ix, err := core.System.AllocateWithSeed(req.BaseKey(), req.Seed, req.OwnerKey(), req.ToSpace())
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	instructions := types.NewInstructions(ix)
-
-	// Without a nonce the message is built against the blockhash just fetched
-	// and expires with it. With one it is built against the value that account
-	// stores and never expires, so which constructor runs is the whole
-	// difference between the two.
+	// Without a nonce the message is built against the blockhash resolved
+	// above and expires with it. With one it is built against the value that
+	// account stores and never expires, so which constructor runs is the
+	// whole difference between the two.
 	var (
 		message        *types.Message
 		priced         *types.Message
 		nonceAuthority *types.PublicKey
 	)
-	if req.NonceAccountKey().IsNil() {
-		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		priced = message
 	} else {
-		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
 		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
-			return
-		}
-		if info == nil {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
-			return
-		}
-		if info.Owner != core.System.ID().Base58() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-				req.NonceAccountKey(), info.Owner))
-			return
-		}
-		if info.Space != core.NonceAccountSpace {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is %d bytes, and a nonce account is %d",
-				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
 			return
 		}
 
-		data, err := info.Bytes()
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
-			return
-		}
-		nonce, err := core.DeserializeNonceAccount(data)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if !nonce.Initialized() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
-			return
-		}
-
-		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
 		if err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -1670,7 +1703,7 @@ func (h *SystemTransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *
 		// real message comes back as expired. The fee follows from the
 		// signature count and any compute budget instructions, never from the
 		// blockhash, so the same shape against a live one prices it exactly.
-		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -1688,57 +1721,38 @@ func (h *SystemTransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *
 		return
 	}
 
-	info, err := chain.Cli.AccountInfo(r.Context(), derived, rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read derived account: %s", err))
-		return
-	}
-	if info == nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s does not exist", derived))
-		return
-	}
-	if info.Owner != core.System.ID().Base58() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"seed: %s is owned by %s, and only the owning program may size an account",
-			derived, info.Owner))
-		return
-	}
-	if info.Space != 0 {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"seed: %s is already allocated %d bytes", derived, info.Space))
-		return
-	}
-
-	rentExempt, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), req.ToSpace(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
-		return
-	}
-	if info.Lamports < rentExempt {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"space: %s holds %d lamports, below the %d lamport rent-exemption minimum for %d bytes",
-			derived, info.Lamports, rentExempt, req.ToSpace()))
-		return
-	}
-
+	// This is the floor an ordinary wallet must hold, a different number from
+	// rentExempt: it is what rent_payer and fee_payer must each keep above
+	// zero in their own accounts, not what the derived account needs.
 	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
 		return
 	}
 
-	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
-		return
+	// rent_payer and fee_payer may be the same account wearing two hats, so
+	// what each distinct key owes is summed by address rather than checked
+	// once per role.
+	spent := map[string]uint64{
+		req.RentPayerKey().Base58(): 0,
+		req.FeePayerKey().Base58():  0,
 	}
-	if feePayerBalance < fee {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
-		return
-	}
-	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
-		return
+	spent[req.RentPayerKey().Base58()] += shortfall
+	spent[req.FeePayerKey().Base58()] += fee
+
+	for payer, amount := range spent {
+		var balance uint64
+		if info := accounts[payer]; info.Exists() {
+			balance = info.Lamports
+		}
+		if balance < amount {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: balance %d does not cover %d", payer, balance, amount))
+			return
+		}
+		if !types.RentExemptAfter(balance, amount, minRent) {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: would leave %d lamports, below the %d lamport rent-exemption minimum", payer, balance-amount, minRent))
+			return
+		}
 	}
 
 	tx, err := types.NewTransaction(message)
@@ -1760,16 +1774,16 @@ func (h *SystemTransactionHandler) SystemSeedAllocate(w http.ResponseWriter, r *
 	}
 
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
-	handler.WriteOK(w, NewSystemSeedAllocateResponse(tx, raw, messageBytes, derived, nonceAuthority, req.ToSpace(), rentExempt, fee))
+	handler.WriteOK(w, NewSystemSeedAllocateResponse(tx, raw, messageBytes, req.DerivedKey(), req.RentPayerKey(), req.FeePayerKey(), nonceAuthority, req.ToSpace(), shortfall, fee))
 }
 
 // SystemSeedAssign godoc
 // @Summary      Build an ownership assignment on a seed-derived address
-// @Description  Hands SHA256(base || seed || owner) to that same owner. There is no separate new-owner field, because one owner does both jobs: it is what the address is derived from and what the account is assigned to, so an account can only be handed to the program its own address already encodes. The owner must be executable, since assigning to a plain address locks the account permanently. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.
+// @Description  Hands SHA256(base || seed || owner) to that same owner. There is no separate new-owner field, because one owner does both jobs: it is what the address is derived from and what the account is assigned to, so an account can only be handed to the program its own address already encodes. This is a narrow, rarely-needed tool: it only works on a derived account whose address was chosen for owner from the very start, brought into existence some other way — an account made through seed/create-account never qualifies, since that always derives against the System Program, and naming that here is either a no-op or a mismatch pointing at an unrelated address. The account must already exist and already be owned by the System Program: only the current owner may reassign an account. owner must be executable, since assigning to a plain address locks the account and its lamports permanently. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-system-seed
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemSeedAssignRequest  true  "Base, seed, and owner"
+// @Param        body  body      SystemSeedAssignRequest  true  "Base, seed, owner, and fee payer"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemSeedAssignResponse
@@ -1792,15 +1806,40 @@ func (h *SystemTransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *ht
 		return
 	}
 
-	derived, err := types.CreateWithSeed(req.BaseKey(), req.Seed, req.OwnerKey())
+	// Every account this handler ever needs is read in one round trip.
+	lookups := []*types.PublicKey{
+		req.DerivedKey(),
+		req.OwnerKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
 		return
 	}
 
-	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
+	// Assign requires the account to already be owned by the System Program:
+	// only the current owner may reassign it, and the System Program is the
+	// only owner that exposes this as a callable instruction.
+	derivedInfo := accounts[req.DerivedKey().Base58()]
+	if !derivedInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s does not exist", req.DerivedKey()))
+		return
+	}
+	if derivedInfo.Owner != core.System.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s is owned by %s, and only the owning program may reassign an account", req.DerivedKey(), derivedInfo.Owner))
+		return
+	}
+
+	// Assigning to something that cannot be invoked is unrecoverable: the new
+	// owner can never debit the account, and the System Program can no longer
+	// assign it back because assignment requires the current owner.
+	ownerInfo := accounts[req.OwnerKey().Base58()]
+	if !ownerInfo.Exists() || !ownerInfo.Executable {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("owner: %s is not an executable program, and assigning to it would lock the account permanently", req.OwnerKey()))
 		return
 	}
 
@@ -1811,60 +1850,29 @@ func (h *SystemTransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *ht
 	}
 	instructions := types.NewInstructions(ix)
 
-	// Without a nonce the message is built against the blockhash just fetched
-	// and expires with it. With one it is built against the value that account
-	// stores and never expires, so which constructor runs is the whole
-	// difference between the two.
+	// Without a nonce the message is built against the blockhash resolved
+	// above and expires with it. With one it is built against the value that
+	// account stores and never expires, so which constructor runs is the
+	// whole difference between the two.
 	var (
 		message        *types.Message
 		priced         *types.Message
 		nonceAuthority *types.PublicKey
 	)
-	if req.NonceAccountKey().IsNil() {
-		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		priced = message
 	} else {
-		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
 		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
-			return
-		}
-		if info == nil {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
-			return
-		}
-		if info.Owner != core.System.ID().Base58() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-				req.NonceAccountKey(), info.Owner))
-			return
-		}
-		if info.Space != core.NonceAccountSpace {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is %d bytes, and a nonce account is %d",
-				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
 			return
 		}
 
-		data, err := info.Bytes()
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
-			return
-		}
-		nonce, err := core.DeserializeNonceAccount(data)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if !nonce.Initialized() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
-			return
-		}
-
-		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
 		if err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -1878,7 +1886,7 @@ func (h *SystemTransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *ht
 		// real message comes back as expired. The fee follows from the
 		// signature count and any compute budget instructions, never from the
 		// blockhash, so the same shape against a live one prices it exactly.
-		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -1896,51 +1904,25 @@ func (h *SystemTransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *ht
 		return
 	}
 
-	ownerInfo, err := chain.Cli.AccountInfo(r.Context(), req.OwnerKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read owner: %s", err))
-		return
-	}
-	if ownerInfo == nil || !ownerInfo.Executable {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"owner: %s is not an executable program, and assigning to it would lock the account permanently",
-			req.OwnerKey()))
-		return
-	}
-
-	info, err := chain.Cli.AccountInfo(r.Context(), derived, rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read derived account: %s", err))
-		return
-	}
-	if info == nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("seed: %s does not exist", derived))
-		return
-	}
-	if info.Owner != core.System.ID().Base58() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"seed: %s is owned by %s, and only the owning program may reassign an account",
-			derived, info.Owner))
-		return
-	}
-
+	// This is the floor an ordinary wallet must hold: what fee_payer must
+	// keep above zero in its own account. Assign moves no lamports of its
+	// own, so fee_payer is the only role checked here.
 	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
 		return
 	}
 
-	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
-		return
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
 	}
 	if feePayerBalance < fee {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d does not cover %d", feePayerBalance, fee))
 		return
 	}
-	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %d lamports, below the %d lamport rent-exemption minimum", feePayerBalance-fee, minRent))
 		return
 	}
 
@@ -1963,7 +1945,7 @@ func (h *SystemTransactionHandler) SystemSeedAssign(w http.ResponseWriter, r *ht
 	}
 
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
-	handler.WriteOK(w, NewSystemSeedAssignResponse(tx, raw, messageBytes, derived, req.OwnerKey(), nonceAuthority, fee))
+	handler.WriteOK(w, NewSystemSeedAssignResponse(tx, raw, messageBytes, req.DerivedKey(), req.OwnerKey(), req.FeePayerKey(), nonceAuthority, fee))
 }
 
 // SystemSeedTransferMax godoc

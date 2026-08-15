@@ -2546,7 +2546,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/seed/allocate": {
             "post": {
-                "description": "Reserves data space on SHA256(base || seed || owner) with base signing in the account's place. Allocation still requires the account to be System-owned, so this is the step taken before assigning it away, on an address derived for its eventual owner from the start. Growing an account raises its rent-exempt floor, so the balance is checked against the minimum for the new size. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
+                "description": "Reserves data space on SHA256(base || seed || System Program) with base signing in the account's place. The account must already exist, be System-owned, and not already be allocated space — Allocate only ever sets a size once. Growing an account raises its rent-exemption floor, so the balance is checked against the minimum for the new size rather than the old one; rent_payer is always required and covers exactly that shortfall with a transfer prepended ahead of the allocation, even though nothing is built and rent reports zero when the derived account already holds enough. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2559,7 +2559,7 @@ const docTemplate = `{
                 "summary": "Build an allocation on a seed-derived address",
                 "parameters": [
                     {
-                        "description": "Base, seed, owner, and space",
+                        "description": "Base, seed, space, fee payer, and rent payer",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2603,7 +2603,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/seed/assign": {
             "post": {
-                "description": "Hands SHA256(base || seed || owner) to that same owner. There is no separate new-owner field, because one owner does both jobs: it is what the address is derived from and what the account is assigned to, so an account can only be handed to the program its own address already encodes. The owner must be executable, since assigning to a plain address locks the account permanently. Naming nonce_account builds the transaction against the value that durable nonce account stores rather than a recent blockhash, so it never expires; the advance that consumes it is prepended as the first instruction, and the response reports nonce_authority, which has to sign as well.",
+                "description": "Hands SHA256(base || seed || owner) to that same owner. There is no separate new-owner field, because one owner does both jobs: it is what the address is derived from and what the account is assigned to, so an account can only be handed to the program its own address already encodes. This is a narrow, rarely-needed tool: it only works on a derived account whose address was chosen for owner from the very start, brought into existence some other way — an account made through seed/create-account never qualifies, since that always derives against the System Program, and naming that here is either a no-op or a mismatch pointing at an unrelated address. The account must already exist and already be owned by the System Program: only the current owner may reassign an account. owner must be executable, since assigning to a plain address locks the account and its lamports permanently. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2616,7 +2616,7 @@ const docTemplate = `{
                 "summary": "Build an ownership assignment on a seed-derived address",
                 "parameters": [
                     {
-                        "description": "Base, seed, and owner",
+                        "description": "Base, seed, owner, and fee payer",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -7262,18 +7262,25 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "fee_payer": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "nonce_account": {
-                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
-                "owner": {
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as RentPayer.",
                     "type": "string",
-                    "example": "11111111111111111111111111111111"
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "rent_payer": {
+                    "description": "RentPayer covers the shortfall, if any, between the derived account's\ncurrent balance and the rent-exemption minimum for Space: a transfer\nfrom RentPayer for exactly that shortfall is prepended ahead of the\nallocation. Required even when the derived account already holds\nenough and no such transfer ends up being built. It may be the same\naccount as the derived address, but only when the derived address\nalready holds enough on its own — a shortfall has nowhere to come from\nin that case.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "seed": {
                     "type": "string",
@@ -7281,7 +7288,7 @@ const docTemplate = `{
                 },
                 "space": {
                     "type": "string",
-                    "example": "165"
+                    "example": "128"
                 }
             }
         },
@@ -7298,7 +7305,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -7310,8 +7317,13 @@ const docTemplate = `{
                 "recent_blockhash": {
                     "type": "string"
                 },
-                "rent_exempt": {
-                    "type": "string"
+                "rent": {
+                    "description": "Rent reports RentPayer and the shortfall it covered. Its lamports are\nzero, and no transfer was actually prepended, when the derived\naccount's balance already reached the rent-exemption minimum for\nSpace.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
                 },
                 "signers": {
                     "type": "array",
@@ -7334,18 +7346,25 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "fee_payer": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "nonce_account": {
-                    "description": "NonceAccount may be left empty, in which case a recent blockhash is\nfetched and the transaction expires with it. Naming one builds against\nthe value that account stores instead, so the transaction never expires.",
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
                 "owner": {
+                    "description": "Owner is both the program the derived account is handed to and the\nvalue base, seed, and this field must have been combined with from the\nstart to name that account at all. It must be executable: only the\nowning program may debit an account or write its data, so assigning to\na plain address locks the account and its lamports permanently.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
                 },
                 "seed": {
                     "type": "string",
@@ -7366,7 +7385,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"

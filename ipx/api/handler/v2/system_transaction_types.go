@@ -1406,41 +1406,64 @@ func NewSystemSeedTransferResponse(tx *types.Transaction, raw, message []byte, d
 	}
 }
 
+// SystemSeedAllocateRequest reserves data space on SHA256(base || seed ||
+// System Program), the same derived account seed/create-account brings into
+// existence.
+//
+// The account sized is the derived address, not Base itself: nobody holds a
+// secret for a derived address, so Base signs in its place.
 type SystemSeedAllocateRequest struct {
-	Base     string `json:"base" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Seed     string `json:"seed" example:"vault-1"`
-	Owner    string `json:"owner" example:"11111111111111111111111111111111"`
-	Space    string `json:"space" example:"165"`
+	Base string `json:"base" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	Seed string `json:"seed" example:"vault-1"`
+
+	Space string `json:"space" example:"128"`
+
+	// FeePayer signs and pays the transaction fee. It may be the same
+	// account as RentPayer.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	base         *types.PublicKey
-	owner        *types.PublicKey
-	feePayer     *types.PublicKey
-	nonceAccount *types.PublicKey
-	space        uint64
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	// RentPayer covers the shortfall, if any, between the derived account's
+	// current balance and the rent-exemption minimum for Space: a transfer
+	// from RentPayer for exactly that shortfall is prepended ahead of the
+	// allocation. Required even when the derived account already holds
+	// enough and no such transfer ends up being built. It may be the same
+	// account as the derived address, but only when the derived address
+	// already holds enough on its own — a shortfall has nowhere to come from
+	// in that case.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	b   *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
+	rp  *types.PublicKey
+	d   *types.PublicKey
+	s   uint64
 }
 
 func (r *SystemSeedAllocateRequest) ValidateRequest() error {
 	var err error
-	if r.base, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Base)); err != nil {
+	if r.b, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Base)); err != nil {
 		return errors.New("base: " + err.Error())
-	}
-	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
-		return errors.New("owner: " + err.Error())
-	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
-		return errors.New("fee_payer: " + err.Error())
-	}
-
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
-		}
 	}
 
 	r.Seed = strings.TrimSpace(r.Seed)
@@ -1451,41 +1474,79 @@ func (r *SystemSeedAllocateRequest) ValidateRequest() error {
 		return fmt.Errorf("seed: %d bytes exceeds the %d byte limit", len(r.Seed), types.MaxSeedLength)
 	}
 
+	if r.d, err = types.CreateWithSeed(r.b, r.Seed, core.System.ID()); err != nil {
+		return fmt.Errorf("seed: %w", err)
+	}
+
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	rp := strings.TrimSpace(r.RentPayer)
+	if rp == "" {
+		return errors.New("rent_payer is required")
+	}
+	if r.rp, err = types.NewPublicKeyFromBase58(rp); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+
 	space := strings.TrimSpace(r.Space)
 	if space == "" {
 		return errors.New("space is required")
 	}
-	if r.space, err = strconv.ParseUint(space, 10, 64); err != nil {
+	if r.s, err = strconv.ParseUint(space, 10, 64); err != nil {
 		return errors.New("space: must be a decimal byte count")
 	}
-	if r.space == 0 {
+	if r.s == 0 {
 		return errors.New("space: must be greater than zero")
 	}
-	if r.space > core.MaxPermittedDataLength {
-		return fmt.Errorf("space: %d bytes exceeds the %d byte limit", r.space, core.MaxPermittedDataLength)
+	if r.s > core.MaxPermittedDataLength {
+		return fmt.Errorf("space: %d bytes exceeds the %d byte limit", r.s, core.MaxPermittedDataLength)
 	}
 
 	return nil
 }
 
-func (r *SystemSeedAllocateRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+func (r *SystemSeedAllocateRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemSeedAllocateRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemSeedAllocateRequest) BaseKey() *types.PublicKey {
-	return r.base
+	return r.b
 }
 
-func (r *SystemSeedAllocateRequest) OwnerKey() *types.PublicKey {
-	return r.owner
+func (r *SystemSeedAllocateRequest) DerivedKey() *types.PublicKey {
+	return r.d
+}
+
+func (r *SystemSeedAllocateRequest) RentPayerKey() *types.PublicKey {
+	return r.rp
 }
 
 func (r *SystemSeedAllocateRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 func (r *SystemSeedAllocateRequest) ToSpace() uint64 {
-	return r.space
+	return r.s
 }
 
 type SystemSeedAllocateResponse struct {
@@ -1501,12 +1562,18 @@ type SystemSeedAllocateResponse struct {
 	// stored value rather than a fetched blockhash.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Space      uint64 `json:"space"`
-	RentExempt string `json:"rent_exempt"`
-	Fee        string `json:"fee"`
+	Space uint64 `json:"space"`
+
+	// Rent reports RentPayer and the shortfall it covered. Its lamports are
+	// zero, and no transfer was actually prepended, when the derived
+	// account's balance already reached the rent-exemption minimum for
+	// Space.
+	Rent SystemPayer `json:"rent"`
+
+	Fee SystemPayer `json:"fee"`
 }
 
-func NewSystemSeedAllocateResponse(tx *types.Transaction, raw, message []byte, derived, nonceAuthority *types.PublicKey, space, rentExempt, fee uint64) *SystemSeedAllocateResponse {
+func NewSystemSeedAllocateResponse(tx *types.Transaction, raw, message []byte, derived, rentPayer, feePayer, nonceAuthority *types.PublicKey, space, rentLamports, fee uint64) *SystemSeedAllocateResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
@@ -1531,8 +1598,8 @@ func NewSystemSeedAllocateResponse(tx *types.Transaction, raw, message []byte, d
 		DerivedAddress:  derived.Base58(),
 		NonceAuthority:  authority,
 		Space:           space,
-		RentExempt:      strconv.FormatUint(rentExempt, 10),
-		Fee:             strconv.FormatUint(fee, 10),
+		Rent:            newSystemPayer(rentPayer, rentLamports),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
@@ -1542,21 +1609,54 @@ func NewSystemSeedAllocateResponse(tx *types.Transaction, raw, message []byte, d
 // There is no separate new-owner field. One owner does both jobs: it is what
 // the address is derived from and what the account is assigned to, so an
 // account can only be handed to the program its own address already encodes.
+// This is why Owner is not fixed to the System Program the way it is on
+// seed/create-account, seed/allocate, and seed/transfer: it names the target
+// program, and a derived account only qualifies here if base, seed, and this
+// exact owner were chosen together from the start. An account brought into
+// existence through seed/create-account never qualifies, since that always
+// derives against the System Program — Owner named here would either be the
+// System Program itself, which is a no-op, or a different value, which
+// points at an entirely different, unrelated address rather than reassigning
+// the one seed/create-account made.
 type SystemSeedAssignRequest struct {
-	Base     string `json:"base" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Seed     string `json:"seed" example:"vault-1"`
-	Owner    string `json:"owner" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	Base string `json:"base" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	Seed string `json:"seed" example:"vault-1"`
+
+	// Owner is both the program the derived account is handed to and the
+	// value base, seed, and this field must have been combined with from the
+	// start to name that account at all. It must be executable: only the
+	// owning program may debit an account or write its data, so assigning to
+	// a plain address locks the account and its lamports permanently.
+	Owner string `json:"owner" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// FeePayer signs and pays the transaction fee.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	base         *types.PublicKey
-	owner        *types.PublicKey
-	feePayer     *types.PublicKey
-	nonceAccount *types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	base    *types.PublicKey
+	o       *types.PublicKey
+	fp      *types.PublicKey
+	rbh     *types.Hash
+	dna     *types.PublicKey
+	derived *types.PublicKey
 }
 
 func (r *SystemSeedAssignRequest) ValidateRequest() error {
@@ -1564,16 +1664,24 @@ func (r *SystemSeedAssignRequest) ValidateRequest() error {
 	if r.base, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Base)); err != nil {
 		return errors.New("base: " + err.Error())
 	}
-	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+	if r.o, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
 		return errors.New("owner: " + err.Error())
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -1585,23 +1693,35 @@ func (r *SystemSeedAssignRequest) ValidateRequest() error {
 		return fmt.Errorf("seed: %d bytes exceeds the %d byte limit", len(r.Seed), types.MaxSeedLength)
 	}
 
+	if r.derived, err = types.CreateWithSeed(r.base, r.Seed, r.o); err != nil {
+		return fmt.Errorf("seed: %w", err)
+	}
+
 	return nil
 }
 
-func (r *SystemSeedAssignRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+func (r *SystemSeedAssignRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemSeedAssignRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemSeedAssignRequest) BaseKey() *types.PublicKey {
 	return r.base
 }
 
+func (r *SystemSeedAssignRequest) DerivedKey() *types.PublicKey {
+	return r.derived
+}
+
 func (r *SystemSeedAssignRequest) OwnerKey() *types.PublicKey {
-	return r.owner
+	return r.o
 }
 
 func (r *SystemSeedAssignRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 type SystemSeedAssignResponse struct {
@@ -1617,11 +1737,11 @@ type SystemSeedAssignResponse struct {
 	// stored value rather than a fetched blockhash.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Owner string `json:"owner"`
-	Fee   string `json:"fee"`
+	Owner string      `json:"owner"`
+	Fee   SystemPayer `json:"fee"`
 }
 
-func NewSystemSeedAssignResponse(tx *types.Transaction, raw, message []byte, derived, owner, nonceAuthority *types.PublicKey, fee uint64) *SystemSeedAssignResponse {
+func NewSystemSeedAssignResponse(tx *types.Transaction, raw, message []byte, derived, owner, feePayer, nonceAuthority *types.PublicKey, fee uint64) *SystemSeedAssignResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
@@ -1646,7 +1766,7 @@ func NewSystemSeedAssignResponse(tx *types.Transaction, raw, message []byte, der
 		DerivedAddress:  derived.Base58(),
 		NonceAuthority:  authority,
 		Owner:           owner.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
@@ -1689,17 +1809,17 @@ type SystemSeedTransferMaxRequest struct {
 	// than a choice.
 	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
-	base    *types.PublicKey
-	ra      *types.PublicKey
-	fp      *types.PublicKey
-	rbh     *types.Hash
-	dna     *types.PublicKey
-	derived *types.PublicKey
+	b   *types.PublicKey
+	ra  *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
+	d   *types.PublicKey
 }
 
 func (r *SystemSeedTransferMaxRequest) ValidateRequest() error {
 	var err error
-	if r.base, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Base)); err != nil {
+	if r.b, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Base)); err != nil {
 		return errors.New("base: " + err.Error())
 	}
 
@@ -1711,21 +1831,21 @@ func (r *SystemSeedTransferMaxRequest) ValidateRequest() error {
 		return fmt.Errorf("seed: %d bytes exceeds the %d byte limit", len(r.Seed), types.MaxSeedLength)
 	}
 
-	if r.derived, err = types.CreateWithSeed(r.base, r.Seed, core.System.ID()); err != nil {
+	if r.d, err = types.CreateWithSeed(r.b, r.Seed, core.System.ID()); err != nil {
 		return fmt.Errorf("seed: %w", err)
 	}
 
 	if r.ra, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RecipientAccount)); err != nil {
 		return errors.New("recipient_account: " + err.Error())
 	}
-	if r.derived.Equal(r.ra) {
+	if r.d.Equal(r.ra) {
 		return errors.New("the derived account and recipient_account are the same account")
 	}
 
 	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
-	if r.fp.Equal(r.derived) {
+	if r.fp.Equal(r.d) {
 		return errors.New("fee_payer and the derived account are the same account, and the derived account has no key to sign with")
 	}
 
@@ -1755,11 +1875,11 @@ func (r *SystemSeedTransferMaxRequest) Blockhash() *types.Hash {
 }
 
 func (r *SystemSeedTransferMaxRequest) BaseKey() *types.PublicKey {
-	return r.base
+	return r.b
 }
 
 func (r *SystemSeedTransferMaxRequest) DerivedKey() *types.PublicKey {
-	return r.derived
+	return r.d
 }
 
 func (r *SystemSeedTransferMaxRequest) RecipientAccountKey() *types.PublicKey {

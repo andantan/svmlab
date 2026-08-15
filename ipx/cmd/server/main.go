@@ -145,6 +145,7 @@ func run() error {
 			r.Post("/transfer", tx.SystemTransfer)
 			r.Post("/transfer/max", tx.SystemTransferMax)
 			r.Post("/transfer/spread", tx.SystemTransferSpread)
+			r.Post("/transfer/collect", tx.SystemTransferCollect)
 			r.Post("/create-account", tx.SystemCreateAccount)
 			r.Post("/allocate", tx.SystemAllocate)
 			r.Post("/assign", tx.SystemAssign)

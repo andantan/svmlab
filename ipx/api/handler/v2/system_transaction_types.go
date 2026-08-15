@@ -585,6 +585,263 @@ func NewSystemTransferSpreadResponse(tx *types.Transaction, raw, message []byte,
 	}
 }
 
+type SystemTransferCollectSource struct {
+	// FundingPayer is debited. It signs the transaction as the transfer
+	// authority for its own instruction, whether or not it also pays the fee.
+	FundingPayer string `json:"funding_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Lamports is the raw amount moved from FundingPayer to the request's
+	// RecipientAccount. It must be left unset when Max is true: the two name
+	// the amount in mutually exclusive ways, and naming both leaves no
+	// reading of which one is meant.
+	Lamports string `json:"lamports" example:"100000000"`
+
+	// Max sweeps FundingPayer's entire balance instead of a chosen amount.
+	// When it is also FeePayer, the fee comes out of that same balance first;
+	// every other source's Lamports is untouched by any fee.
+	Max bool `json:"max" example:"false"`
+
+	fup *types.PublicKey
+	l   uint64
+}
+
+func (s *SystemTransferCollectSource) FundingPayerKey() *types.PublicKey {
+	return s.fup
+}
+
+// ToLamports is the amount named for a fixed source. It is meaningless for a
+// Max source, whose amount is not known until the request resolves against a
+// live balance.
+func (s *SystemTransferCollectSource) ToLamports() uint64 {
+	return s.l
+}
+
+func (s *SystemTransferCollectSource) IsMax() bool {
+	return s.Max
+}
+
+// SystemTransferCollectRequest moves lamports from several accounts into one
+// in a single transaction — the inverse of transfer/spread. Every source
+// signs its own instruction, so this is a multi-party transaction: as many
+// signatures are needed as sources named, plus fee_payer.
+type SystemTransferCollectRequest struct {
+	// RecipientAccount is the account credited by every source. It must
+	// already exist: this is a plain transfer between accounts, not a way to
+	// bring a new one into existence.
+	RecipientAccount string `json:"recipient_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+
+	// Transfers lists the funding payers and their amounts, in the order the
+	// instructions are executed and the response echoes them back. There is
+	// no upper bound here beyond what fits in one transaction.
+	Transfers []SystemTransferCollectSource `json:"transfers"`
+
+	// FeePayer signs and pays the transaction fee. It may be the same
+	// account as any one source, in which case the fee is deducted from its
+	// balance alongside its own transfer.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	ra  *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
+}
+
+func (r *SystemTransferCollectRequest) ValidateRequest() error {
+	var err error
+	if r.ra, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RecipientAccount)); err != nil {
+		return errors.New("recipient_account: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	if len(r.Transfers) == 0 {
+		return errors.New("transfers is required")
+	}
+
+	// Two entries debiting the same address would both land, so this is a
+	// rule rather than a runtime constraint. It is a rule because one request
+	// naming an address twice is far more likely a mistake than an intent,
+	// and the index of the earlier entry is reported so it can be found.
+	seen := make(map[string]int, len(r.Transfers))
+
+	for i := range r.Transfers {
+		s := &r.Transfers[i]
+
+		if s.fup, err = types.NewPublicKeyFromBase58(strings.TrimSpace(s.FundingPayer)); err != nil {
+			return fmt.Errorf("transfers[%d].funding_payer: %s", i, err)
+		}
+		if s.fup.Equal(r.ra) {
+			return fmt.Errorf("transfers[%d].funding_payer: is recipient_account", i)
+		}
+		if first, ok := seen[s.fup.Base58()]; ok {
+			return fmt.Errorf("transfers[%d].funding_payer: already named by transfers[%d]", i, first)
+		}
+		seen[s.fup.Base58()] = i
+
+		lamports := strings.TrimSpace(s.Lamports)
+		if s.Max {
+			if lamports != "" {
+				return fmt.Errorf("transfers[%d].lamports: must not be set when max is true", i)
+			}
+			continue
+		}
+
+		if lamports == "" {
+			return fmt.Errorf("transfers[%d].lamports is required", i)
+		}
+		if s.l, err = strconv.ParseUint(lamports, 10, 64); err != nil {
+			return fmt.Errorf("transfers[%d].lamports: must be a decimal lamport count", i)
+		}
+		if s.l == 0 {
+			return fmt.Errorf("transfers[%d].lamports: must be greater than zero", i)
+		}
+	}
+
+	return nil
+}
+
+func (r *SystemTransferCollectRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemTransferCollectRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+
+func (r *SystemTransferCollectRequest) RecipientAccountKey() *types.PublicKey {
+	return r.ra
+}
+
+func (r *SystemTransferCollectRequest) FeePayerKey() *types.PublicKey {
+	return r.fp
+}
+
+func (r *SystemTransferCollectRequest) TransferList() []SystemTransferCollectSource {
+	return r.Transfers
+}
+
+// SystemTransferCollectSourceResponse echoes one source with its amount in
+// SOL beside the lamport count. Lamports and SOL are always the amount
+// actually moved, resolved against a live balance when Max was true rather
+// than echoing back a field the request left empty.
+type SystemTransferCollectSourceResponse struct {
+	FundingPayer string `json:"funding_payer"`
+	Lamports     string `json:"lamports"`
+	SOL          string `json:"sol"`
+	Max          bool   `json:"max"`
+}
+
+type SystemTransferCollectResponse struct {
+	Transaction     string `json:"transaction"`
+	Message         string `json:"message"`
+	RecentBlockhash string `json:"recent_blockhash"`
+
+	// AccountKeys is shorter than the source list plus two. The recipient
+	// appears in every instruction and the System Program in all of them, yet
+	// each is one key here: compiling a message deduplicates account keys and
+	// the instructions address them by index.
+	AccountKeys []string `json:"account_keys"`
+
+	// Signers lists every source alongside fee_payer: unlike transfer/spread,
+	// this is a multi-party transaction, and each source signs only for its
+	// own instruction.
+	Signers []string `json:"signers"`
+
+	// NonceAuthority is present only when the transaction was built against a
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
+	// stored value rather than a fetched blockhash.
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Transfers []SystemTransferCollectSourceResponse `json:"transfers"`
+
+	// Recipient reports the account credited and the total collected into it
+	// across every transfer.
+	Recipient SystemPayer `json:"recipient"`
+
+	Fee SystemPayer `json:"fee"`
+
+	// Size and SizeLimit are what bounds this endpoint. A transaction travels
+	// in one packet and cannot be split, so the transfer count is really a
+	// byte count, and reporting both lets a caller work out how many more
+	// would fit rather than discovering it by being refused.
+	Size      int `json:"size"`
+	SizeLimit int `json:"size_limit"`
+}
+
+func NewSystemTransferCollectResponse(tx *types.Transaction, raw, message []byte, recipient, feePayer, nonceAuthority *types.PublicKey, sources []SystemTransferCollectSource, resolved []uint64, total, fee uint64) *SystemTransferCollectResponse {
+	authority := ""
+	if !nonceAuthority.IsNil() {
+		authority = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	sourceResponses := make([]SystemTransferCollectSourceResponse, len(sources))
+	for i := range sources {
+		sourceResponses[i] = SystemTransferCollectSourceResponse{
+			FundingPayer: sources[i].FundingPayerKey().Base58(),
+			Lamports:     strconv.FormatUint(resolved[i], 10),
+			SOL:          types.LamportsToSol(resolved[i]),
+			Max:          sources[i].IsMax(),
+		}
+	}
+
+	return &SystemTransferCollectResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  authority,
+		Transfers:       sourceResponses,
+		Recipient:       newSystemPayer(recipient, total),
+		Fee:             newSystemPayer(feePayer, fee),
+		Size:            len(raw),
+		SizeLimit:       types.MaxTransactionSize,
+	}
+}
+
 type SystemCreateAccountRequest struct {
 	// NewAccount is the account created. It signs alongside RentPayer, since
 	// an address does not exist until whoever holds its private key

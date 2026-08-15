@@ -1945,78 +1945,116 @@ func NewSystemSeedTransferMaxResponse(tx *types.Transaction, raw, message []byte
 // rent-exempt minimum for that size, so both follow from what the account is
 // rather than from a choice the caller makes.
 type SystemNonceCreateRequest struct {
-	From string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-
-	// NewNonceAccount is the account being created. It is named apart from
-	// NonceAccount because both are nonce accounts and only their roles
-	// differ: this one is what the transaction produces, that one is what the
-	// transaction is built against.
+	// NewNonceAccount is the account created. It signs alongside RentPayer,
+	// since an address does not exist until whoever holds its private key
+	// authorizes its creation. It must not already exist.
 	NewNonceAccount string `json:"new_nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
 	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	// It has to be an account other than the one being created.
-	NonceAccount string `json:"nonce_account" example:""`
+	// FeePayer signs and pays the transaction fee. It may be the same
+	// account as RentPayer.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	from            *types.PublicKey
-	newNonceAccount *types.PublicKey
-	authority       *types.PublicKey
-	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice. It has to be an account other than NewNonceAccount, which
+	// holds no nonce yet.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	// RentPayer funds NewNonceAccount's creation for exactly the
+	// rent-exemption minimum for a nonce account's fixed size — always, and
+	// only that amount. Neither the size nor the funding is a choice: a
+	// nonce account is always exactly NonceAccountSpace bytes, and the
+	// amount that has to sit in it follows from that.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	rp  *types.PublicKey
+	nna *types.PublicKey
+	a   *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
 }
 
 func (r *SystemNonceCreateRequest) ValidateRequest() error {
 	var err error
-	if r.from, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
-		return errors.New("from: " + err.Error())
-	}
-	if r.newNonceAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewNonceAccount)); err != nil {
+	if r.nna, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewNonceAccount)); err != nil {
 		return errors.New("new_nonce_account: " + err.Error())
 	}
-	if r.from.Equal(r.newNonceAccount) {
-		return errors.New("from and new_nonce_account are the same account")
-	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+	if r.a, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
 		return errors.New("authority: " + err.Error())
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
-		if r.nonceAccount.Equal(r.newNonceAccount) {
-			return errors.New("nonce_account: cannot be the account being created, which holds no nonce yet")
+		if r.dna.Equal(r.nna) {
+			return errors.New("durable_nonce_account: cannot be the account being created, which holds no nonce yet")
 		}
+	}
+
+	rp := strings.TrimSpace(r.RentPayer)
+	if rp == "" {
+		return errors.New("rent_payer is required")
+	}
+	if r.rp, err = types.NewPublicKeyFromBase58(rp); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+	if r.rp.Equal(r.nna) {
+		return errors.New("rent_payer and new_nonce_account are the same account")
 	}
 
 	return nil
 }
 
-func (r *SystemNonceCreateRequest) FromKey() *types.PublicKey {
-	return r.from
+func (r *SystemNonceCreateRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemNonceCreateRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+
+func (r *SystemNonceCreateRequest) RentPayerKey() *types.PublicKey {
+	return r.rp
 }
 
 func (r *SystemNonceCreateRequest) NewNonceAccountKey() *types.PublicKey {
-	return r.newNonceAccount
-}
-
-func (r *SystemNonceCreateRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+	return r.nna
 }
 
 func (r *SystemNonceCreateRequest) AuthorityKey() *types.PublicKey {
-	return r.authority
+	return r.a
 }
 
 func (r *SystemNonceCreateRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 type SystemNonceCreateResponse struct {
@@ -2028,18 +2066,24 @@ type SystemNonceCreateResponse struct {
 	NewNonceAccount string   `json:"new_nonce_account"`
 	Authority       string   `json:"authority"`
 
-	// NonceAuthority belongs to the account named in the request's
-	// nonce_account, not to the one being created, and is present only when
-	// one was named. Authority above is what the new account gains.
+	// NonceAuthority is present only when the transaction was built against a
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
+	// stored value rather than a fetched blockhash. It belongs to
+	// durable_nonce_account, not to NewNonceAccount — Authority above is what
+	// the new account gains.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Lamports    string `json:"lamports"`
-	LamportsSOL string `json:"lamports_sol"`
-	Space       uint64 `json:"space"`
-	Fee         string `json:"fee"`
+	Space uint64 `json:"space"`
+
+	// Rent reports what funds the creation. Its lamports are always exactly
+	// the rent-exemption minimum for a nonce account's fixed size, never more
+	// or less.
+	Rent SystemPayer `json:"rent"`
+
+	Fee SystemPayer `json:"fee"`
 }
 
-func NewSystemNonceCreateResponse(tx *types.Transaction, raw, message []byte, newNonceAccount, authority, nonceAuthority *types.PublicKey, lamports, fee uint64) *SystemNonceCreateResponse {
+func NewSystemNonceCreateResponse(tx *types.Transaction, raw, message []byte, newNonceAccount, authority, rentPayer, feePayer, nonceAuthority *types.PublicKey, rentLamports, fee uint64) *SystemNonceCreateResponse {
 	nonceAuthorityBase58 := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuthorityBase58 = nonceAuthority.Base58()
@@ -2064,10 +2108,9 @@ func NewSystemNonceCreateResponse(tx *types.Transaction, raw, message []byte, ne
 		NewNonceAccount: newNonceAccount.Base58(),
 		Authority:       authority.Base58(),
 		NonceAuthority:  nonceAuthorityBase58,
-		Lamports:        strconv.FormatUint(lamports, 10),
-		LamportsSOL:     types.LamportsToSol(lamports),
 		Space:           core.NonceAccountSpace,
-		Fee:             strconv.FormatUint(fee, 10),
+		Rent:            newSystemPayer(rentPayer, rentLamports),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
@@ -2079,65 +2122,95 @@ func NewSystemNonceCreateResponse(tx *types.Transaction, raw, message []byte, ne
 // account that already holds lamports, so an address someone funded first can
 // only become a nonce account through the initializer alone.
 type SystemNonceInitializeRequest struct {
-	// NewNonceAccount already exists but is not a nonce account yet, which is
-	// what this makes it. It is named apart from NonceAccount because both are
-	// nonce accounts by the end and only their roles differ.
-	NewNonceAccount string `json:"new_nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	// NonceAccount must already exist, be owned by the System Program, and be
+	// exactly NonceAccountSpace bytes — this endpoint doesn't create it, only
+	// writes the nonce state into a slot that's already there, and it does
+	// not sign: no authority of its own is needed to accept one. It is named
+	// apart from DurableNonceAccount because both name a nonce account, and
+	// only their roles differ: this one is what the instruction acts on, that
+	// one is only what prices and expiry-proofs the transaction.
+	NonceAccount string `json:"nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
 	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	// It has to be an account other than the one being initialized, which
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice. It has to be an account other than NonceAccount, which
 	// holds no nonce to build against yet.
-	NonceAccount string `json:"nonce_account" example:""`
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
-	newNonceAccount *types.PublicKey
-	authority       *types.PublicKey
-	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
+	na  *types.PublicKey
+	a   *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
 }
 
 func (r *SystemNonceInitializeRequest) ValidateRequest() error {
 	var err error
-	if r.newNonceAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewNonceAccount)); err != nil {
-		return errors.New("new_nonce_account: " + err.Error())
+	if r.na, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NonceAccount)); err != nil {
+		return errors.New("nonce_account: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+	if r.a, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
 		return errors.New("authority: " + err.Error())
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
-		if r.nonceAccount.Equal(r.newNonceAccount) {
-			return errors.New("nonce_account: cannot be the account being initialized, which holds no nonce yet")
+		if r.dna.Equal(r.na) {
+			return errors.New("durable_nonce_account: cannot be the account being initialized, which holds no nonce yet")
 		}
 	}
 
 	return nil
 }
 
-func (r *SystemNonceInitializeRequest) NewNonceAccountKey() *types.PublicKey {
-	return r.newNonceAccount
+func (r *SystemNonceInitializeRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemNonceInitializeRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemNonceInitializeRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+	return r.na
 }
 
 func (r *SystemNonceInitializeRequest) AuthorityKey() *types.PublicKey {
-	return r.authority
+	return r.a
 }
 
 func (r *SystemNonceInitializeRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 type SystemNonceInitializeResponse struct {
@@ -2146,18 +2219,20 @@ type SystemNonceInitializeResponse struct {
 	RecentBlockhash string   `json:"recent_blockhash"`
 	AccountKeys     []string `json:"account_keys"`
 	Signers         []string `json:"signers"`
-	NewNonceAccount string   `json:"new_nonce_account"`
+	NonceAccount    string   `json:"nonce_account"`
 	Authority       string   `json:"authority"`
 
-	// NonceAuthority belongs to the account named in the request's
-	// nonce_account, not to the one being initialized, and is present only
-	// when one was named. Authority above is what the new account gains.
+	// NonceAuthority is present only when the transaction was built against a
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
+	// stored value rather than a fetched blockhash. It belongs to
+	// durable_nonce_account, not to NonceAccount — Authority above is what
+	// NonceAccount gains.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Fee string `json:"fee"`
+	Fee SystemPayer `json:"fee"`
 }
 
-func NewSystemNonceInitializeResponse(tx *types.Transaction, raw, message []byte, newNonceAccount, authority, nonceAuthority *types.PublicKey, fee uint64) *SystemNonceInitializeResponse {
+func NewSystemNonceInitializeResponse(tx *types.Transaction, raw, message []byte, nonceAccount, authority, feePayer, nonceAuthority *types.PublicKey, fee uint64) *SystemNonceInitializeResponse {
 	nonceAuthorityBase58 := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuthorityBase58 = nonceAuthority.Base58()
@@ -2179,10 +2254,10 @@ func NewSystemNonceInitializeResponse(tx *types.Transaction, raw, message []byte
 		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
 		AccountKeys:     keys,
 		Signers:         signers,
-		NewNonceAccount: newNonceAccount.Base58(),
+		NonceAccount:    nonceAccount.Base58(),
 		Authority:       authority.Base58(),
 		NonceAuthority:  nonceAuthorityBase58,
-		Fee:             strconv.FormatUint(fee, 10),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
@@ -2193,91 +2268,121 @@ func NewSystemNonceInitializeResponse(tx *types.Transaction, raw, message []byte
 // the value it was built for is gone by the time it finishes and the same
 // transaction cannot land twice.
 type SystemNonceAdvanceRequest struct {
-	// TargetNonceAccount is the account whose stored value this rotates. It is
-	// named apart from NonceAccount because both are nonce accounts and only
-	// their roles differ: this one is what the instruction acts on, that one
-	// is what the transaction is built against.
-	TargetNonceAccount string `json:"target_nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	// NonceAccount must already exist, be owned by the System Program, be
+	// exactly NonceAccountSpace bytes, and already be initialized — Advance
+	// rotates a stored value, it does not create one. It is named apart from
+	// DurableNonceAccount because both name a nonce account, and only their
+	// roles differ: this one is what the instruction acts on, that one is
+	// only what prices and expiry-proofs the transaction.
+	NonceAccount string `json:"nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
 	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	// It has to be an account other than the target: the runtime refuses a
-	// transaction that advances the same nonce twice.
-	NonceAccount string `json:"nonce_account" example:""`
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	targetNonceAccount *types.PublicKey
-	authority          *types.PublicKey
-	feePayer           *types.PublicKey
-	nonceAccount       *types.PublicKey
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice. It has to be an account other than NonceAccount: the
+	// runtime refuses a transaction that advances the same nonce twice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	na  *types.PublicKey
+	a   *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
 }
 
 func (r *SystemNonceAdvanceRequest) ValidateRequest() error {
 	var err error
-	if r.targetNonceAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TargetNonceAccount)); err != nil {
-		return errors.New("target_nonce_account: " + err.Error())
+	if r.na, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NonceAccount)); err != nil {
+		return errors.New("nonce_account: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+	if r.a, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
 		return errors.New("authority: " + err.Error())
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
-		if r.nonceAccount.Equal(r.targetNonceAccount) {
-			return errors.New("nonce_account: cannot be the target, since a transaction may advance a nonce only once")
+		if r.dna.Equal(r.na) {
+			return errors.New("durable_nonce_account: cannot be nonce_account, since a transaction may advance a nonce only once")
 		}
 	}
 
 	return nil
 }
 
-func (r *SystemNonceAdvanceRequest) TargetNonceAccountKey() *types.PublicKey {
-	return r.targetNonceAccount
+func (r *SystemNonceAdvanceRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemNonceAdvanceRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemNonceAdvanceRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+	return r.na
 }
 
 func (r *SystemNonceAdvanceRequest) AuthorityKey() *types.PublicKey {
-	return r.authority
+	return r.a
 }
 
 func (r *SystemNonceAdvanceRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 type SystemNonceAdvanceResponse struct {
-	Transaction        string   `json:"transaction"`
-	Message            string   `json:"message"`
-	RecentBlockhash    string   `json:"recent_blockhash"`
-	AccountKeys        []string `json:"account_keys"`
-	Signers            []string `json:"signers"`
-	TargetNonceAccount string   `json:"target_nonce_account"`
-	Authority          string   `json:"authority"`
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+	NonceAccount    string   `json:"nonce_account"`
+	Authority       string   `json:"authority"`
 
-	// NonceAuthority belongs to the account named in the request's
-	// nonce_account, not to the target, and is present only when one was
-	// named. Authority above is the target's.
+	// NonceAuthority is present only when the transaction was built against a
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
+	// stored value rather than a fetched blockhash. It belongs to
+	// durable_nonce_account, not to NonceAccount — Authority above is
+	// NonceAccount's.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	// CurrentNonce is what the target holds now, before this transaction
+	// CurrentNonce is what NonceAccount holds now, before this transaction
 	// lands. Any transaction already built against it stops being valid once
 	// this one executes.
 	CurrentNonce string `json:"current_nonce"`
 
-	Fee string `json:"fee"`
+	Fee SystemPayer `json:"fee"`
 }
 
-func NewSystemNonceAdvanceResponse(tx *types.Transaction, raw, message []byte, targetNonceAccount, authority, nonceAuthority *types.PublicKey, currentNonce *types.Hash, fee uint64) *SystemNonceAdvanceResponse {
+func NewSystemNonceAdvanceResponse(tx *types.Transaction, raw, message []byte, nonceAccount, authority, feePayer, nonceAuthority *types.PublicKey, currentNonce *types.Hash, fee uint64) *SystemNonceAdvanceResponse {
 	nonceAuthorityBase58 := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuthorityBase58 = nonceAuthority.Base58()
@@ -2294,16 +2399,16 @@ func NewSystemNonceAdvanceResponse(tx *types.Transaction, raw, message []byte, t
 	}
 
 	return &SystemNonceAdvanceResponse{
-		Transaction:        codec.Base64.Encode(raw),
-		Message:            codec.Base64.Encode(message),
-		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:        keys,
-		Signers:            signers,
-		TargetNonceAccount: targetNonceAccount.Base58(),
-		Authority:          authority.Base58(),
-		NonceAuthority:     nonceAuthorityBase58,
-		CurrentNonce:       currentNonce.Base58(),
-		Fee:                strconv.FormatUint(fee, 10),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAccount:    nonceAccount.Base58(),
+		Authority:       authority.Base58(),
+		NonceAuthority:  nonceAuthorityBase58,
+		CurrentNonce:    currentNonce.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
@@ -2314,122 +2419,159 @@ func NewSystemNonceAdvanceResponse(tx *types.Transaction, raw, message []byte, t
 // has to keep the account rent exempt at its size, or it would be subject to
 // removal while still holding a nonce something was built against.
 type SystemNonceWithdrawRequest struct {
-	// TargetNonceAccount is the account being withdrawn from. It is named
-	// apart from NonceAccount because both are nonce accounts and only their
-	// roles differ: this one is what the instruction acts on, that one is what
-	// the transaction is built against.
-	TargetNonceAccount string `json:"target_nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	// NonceAccount is withdrawn from. It is named apart from
+	// DurableNonceAccount because both name a nonce account, and only their
+	// roles differ: this one is what the instruction acts on, that one is
+	// only what prices and expiry-proofs the transaction.
+	NonceAccount string `json:"nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
 	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	To        string `json:"to" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Amount    string `json:"amount" example:"1000000"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	// It has to be an account other than the target: the runtime refuses a
-	// transaction that advances the same nonce twice.
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecipientAccount is the account credited. It must already exist: this
+	// is a plain transfer between two accounts, not a way to bring a new one
+	// into existence.
+	RecipientAccount string `json:"recipient_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
-	targetNonceAccount *types.PublicKey
-	authority          *types.PublicKey
-	to                 *types.PublicKey
-	feePayer           *types.PublicKey
-	nonceAccount       *types.PublicKey
-	amount             uint64
+	// Lamports is the raw amount moved from NonceAccount to RecipientAccount.
+	// Taking everything closes the account and the runtime applies a further
+	// rule to that, so it has its own endpoint: what stays here has to keep
+	// NonceAccount rent exempt at its size.
+	Lamports string `json:"lamports" example:"1000000"`
+
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice. It has to be an account other than NonceAccount: the
+	// runtime refuses a transaction that advances the same nonce twice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	na  *types.PublicKey
+	a   *types.PublicKey
+	ra  *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
+	l   uint64
 }
 
 func (r *SystemNonceWithdrawRequest) ValidateRequest() error {
 	var err error
-	if r.targetNonceAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TargetNonceAccount)); err != nil {
-		return errors.New("target_nonce_account: " + err.Error())
+	if r.na, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NonceAccount)); err != nil {
+		return errors.New("nonce_account: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+	if r.a, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
 		return errors.New("authority: " + err.Error())
 	}
-	if r.to, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.To)); err != nil {
-		return errors.New("to: " + err.Error())
+	if r.ra, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RecipientAccount)); err != nil {
+		return errors.New("recipient_account: " + err.Error())
 	}
-	if r.targetNonceAccount.Equal(r.to) {
-		return errors.New("target_nonce_account and to are the same account")
+	if r.na.Equal(r.ra) {
+		return errors.New("nonce_account and recipient_account are the same account")
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
-		if r.nonceAccount.Equal(r.targetNonceAccount) {
-			return errors.New("nonce_account: cannot be the target, since a transaction may advance a nonce only once")
+		if r.dna.Equal(r.na) {
+			return errors.New("durable_nonce_account: cannot be nonce_account, since a transaction may advance a nonce only once")
 		}
 	}
 
-	amount := strings.TrimSpace(r.Amount)
-	if amount == "" {
-		return errors.New("amount is required")
+	lamports := strings.TrimSpace(r.Lamports)
+	if lamports == "" {
+		return errors.New("lamports is required")
 	}
-	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
-		return errors.New("amount: must be a decimal lamport count")
+	if r.l, err = strconv.ParseUint(lamports, 10, 64); err != nil {
+		return errors.New("lamports: must be a decimal lamport count")
 	}
-	if r.amount == 0 {
-		return errors.New("amount: must be greater than zero")
+	if r.l == 0 {
+		return errors.New("lamports: must be greater than zero")
 	}
 
 	return nil
 }
 
-func (r *SystemNonceWithdrawRequest) TargetNonceAccountKey() *types.PublicKey {
-	return r.targetNonceAccount
+func (r *SystemNonceWithdrawRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemNonceWithdrawRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemNonceWithdrawRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+	return r.na
 }
 
 func (r *SystemNonceWithdrawRequest) AuthorityKey() *types.PublicKey {
-	return r.authority
+	return r.a
 }
 
-func (r *SystemNonceWithdrawRequest) ToKey() *types.PublicKey {
-	return r.to
+func (r *SystemNonceWithdrawRequest) RecipientAccountKey() *types.PublicKey {
+	return r.ra
 }
 
 func (r *SystemNonceWithdrawRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 func (r *SystemNonceWithdrawRequest) ToLamports() uint64 {
-	return r.amount
+	return r.l
 }
 
 type SystemNonceWithdrawResponse struct {
-	Transaction        string   `json:"transaction"`
-	Message            string   `json:"message"`
-	RecentBlockhash    string   `json:"recent_blockhash"`
-	AccountKeys        []string `json:"account_keys"`
-	Signers            []string `json:"signers"`
-	TargetNonceAccount string   `json:"target_nonce_account"`
-	Authority          string   `json:"authority"`
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+	NonceAccount    string   `json:"nonce_account"`
+	Authority       string   `json:"authority"`
 
-	// NonceAuthority belongs to the account named in the request's
-	// nonce_account, not to the target, and is present only when one was
-	// named. Authority above is the target's.
+	// NonceAuthority is present only when the transaction was built against a
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
+	// stored value rather than a fetched blockhash. It belongs to
+	// durable_nonce_account, not to NonceAccount — Authority above is
+	// NonceAccount's.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Amount    string `json:"amount"`
-	AmountSOL string `json:"amount_sol"`
+	// Withdrawal reports NonceAccount and how much was taken from it.
+	Withdrawal SystemPayer `json:"withdrawal"`
 
-	// Remaining is what the target keeps, which has to stay at or above the
+	// Remaining is what NonceAccount keeps, which has to stay at or above the
 	// rent-exempt minimum for its size.
 	Remaining string `json:"remaining"`
 
-	Fee string `json:"fee"`
+	Fee SystemPayer `json:"fee"`
 }
 
-func NewSystemNonceWithdrawResponse(tx *types.Transaction, raw, message []byte, targetNonceAccount, authority, nonceAuthority *types.PublicKey, amount, remaining, fee uint64) *SystemNonceWithdrawResponse {
+func NewSystemNonceWithdrawResponse(tx *types.Transaction, raw, message []byte, nonceAccount, authority, feePayer, nonceAuthority *types.PublicKey, lamports, remaining, fee uint64) *SystemNonceWithdrawResponse {
 	nonceAuthorityBase58 := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuthorityBase58 = nonceAuthority.Base58()
@@ -2446,18 +2588,17 @@ func NewSystemNonceWithdrawResponse(tx *types.Transaction, raw, message []byte, 
 	}
 
 	return &SystemNonceWithdrawResponse{
-		Transaction:        codec.Base64.Encode(raw),
-		Message:            codec.Base64.Encode(message),
-		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:        keys,
-		Signers:            signers,
-		TargetNonceAccount: targetNonceAccount.Base58(),
-		Authority:          authority.Base58(),
-		NonceAuthority:     nonceAuthorityBase58,
-		Amount:             strconv.FormatUint(amount, 10),
-		AmountSOL:          types.LamportsToSol(amount),
-		Remaining:          strconv.FormatUint(remaining, 10),
-		Fee:                strconv.FormatUint(fee, 10),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAccount:    nonceAccount.Base58(),
+		Authority:       authority.Base58(),
+		NonceAuthority:  nonceAuthorityBase58,
+		Withdrawal:      newSystemPayer(nonceAccount, lamports),
+		Remaining:       strconv.FormatUint(remaining, 10),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
@@ -2467,103 +2608,140 @@ func NewSystemNonceWithdrawResponse(tx *types.Transaction, raw, message []byte, 
 // nonce/withdraw does. The fee payer cannot be the nonce account itself, since
 // the balance being withdrawn is the same balance the fee would come from.
 type SystemNonceWithdrawMaxRequest struct {
-	// TargetNonceAccount is the account being emptied and thereby closed. It
-	// is named apart from NonceAccount because both are nonce accounts and
-	// only their roles differ: this one is what the instruction acts on, that
-	// one is what the transaction is built against.
-	TargetNonceAccount string `json:"target_nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	// NonceAccount is emptied and thereby closed. It is named apart from
+	// DurableNonceAccount because both name a nonce account, and only their
+	// roles differ: this one is what the instruction acts on, that one is
+	// only what prices and expiry-proofs the transaction.
+	NonceAccount string `json:"nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
 	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	To        string `json:"to" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	// It has to be an account other than the target, which could not be closed
-	// anyway once this transaction has just advanced it.
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecipientAccount is the account credited. It must already exist: this
+	// is a plain transfer between two accounts, not a way to bring a new one
+	// into existence.
+	RecipientAccount string `json:"recipient_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
-	targetNonceAccount *types.PublicKey
-	authority          *types.PublicKey
-	to                 *types.PublicKey
-	feePayer           *types.PublicKey
-	nonceAccount       *types.PublicKey
+	// FeePayer signs and pays the transaction fee. It cannot be NonceAccount
+	// itself, since the balance being withdrawn is the same balance the fee
+	// would come from.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice. It has to be an account other than NonceAccount, which
+	// could not be closed anyway once this transaction has just advanced it.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	na  *types.PublicKey
+	a   *types.PublicKey
+	ra  *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
 }
 
 func (r *SystemNonceWithdrawMaxRequest) ValidateRequest() error {
 	var err error
-	if r.targetNonceAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TargetNonceAccount)); err != nil {
-		return errors.New("target_nonce_account: " + err.Error())
+	if r.na, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NonceAccount)); err != nil {
+		return errors.New("nonce_account: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+	if r.a, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
 		return errors.New("authority: " + err.Error())
 	}
-	if r.to, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.To)); err != nil {
-		return errors.New("to: " + err.Error())
+	if r.ra, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RecipientAccount)); err != nil {
+		return errors.New("recipient_account: " + err.Error())
 	}
-	if r.targetNonceAccount.Equal(r.to) {
-		return errors.New("target_nonce_account and to are the same account")
+	if r.na.Equal(r.ra) {
+		return errors.New("nonce_account and recipient_account are the same account")
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
-	if r.targetNonceAccount.Equal(r.feePayer) {
-		return errors.New("fee_payer: cannot be the target nonce account, whose whole balance is being withdrawn")
+	if r.na.Equal(r.fp) {
+		return errors.New("fee_payer: cannot be nonce_account, whose whole balance is being withdrawn")
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
-		if r.nonceAccount.Equal(r.targetNonceAccount) {
-			return errors.New("nonce_account: cannot be the target, whose stored value this transaction would have just advanced to the current blockhash, which blocks closing it")
+		if r.dna.Equal(r.na) {
+			return errors.New("durable_nonce_account: cannot be nonce_account, whose stored value this transaction would have just advanced to the current blockhash, which blocks closing it")
 		}
 	}
 
 	return nil
 }
 
-func (r *SystemNonceWithdrawMaxRequest) TargetNonceAccountKey() *types.PublicKey {
-	return r.targetNonceAccount
+func (r *SystemNonceWithdrawMaxRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemNonceWithdrawMaxRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemNonceWithdrawMaxRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+	return r.na
 }
 
 func (r *SystemNonceWithdrawMaxRequest) AuthorityKey() *types.PublicKey {
-	return r.authority
+	return r.a
 }
 
-func (r *SystemNonceWithdrawMaxRequest) ToKey() *types.PublicKey {
-	return r.to
+func (r *SystemNonceWithdrawMaxRequest) RecipientAccountKey() *types.PublicKey {
+	return r.ra
 }
 
 func (r *SystemNonceWithdrawMaxRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 type SystemNonceWithdrawMaxResponse struct {
-	Transaction        string   `json:"transaction"`
-	Message            string   `json:"message"`
-	RecentBlockhash    string   `json:"recent_blockhash"`
-	AccountKeys        []string `json:"account_keys"`
-	Signers            []string `json:"signers"`
-	TargetNonceAccount string   `json:"target_nonce_account"`
-	Authority          string   `json:"authority"`
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+	NonceAccount    string   `json:"nonce_account"`
+	Authority       string   `json:"authority"`
 
-	// NonceAuthority belongs to the account named in the request's
-	// nonce_account, not to the target, and is present only when one was
-	// named. Authority above is the target's.
+	// NonceAuthority is present only when the transaction was built against a
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
+	// stored value rather than a fetched blockhash. It belongs to
+	// durable_nonce_account, not to NonceAccount — Authority above is
+	// NonceAccount's.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Amount    string `json:"amount"`
-	AmountSOL string `json:"amount_sol"`
-	Fee       string `json:"fee"`
+	// Withdrawal reports NonceAccount and its entire balance, which this
+	// closes the account by taking.
+	Withdrawal SystemPayer `json:"withdrawal"`
+
+	Fee SystemPayer `json:"fee"`
 }
 
-func NewSystemNonceWithdrawMaxResponse(tx *types.Transaction, raw, message []byte, targetNonceAccount, authority, nonceAuthority *types.PublicKey, amount, fee uint64) *SystemNonceWithdrawMaxResponse {
+func NewSystemNonceWithdrawMaxResponse(tx *types.Transaction, raw, message []byte, nonceAccount, authority, feePayer, nonceAuthority *types.PublicKey, lamports, fee uint64) *SystemNonceWithdrawMaxResponse {
 	nonceAuthorityBase58 := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuthorityBase58 = nonceAuthority.Base58()
@@ -2580,17 +2758,16 @@ func NewSystemNonceWithdrawMaxResponse(tx *types.Transaction, raw, message []byt
 	}
 
 	return &SystemNonceWithdrawMaxResponse{
-		Transaction:        codec.Base64.Encode(raw),
-		Message:            codec.Base64.Encode(message),
-		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:        keys,
-		Signers:            signers,
-		TargetNonceAccount: targetNonceAccount.Base58(),
-		Authority:          authority.Base58(),
-		NonceAuthority:     nonceAuthorityBase58,
-		Amount:             strconv.FormatUint(amount, 10),
-		AmountSOL:          types.LamportsToSol(amount),
-		Fee:                strconv.FormatUint(fee, 10),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAccount:    nonceAccount.Base58(),
+		Authority:       authority.Base58(),
+		NonceAuthority:  nonceAuthorityBase58,
+		Withdrawal:      newSystemPayer(nonceAccount, lamports),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
@@ -2601,99 +2778,130 @@ func NewSystemNonceWithdrawMaxResponse(tx *types.Transaction, raw, message []byt
 // but never submitted: such a transaction advances the nonce as its first
 // instruction, and that now needs a signature the old authority cannot give.
 type SystemNonceAuthorizeRequest struct {
-	// TargetNonceAccount is the account whose authority changes. It is named
-	// apart from NonceAccount because both are nonce accounts and only their
-	// roles differ: this one is what the instruction acts on, that one is what
-	// the transaction is built against.
-	TargetNonceAccount string `json:"target_nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	// NonceAccount must already exist, be owned by the System Program, be
+	// exactly NonceAccountSpace bytes, and already be initialized — Authorize
+	// hands off control of a nonce account, it does not create one. It is
+	// named apart from DurableNonceAccount because both name a nonce
+	// account, and only their roles differ: this one is what the instruction
+	// acts on, that one is only what prices and expiry-proofs the transaction.
+	NonceAccount string `json:"nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
-	Authority    string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
 	NewAuthority string `json:"new_authority" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
-	FeePayer     string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	// It has to be an account other than the target: the runtime refuses a
-	// transaction that advances the same nonce twice.
-	NonceAccount string `json:"nonce_account" example:""`
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	targetNonceAccount *types.PublicKey
-	authority          *types.PublicKey
-	newAuthority       *types.PublicKey
-	feePayer           *types.PublicKey
-	nonceAccount       *types.PublicKey
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice. It has to be an account other than NonceAccount: the
+	// runtime refuses a transaction that advances the same nonce twice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	nAcc *types.PublicKey
+	a    *types.PublicKey
+	na   *types.PublicKey
+	fp   *types.PublicKey
+	rbh  *types.Hash
+	dna  *types.PublicKey
 }
 
 func (r *SystemNonceAuthorizeRequest) ValidateRequest() error {
 	var err error
-	if r.targetNonceAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TargetNonceAccount)); err != nil {
-		return errors.New("target_nonce_account: " + err.Error())
+	if r.nAcc, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NonceAccount)); err != nil {
+		return errors.New("nonce_account: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+	if r.a, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
 		return errors.New("authority: " + err.Error())
 	}
-	if r.newAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewAuthority)); err != nil {
+	if r.na, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewAuthority)); err != nil {
 		return errors.New("new_authority: " + err.Error())
 	}
-	if r.authority.Equal(r.newAuthority) {
+	if r.a.Equal(r.na) {
 		return errors.New("new_authority: is already the authority")
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
-		if r.nonceAccount.Equal(r.targetNonceAccount) {
-			return errors.New("nonce_account: cannot be the target, since a transaction may advance a nonce only once")
+		if r.dna.Equal(r.nAcc) {
+			return errors.New("durable_nonce_account: cannot be nonce_account, since a transaction may advance a nonce only once")
 		}
 	}
 
 	return nil
 }
 
-func (r *SystemNonceAuthorizeRequest) TargetNonceAccountKey() *types.PublicKey {
-	return r.targetNonceAccount
+func (r *SystemNonceAuthorizeRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemNonceAuthorizeRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemNonceAuthorizeRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+	return r.nAcc
 }
 
 func (r *SystemNonceAuthorizeRequest) AuthorityKey() *types.PublicKey {
-	return r.authority
+	return r.a
 }
 
 func (r *SystemNonceAuthorizeRequest) NewAuthorityKey() *types.PublicKey {
-	return r.newAuthority
+	return r.na
 }
 
 func (r *SystemNonceAuthorizeRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 type SystemNonceAuthorizeResponse struct {
-	Transaction        string   `json:"transaction"`
-	Message            string   `json:"message"`
-	RecentBlockhash    string   `json:"recent_blockhash"`
-	AccountKeys        []string `json:"account_keys"`
-	Signers            []string `json:"signers"`
-	TargetNonceAccount string   `json:"target_nonce_account"`
-	Authority          string   `json:"authority"`
-	NewAuthority       string   `json:"new_authority"`
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+	NonceAccount    string   `json:"nonce_account"`
+	Authority       string   `json:"authority"`
+	NewAuthority    string   `json:"new_authority"`
 
-	// NonceAuthority belongs to the account named in the request's
-	// nonce_account, not to the target, and is present only when one was
-	// named. Authority above is the target's.
+	// NonceAuthority is present only when the transaction was built against a
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
+	// stored value rather than a fetched blockhash. It belongs to
+	// durable_nonce_account, not to NonceAccount — Authority above is
+	// NonceAccount's, before this transaction lands.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Fee string `json:"fee"`
+	Fee SystemPayer `json:"fee"`
 }
 
-func NewSystemNonceAuthorizeResponse(tx *types.Transaction, raw, message []byte, targetNonceAccount, authority, newAuthority, nonceAuthority *types.PublicKey, fee uint64) *SystemNonceAuthorizeResponse {
+func NewSystemNonceAuthorizeResponse(tx *types.Transaction, raw, message []byte, nonceAccount, authority, newAuthority, feePayer, nonceAuthority *types.PublicKey, fee uint64) *SystemNonceAuthorizeResponse {
 	nonceAuthorityBase58 := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuthorityBase58 = nonceAuthority.Base58()
@@ -2710,16 +2918,16 @@ func NewSystemNonceAuthorizeResponse(tx *types.Transaction, raw, message []byte,
 	}
 
 	return &SystemNonceAuthorizeResponse{
-		Transaction:        codec.Base64.Encode(raw),
-		Message:            codec.Base64.Encode(message),
-		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:        keys,
-		Signers:            signers,
-		TargetNonceAccount: targetNonceAccount.Base58(),
-		Authority:          authority.Base58(),
-		NewAuthority:       newAuthority.Base58(),
-		NonceAuthority:     nonceAuthorityBase58,
-		Fee:                strconv.FormatUint(fee, 10),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAccount:    nonceAccount.Base58(),
+		Authority:       authority.Base58(),
+		NewAuthority:    newAuthority.Base58(),
+		NonceAuthority:  nonceAuthorityBase58,
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
@@ -2734,77 +2942,103 @@ func NewSystemNonceAuthorizeResponse(tx *types.Transaction, raw, message []byte,
 // current version for a long time, so only accounts predating that change are
 // Legacy, and no instruction can produce one now.
 type SystemNonceUpgradeRequest struct {
-	// TargetNonceAccount is the Legacy account being migrated. It is named
-	// apart from NonceAccount because both are nonce accounts and only their
-	// roles differ: this one is what the instruction acts on, that one is what
-	// the transaction is built against.
-	TargetNonceAccount string `json:"target_nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	// NonceAccount is the Legacy account being migrated. It is named apart
+	// from DurableNonceAccount because both name a nonce account, and only
+	// their roles differ: this one is what the instruction acts on, that one
+	// is only what prices and expiry-proofs the transaction.
+	NonceAccount string `json:"nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	// It has to be an account other than the target, which is Legacy and so
-	// not something to build against.
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	targetNonceAccount *types.PublicKey
-	feePayer           *types.PublicKey
-	nonceAccount       *types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice. It has to be an account other than NonceAccount, which is
+	// Legacy and so not something to build against.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	na  *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
 }
 
 func (r *SystemNonceUpgradeRequest) ValidateRequest() error {
 	var err error
-	if r.targetNonceAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TargetNonceAccount)); err != nil {
-		return errors.New("target_nonce_account: " + err.Error())
+	if r.na, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NonceAccount)); err != nil {
+		return errors.New("nonce_account: " + err.Error())
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
-		if r.nonceAccount.Equal(r.targetNonceAccount) {
-			return errors.New("nonce_account: cannot be the target, which is being migrated by this same transaction")
+		if r.dna.Equal(r.na) {
+			return errors.New("durable_nonce_account: cannot be nonce_account, which is being migrated by this same transaction")
 		}
 	}
 
 	return nil
 }
 
-func (r *SystemNonceUpgradeRequest) TargetNonceAccountKey() *types.PublicKey {
-	return r.targetNonceAccount
+func (r *SystemNonceUpgradeRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemNonceUpgradeRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemNonceUpgradeRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+	return r.na
 }
 
 func (r *SystemNonceUpgradeRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 type SystemNonceUpgradeResponse struct {
-	Transaction        string   `json:"transaction"`
-	Message            string   `json:"message"`
-	RecentBlockhash    string   `json:"recent_blockhash"`
-	AccountKeys        []string `json:"account_keys"`
-	Signers            []string `json:"signers"`
-	TargetNonceAccount string   `json:"target_nonce_account"`
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+	NonceAccount    string   `json:"nonce_account"`
 
-	// NonceAuthority belongs to the account named in the request's
-	// nonce_account, and is present only when one was named. The target has an
+	// NonceAuthority is present only when the transaction was built against a
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries
+	// a stored value rather than a fetched blockhash. NonceAccount has an
 	// authority too, but nothing signs for an upgrade, so it is not reported.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Version uint32 `json:"version"`
-	Fee     string `json:"fee"`
+	Version uint32      `json:"version"`
+	Fee     SystemPayer `json:"fee"`
 }
 
-func NewSystemNonceUpgradeResponse(tx *types.Transaction, raw, message []byte, targetNonceAccount, nonceAuthority *types.PublicKey, version uint32, fee uint64) *SystemNonceUpgradeResponse {
+func NewSystemNonceUpgradeResponse(tx *types.Transaction, raw, message []byte, nonceAccount, feePayer, nonceAuthority *types.PublicKey, version uint32, fee uint64) *SystemNonceUpgradeResponse {
 	nonceAuthorityBase58 := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuthorityBase58 = nonceAuthority.Base58()
@@ -2821,14 +3055,14 @@ func NewSystemNonceUpgradeResponse(tx *types.Transaction, raw, message []byte, t
 	}
 
 	return &SystemNonceUpgradeResponse{
-		Transaction:        codec.Base64.Encode(raw),
-		Message:            codec.Base64.Encode(message),
-		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:        keys,
-		Signers:            signers,
-		TargetNonceAccount: targetNonceAccount.Base58(),
-		NonceAuthority:     nonceAuthorityBase58,
-		Version:            version,
-		Fee:                strconv.FormatUint(fee, 10),
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAccount:    nonceAccount.Base58(),
+		NonceAuthority:  nonceAuthorityBase58,
+		Version:         version,
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }

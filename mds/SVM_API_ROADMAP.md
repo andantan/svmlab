@@ -803,6 +803,15 @@ account/program-accounts
 account/history
 ~~~
 
+Rough idea, not v2, not scheduled: a seed-based durable nonce account
+convenience endpoint — `seed/create-account` + `seed/allocate` (80 bytes) +
+`nonce/initialize` bundled into one call, the seed-derived counterpart to
+`nonce/create-account`. Advancing a nonce only ever checks the authority's
+signature, never the nonce account's own, so a seed-derived (keyless) address
+works as a durable nonce account today via that three-call chain — this
+would just be the one-shot convenience wrapper. Belongs in a later, more
+composed API generation (v4/v5-ish) rather than this low-level v2 pass.
+
 ## Recommended expanded sequence
 
 ~~~text

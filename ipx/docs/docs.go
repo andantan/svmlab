@@ -2888,7 +2888,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/system/transfer/spread": {
             "post": {
-                "description": "Assembles one Transfer instruction per recipient, all leaving the same account, in a single transaction. This is the first endpoint to carry an arbitrary number of instructions, so it is the first bounded by transaction size rather than by anything it checks: a transaction travels in one 1232-byte packet and cannot be split, which caps the list somewhere around twenty and is reported as size and size_limit. The account keys show fewer entries than instructions, since the sender and the System Program appear in every one and a compiled message lists each key once. There is no max variant, because sending everything one account holds does not say how to divide it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. A recipient is not required to exist yet, but if it does not, its lamports must be at least the rent-exemption minimum, since the runtime will not create an account below it.",
+                "description": "Assembles one Transfer instruction per recipient, all leaving the same account and all landing on accounts that already exist, in a single transaction. This is the first endpoint to carry an arbitrary number of instructions, so it is the first bounded by transaction size rather than by anything it checks: a transaction travels in one 1232-byte packet and cannot be split, which caps the list somewhere around twenty and is reported as size and size_limit. The account keys show fewer entries than instructions, since the sender and the System Program appear in every one and a compiled message lists each key once. There is no max variant, because sending everything one account holds does not say how to divide it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2901,7 +2901,7 @@ const docTemplate = `{
                 "summary": "Build one transaction paying several recipients",
                 "parameters": [
                     {
-                        "description": "Sender, recipients with amounts, and fee payer",
+                        "description": "Funding payer, recipients with amounts, and fee payer",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -7674,12 +7674,12 @@ const docTemplate = `{
                     "example": ""
                 },
                 "fee_payer": {
-                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as From, in which case the fee is deducted from its balance\nalongside every transfer.",
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as FundingPayer, in which case the fee is deducted from its\nbalance alongside every transfer.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "from": {
-                    "description": "From is the account debited for every transfer. It signs the\ntransaction as the transfer authority, whether or not it also pays the\nfee.",
+                "funding_payer": {
+                    "description": "FundingPayer is the account debited for every transfer. It signs the\ntransaction as the transfer authority, whether or not it also pays the\nfee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -7708,7 +7708,15 @@ const docTemplate = `{
                     }
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "funding": {
+                    "description": "Funding is the funding_payer's total spend across every transfer.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
                 },
                 "message": {
                     "type": "string"
@@ -7733,12 +7741,6 @@ const docTemplate = `{
                 "size_limit": {
                     "type": "integer"
                 },
-                "total_lamports": {
-                    "type": "string"
-                },
-                "total_sol": {
-                    "type": "string"
-                },
                 "transaction": {
                     "type": "string"
                 },
@@ -7754,12 +7756,12 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "lamports": {
-                    "description": "Lamports is the raw amount moved from the request's From to To.",
+                    "description": "Lamports is the raw amount moved from the request's FundingPayer to\nRecipientAccount.",
                     "type": "string",
                     "example": "100000000"
                 },
-                "to": {
-                    "description": "To is the account credited. It is not required to exist yet, but if it\ndoes not, Lamports must be at least the rent-exemption minimum, since\nthe runtime will not create an account below it.",
+                "recipient_account": {
+                    "description": "RecipientAccount is the account credited. It must already exist: this\nis a plain transfer between accounts, not a way to bring a new one\ninto existence.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
@@ -7771,10 +7773,10 @@ const docTemplate = `{
                 "lamports": {
                     "type": "string"
                 },
-                "sol": {
+                "recipient_account": {
                     "type": "string"
                 },
-                "to": {
+                "sol": {
                     "type": "string"
                 }
             }

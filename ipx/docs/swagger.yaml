@@ -2752,13 +2752,13 @@ definitions:
       fee_payer:
         description: |-
           FeePayer signs and pays the transaction fee. It may be the same
-          account as From, in which case the fee is deducted from its balance
-          alongside every transfer.
+          account as FundingPayer, in which case the fee is deducted from its
+          balance alongside every transfer.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
-      from:
+      funding_payer:
         description: |-
-          From is the account debited for every transfer. It signs the
+          FundingPayer is the account debited for every transfer. It signs the
           transaction as the transfer authority, whether or not it also pays the
           fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
@@ -2796,7 +2796,11 @@ definitions:
           type: string
         type: array
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
+      funding:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: Funding is the funding_payer's total spend across every transfer.
       message:
         type: string
       nonce_authority:
@@ -2820,10 +2824,6 @@ definitions:
         type: integer
       size_limit:
         type: integer
-      total_lamports:
-        type: string
-      total_sol:
-        type: string
       transaction:
         type: string
       transfers:
@@ -2834,14 +2834,16 @@ definitions:
   v2.SystemTransferSpreadTarget:
     properties:
       lamports:
-        description: Lamports is the raw amount moved from the request's From to To.
+        description: |-
+          Lamports is the raw amount moved from the request's FundingPayer to
+          RecipientAccount.
         example: "100000000"
         type: string
-      to:
+      recipient_account:
         description: |-
-          To is the account credited. It is not required to exist yet, but if it
-          does not, Lamports must be at least the rent-exemption minimum, since
-          the runtime will not create an account below it.
+          RecipientAccount is the account credited. It must already exist: this
+          is a plain transfer between accounts, not a way to bring a new one
+          into existence.
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
@@ -2849,9 +2851,9 @@ definitions:
     properties:
       lamports:
         type: string
-      sol:
+      recipient_account:
         type: string
-      to:
+      sol:
         type: string
     type: object
   v2.ThawAccountRequest:
@@ -5289,25 +5291,24 @@ paths:
       consumes:
       - application/json
       description: 'Assembles one Transfer instruction per recipient, all leaving
-        the same account, in a single transaction. This is the first endpoint to carry
-        an arbitrary number of instructions, so it is the first bounded by transaction
-        size rather than by anything it checks: a transaction travels in one 1232-byte
-        packet and cannot be split, which caps the list somewhere around twenty and
-        is reported as size and size_limit. The account keys show fewer entries than
-        instructions, since the sender and the System Program appear in every one
-        and a compiled message lists each key once. There is no max variant, because
-        sending everything one account holds does not say how to divide it. recent_blockhash
-        is always required and is never fetched server-side. Left alone, it also builds
-        the message and expires whenever the runtime says it does. Naming durable_nonce_account
-        builds the message against the value that account stores instead, so the transaction
+        the same account and all landing on accounts that already exist, in a single
+        transaction. This is the first endpoint to carry an arbitrary number of instructions,
+        so it is the first bounded by transaction size rather than by anything it
+        checks: a transaction travels in one 1232-byte packet and cannot be split,
+        which caps the list somewhere around twenty and is reported as size and size_limit.
+        The account keys show fewer entries than instructions, since the sender and
+        the System Program appear in every one and a compiled message lists each key
+        once. There is no max variant, because sending everything one account holds
+        does not say how to divide it. recent_blockhash is always required and is
+        never fetched server-side. Left alone, it also builds the message and expires
+        whenever the runtime says it does. Naming durable_nonce_account builds the
+        message against the value that account stores instead, so the transaction
         never expires, and prepends the advance that consumes it as the first instruction;
         recent_blockhash then only prices the transaction, since a nonce is never
         among the cluster''s recent blockhashes. The response reports nonce_authority
-        in that case, which has to sign as well. A recipient is not required to exist
-        yet, but if it does not, its lamports must be at least the rent-exemption
-        minimum, since the runtime will not create an account below it.'
+        in that case, which has to sign as well.'
       parameters:
-      - description: Sender, recipients with amounts, and fee payer
+      - description: Funding payer, recipients with amounts, and fee payer
         in: body
         name: body
         required: true

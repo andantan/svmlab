@@ -386,11 +386,11 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 
 // SystemTransferSpread godoc
 // @Summary      Build one transaction paying several recipients
-// @Description  Assembles one Transfer instruction per recipient, all leaving the same account, in a single transaction. This is the first endpoint to carry an arbitrary number of instructions, so it is the first bounded by transaction size rather than by anything it checks: a transaction travels in one 1232-byte packet and cannot be split, which caps the list somewhere around twenty and is reported as size and size_limit. The account keys show fewer entries than instructions, since the sender and the System Program appear in every one and a compiled message lists each key once. There is no max variant, because sending everything one account holds does not say how to divide it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. A recipient is not required to exist yet, but if it does not, its lamports must be at least the rent-exemption minimum, since the runtime will not create an account below it.
+// @Description  Assembles one Transfer instruction per recipient, all leaving the same account and all landing on accounts that already exist, in a single transaction. This is the first endpoint to carry an arbitrary number of instructions, so it is the first bounded by transaction size rather than by anything it checks: a transaction travels in one 1232-byte packet and cannot be split, which caps the list somewhere around twenty and is reported as size and size_limit. The account keys show fewer entries than instructions, since the sender and the System Program appear in every one and a compiled message lists each key once. There is no max variant, because sending everything one account holds does not say how to divide it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-system-transfer
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemTransferSpreadRequest  true  "Sender, recipients with amounts, and fee payer"
+// @Param        body  body      SystemTransferSpreadRequest  true  "Funding payer, recipients with amounts, and fee payer"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemTransferSpreadResponse
@@ -413,20 +413,40 @@ func (h *SystemTransactionHandler) SystemTransferSpread(w http.ResponseWriter, r
 		return
 	}
 
-	// recent_blockhash is always caller-supplied now; there is no server-side
-	// fetch behind it. Without a nonce it also builds the message. With one,
-	// it is used only to price the message below, since a nonce is never
-	// among the cluster's recent blockhashes and pricing against one directly
-	// comes back expired.
-	blockhash := req.Blockhash()
+	// Every account this handler ever needs is read in one round trip.
+	// funding_payer and fee_payer are frequently the same key under
+	// different roles, and batching rather than fetching each alone is what
+	// makes that overlap cheap instead of redundant reads.
+	targets := req.Targets()
+	lookups := make([]*types.PublicKey, 0, len(targets)+3)
+	lookups = append(lookups, req.FundingPayerKey(), req.FeePayerKey())
+	for i := range targets {
+		lookups = append(lookups, targets[i].RecipientAccountKey())
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	// This is a plain balance transfer, not a way to create an account: every
+	// recipient has to already be there.
+	for i := range targets {
+		if !accounts[targets[i].RecipientAccountKey().Base58()].Exists() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("transfers[%d].recipient_account: %s does not exist", i, targets[i].RecipientAccountKey()))
+			return
+		}
+	}
 
 	// One instruction per recipient, in the order they were given. The order
 	// is kept rather than sorted because it is what the caller will read back
 	// in the response, and the runtime executes them in it.
-	targets := req.Targets()
 	ixs := make([]*types.Instruction, 0, len(targets))
 	for i := range targets {
-		ix, err := core.System.Transfer(req.FromKey(), targets[i].ToKey(), targets[i].ToLamports())
+		ix, err := core.System.Transfer(req.FundingPayerKey(), targets[i].RecipientAccountKey(), targets[i].ToLamports())
 		if err != nil {
 			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("transfers[%d]: %s", i, err))
 			return
@@ -445,18 +465,13 @@ func (h *SystemTransactionHandler) SystemTransferSpread(w http.ResponseWriter, r
 		nonceAuthority *types.PublicKey
 	)
 	if req.DurableNonceAccountKey().IsNil() {
-		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		priced = message
 	} else {
-		info, err := chain.Cli.AccountInfo(r.Context(), req.DurableNonceAccountKey(), rpc.CommitmentConfirmed)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
-			return
-		}
-		nonce, err := info.NonceAccount()
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
 		if err != nil {
 			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
 			return
@@ -476,7 +491,7 @@ func (h *SystemTransactionHandler) SystemTransferSpread(w http.ResponseWriter, r
 		// real message comes back as expired. The fee follows from the
 		// signature count and any compute budget instructions, never from the
 		// blockhash, so the same shape against a live one prices it exactly.
-		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -493,9 +508,7 @@ func (h *SystemTransactionHandler) SystemTransferSpread(w http.ResponseWriter, r
 	// Serializing here rather than at the end, which is where every other
 	// endpoint does it, because this is where the size limit is enforced and
 	// this is the only endpoint that can reach it. A request naming too many
-	// recipients is refused before it costs a fee lookup and three balance
-	// reads, and the error names the byte count rather than a recipient count
-	// that would only ever be an estimate.
+	// recipients is refused before it costs a fee lookup.
 	raw, err := tx.Serialize()
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
@@ -520,60 +533,27 @@ func (h *SystemTransactionHandler) SystemTransferSpread(w http.ResponseWriter, r
 		return
 	}
 
-	// A recipient that does not exist yet is the same rule from the other
-	// side: the runtime will not create an account below the rent-exemption
-	// minimum, so a target that small is caught here instead of failing once
-	// sent.
-	for i := range targets {
-		toExists, err := chain.Cli.Exists(r.Context(), targets[i].ToKey(), rpc.CommitmentConfirmed)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read recipient account: %s", err))
-			return
-		}
-		if !toExists && targets[i].ToLamports() < minRent {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("transfers[%d].lamports: %d is below the %d lamport rent-exemption minimum required to create %s", i, targets[i].ToLamports(), minRent, targets[i].ToKey()))
-			return
-		}
+	// funding_payer and fee_payer may be the same account wearing two hats,
+	// so what each distinct key owes is summed by address rather than
+	// checked once per role.
+	spent := map[string]uint64{
+		req.FundingPayerKey().Base58(): 0,
+		req.FeePayerKey().Base58():     0,
 	}
+	spent[req.FundingPayerKey().Base58()] += req.Total()
+	spent[req.FeePayerKey().Base58()] += fee
 
-	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance: %s", err))
-		return
-	}
-
-	spent := req.Total()
-	if req.FromKey().Equal(req.FeePayerKey()) {
-		// The total was already checked for overflow, but adding the fee to a
-		// total near the top of a u64 could still wrap, and a wrapped figure
-		// would read as affordable.
-		if spent+fee < spent {
-			handler.WriteError(w, http.StatusBadRequest, "transfers: the total plus the fee exceeds what a u64 can hold")
+	for payer, amount := range spent {
+		var balance uint64
+		if info := accounts[payer]; info.Exists() {
+			balance = info.Lamports
+		}
+		if balance < amount {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: balance %d does not cover %d", payer, balance, amount))
 			return
 		}
-		spent += fee
-	}
-	if balance < spent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("transfers: balance %d lamports does not cover %d lamports", balance, spent))
-		return
-	}
-	if !types.RentExemptAfter(balance, spent, minRent) {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("transfers: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FromKey(), balance-spent, minRent))
-		return
-	}
-
-	if !req.FromKey().Equal(req.FeePayerKey()) {
-		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
-			return
-		}
-		if feePayerBalance < fee {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
-			return
-		}
-		if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		if !types.RentExemptAfter(balance, amount, minRent) {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: would leave %d lamports, below the %d lamport rent-exemption minimum", payer, balance-amount, minRent))
 			return
 		}
 	}
@@ -585,7 +565,7 @@ func (h *SystemTransactionHandler) SystemTransferSpread(w http.ResponseWriter, r
 	}
 
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
-	handler.WriteOK(w, NewSystemTransferSpreadResponse(tx, raw, messageBytes, nonceAuthority, targets, req.Total(), fee))
+	handler.WriteOK(w, NewSystemTransferSpreadResponse(tx, raw, messageBytes, req.FundingPayerKey(), req.FeePayerKey(), nonceAuthority, targets, req.Total(), fee))
 }
 
 // SystemCreateAccount godoc

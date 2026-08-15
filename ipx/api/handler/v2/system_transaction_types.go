@@ -335,20 +335,21 @@ func NewSystemTransferMaxResponse(tx *types.Transaction, raw, message []byte, fu
 // limit. There is no per-entry sender: every transfer here leaves the same
 // account, which is what keeps the signer count at one or two.
 type SystemTransferSpreadTarget struct {
-	// To is the account credited. It is not required to exist yet, but if it
-	// does not, Lamports must be at least the rent-exemption minimum, since
-	// the runtime will not create an account below it.
-	To string `json:"to" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	// RecipientAccount is the account credited. It must already exist: this
+	// is a plain transfer between accounts, not a way to bring a new one
+	// into existence.
+	RecipientAccount string `json:"recipient_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
-	// Lamports is the raw amount moved from the request's From to To.
+	// Lamports is the raw amount moved from the request's FundingPayer to
+	// RecipientAccount.
 	Lamports string `json:"lamports" example:"100000000"`
 
-	t *types.PublicKey
-	l uint64
+	ra *types.PublicKey
+	l  uint64
 }
 
-func (t *SystemTransferSpreadTarget) ToKey() *types.PublicKey {
-	return t.t
+func (t *SystemTransferSpreadTarget) RecipientAccountKey() *types.PublicKey {
+	return t.ra
 }
 
 func (t *SystemTransferSpreadTarget) ToLamports() uint64 {
@@ -362,10 +363,10 @@ func (t *SystemTransferSpreadTarget) ToLamports() uint64 {
 // amount, and there is no reading of how it should be divided among several
 // recipients.
 type SystemTransferSpreadRequest struct {
-	// From is the account debited for every transfer. It signs the
+	// FundingPayer is the account debited for every transfer. It signs the
 	// transaction as the transfer authority, whether or not it also pays the
 	// fee.
-	From string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	FundingPayer string `json:"funding_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
 	// Transfers lists the recipients and their amounts, in the order the
 	// instructions are executed and the response echoes them back. There is
@@ -373,8 +374,8 @@ type SystemTransferSpreadRequest struct {
 	Transfers []SystemTransferSpreadTarget `json:"transfers"`
 
 	// FeePayer signs and pays the transaction fee. It may be the same
-	// account as From, in which case the fee is deducted from its balance
-	// alongside every transfer.
+	// account as FundingPayer, in which case the fee is deducted from its
+	// balance alongside every transfer.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
 	// RecentBlockhash is always required, and there is no server-side fetch
@@ -395,7 +396,7 @@ type SystemTransferSpreadRequest struct {
 	// than a choice.
 	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
-	f   *types.PublicKey
+	fup *types.PublicKey
 	fp  *types.PublicKey
 	rbh *types.Hash
 	dna *types.PublicKey
@@ -404,8 +405,8 @@ type SystemTransferSpreadRequest struct {
 
 func (r *SystemTransferSpreadRequest) ValidateRequest() error {
 	var err error
-	if r.f, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
-		return errors.New("from: " + err.Error())
+	if r.fup, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FundingPayer)); err != nil {
+		return errors.New("funding_payer: " + err.Error())
 	}
 	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -441,16 +442,16 @@ func (r *SystemTransferSpreadRequest) ValidateRequest() error {
 	for i := range r.Transfers {
 		t := &r.Transfers[i]
 
-		if t.t, err = types.NewPublicKeyFromBase58(strings.TrimSpace(t.To)); err != nil {
-			return fmt.Errorf("transfers[%d].to: %s", i, err)
+		if t.ra, err = types.NewPublicKeyFromBase58(strings.TrimSpace(t.RecipientAccount)); err != nil {
+			return fmt.Errorf("transfers[%d].recipient_account: %s", i, err)
 		}
-		if r.f.Equal(t.t) {
-			return fmt.Errorf("transfers[%d].to: is the sender", i)
+		if r.fup.Equal(t.ra) {
+			return fmt.Errorf("transfers[%d].recipient_account: is the funding_payer", i)
 		}
-		if first, ok := seen[t.t.Base58()]; ok {
-			return fmt.Errorf("transfers[%d].to: already named by transfers[%d]", i, first)
+		if first, ok := seen[t.ra.Base58()]; ok {
+			return fmt.Errorf("transfers[%d].recipient_account: already named by transfers[%d]", i, first)
 		}
-		seen[t.t.Base58()] = i
+		seen[t.ra.Base58()] = i
 
 		lamports := strings.TrimSpace(t.Lamports)
 		if lamports == "" {
@@ -484,8 +485,8 @@ func (r *SystemTransferSpreadRequest) Blockhash() *types.Hash {
 	return r.rbh
 }
 
-func (r *SystemTransferSpreadRequest) FromKey() *types.PublicKey {
-	return r.f
+func (r *SystemTransferSpreadRequest) FundingPayerKey() *types.PublicKey {
+	return r.fup
 }
 
 func (r *SystemTransferSpreadRequest) FeePayerKey() *types.PublicKey {
@@ -502,12 +503,12 @@ func (r *SystemTransferSpreadRequest) Total() uint64 {
 	return r.tot
 }
 
-// SystemTransferSpreadTargetResponse echoes one recipient with its amount in SOL
-// beside the lamport count.
+// SystemTransferSpreadTargetResponse echoes one recipient with its amount in
+// SOL beside the lamport count.
 type SystemTransferSpreadTargetResponse struct {
-	To       string `json:"to"`
-	Lamports string `json:"lamports"`
-	SOL      string `json:"sol"`
+	RecipientAccount string `json:"recipient_account"`
+	Lamports         string `json:"lamports"`
+	SOL              string `json:"sol"`
 }
 
 type SystemTransferSpreadResponse struct {
@@ -529,10 +530,12 @@ type SystemTransferSpreadResponse struct {
 	// stored value rather than a fetched blockhash.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Transfers     []SystemTransferSpreadTargetResponse `json:"transfers"`
-	TotalLamports string                               `json:"total_lamports"`
-	TotalSOL      string                               `json:"total_sol"`
-	Fee           string                               `json:"fee"`
+	Transfers []SystemTransferSpreadTargetResponse `json:"transfers"`
+
+	// Funding is the funding_payer's total spend across every transfer.
+	Funding SystemPayer `json:"funding"`
+
+	Fee SystemPayer `json:"fee"`
 
 	// Size and SizeLimit are what bounds this endpoint. A transaction travels
 	// in one packet and cannot be split, so the recipient count is really a
@@ -542,7 +545,7 @@ type SystemTransferSpreadResponse struct {
 	SizeLimit int `json:"size_limit"`
 }
 
-func NewSystemTransferSpreadResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, targets []SystemTransferSpreadTarget, total, fee uint64) *SystemTransferSpreadResponse {
+func NewSystemTransferSpreadResponse(tx *types.Transaction, raw, message []byte, fundingPayer, feePayer, nonceAuthority *types.PublicKey, targets []SystemTransferSpreadTarget, total, fee uint64) *SystemTransferSpreadResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
@@ -561,9 +564,9 @@ func NewSystemTransferSpreadResponse(tx *types.Transaction, raw, message []byte,
 	transfers := make([]SystemTransferSpreadTargetResponse, len(targets))
 	for i := range targets {
 		transfers[i] = SystemTransferSpreadTargetResponse{
-			To:       targets[i].ToKey().Base58(),
-			Lamports: strconv.FormatUint(targets[i].ToLamports(), 10),
-			SOL:      types.LamportsToSol(targets[i].ToLamports()),
+			RecipientAccount: targets[i].RecipientAccountKey().Base58(),
+			Lamports:         strconv.FormatUint(targets[i].ToLamports(), 10),
+			SOL:              types.LamportsToSol(targets[i].ToLamports()),
 		}
 	}
 
@@ -575,9 +578,8 @@ func NewSystemTransferSpreadResponse(tx *types.Transaction, raw, message []byte,
 		Signers:         signers,
 		NonceAuthority:  authority,
 		Transfers:       transfers,
-		TotalLamports:   strconv.FormatUint(total, 10),
-		TotalSOL:        types.LamportsToSol(total),
-		Fee:             strconv.FormatUint(fee, 10),
+		Funding:         newSystemPayer(fundingPayer, total),
+		Fee:             newSystemPayer(feePayer, fee),
 		Size:            len(raw),
 		SizeLimit:       types.MaxTransactionSize,
 	}

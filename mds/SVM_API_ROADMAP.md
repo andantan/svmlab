@@ -15,6 +15,23 @@ account model -> deterministic addresses -> assets -> application state
 Core and endpoints had come apart around Token's freeze and thaw builders, the
 same shape the first lifecycle was in before it shipped; that gap is closed.
 
+System Program's "done" row is being re-walked endpoint by endpoint for field
+fidelity against the real `SystemInstruction` set: a low-level API plays one
+role per endpoint, so `transfer`/`transfer/max`/`transfer/spread` now require
+both sides to already exist, and `funding_payer`/`rent_payer`/`fee_payer` are
+the three roles any endpoint draws from. One finding from that pass changes
+what is possible, not just what is named: the System Program's `Transfer` (and
+`CreateAccount`'s internal lamport move) reject a `from` account outright if it
+carries any data, regardless of who owns it. Combined with `Allocate` being a
+one-time, non-shrinkable operation, a System-owned account allocated to an
+arbitrary size other than the 80-byte nonce layout has no recovery path within
+System Program at all — no `system/close-account` exists or can exist, since
+System Program itself has no generic close instruction. The only account shape
+System Program can un-stick this way is a nonce account (`nonce/initialize` +
+`nonce/withdraw`/`withdraw/max`, both already live); anything else needs a
+custom-deployed program to take ownership via `assign` and drain it directly,
+which is exactly the case Vault's `vault/close` is for below.
+
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion |
@@ -199,6 +216,11 @@ token vault:  ["vault-token", vault_state_pubkey, mint_pubkey]
 
 The program verifies authority, stored bump, mint, and destination. Token
 withdrawal performs a Token Program CPI with the vault PDA as authority.
+
+`vault/close` is also the first real example of a pattern System Program
+cannot offer on its own: reclaiming lamports from an account that carries
+data, by assigning it to a program that owns a drain/close instruction rather
+than relying on System's `Transfer` (see Current Status).
 
 Dependencies: PDA, Token, ATA.
 

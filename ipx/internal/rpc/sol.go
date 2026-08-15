@@ -68,6 +68,16 @@ func (a *AccountInfo) Exists() bool {
 	return a != nil
 }
 
+// CarriesData reports whether an account holds any data. The System Program's
+// Transfer instruction (and CreateAccount's internal lamport move) rejects a
+// `from` account outright if this is true, regardless of who owns it, so
+// callers naming a funding or rent payer check it on its own rather than
+// folding it into an ownership or existence check. A nil receiver carries no
+// data.
+func (a *AccountInfo) CarriesData() bool {
+	return a.Exists() && a.Space != 0
+}
+
 // IsNonceAccount reports whether this account is shaped like a nonce
 // account: owned by the System Program and sized for one. It does not check
 // whether the account is initialized — the data still has to be

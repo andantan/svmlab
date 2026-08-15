@@ -591,15 +591,6 @@ type SystemCreateAccountRequest struct {
 	// authorizes its creation. It must not already exist.
 	NewAccount string `json:"new_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
-	// Owner must be executable: only the owning program may debit an account
-	// or write its data, so an account handed to a plain address is locked
-	// from the moment it exists. Pass the System Program for an ordinary
-	// account.
-	Owner string `json:"owner" example:"11111111111111111111111111111111"`
-
-	// Space is the byte count allocated for NewAccount's data.
-	Space string `json:"space" example:"0"`
-
 	// FeePayer signs and pays the transaction fee. It may be the same
 	// account as RentPayer.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
@@ -623,28 +614,24 @@ type SystemCreateAccountRequest struct {
 	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
 	// RentPayer funds NewAccount's creation for exactly the rent-exemption
-	// minimum for Space — always, and only that amount. There is no way to
-	// fund it beyond that minimum here: this endpoint only ever brings an
-	// account into existence, and topping it up further is a separate
+	// minimum for a zero-byte account — always, and only that amount. There
+	// is no way to fund it beyond that minimum here: this endpoint only ever
+	// brings an account into existence, empty. Reserving space is a separate
+	// call to allocate, and topping up its balance further is a separate
 	// transfer.
 	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
 	na  *types.PublicKey
-	o   *types.PublicKey
 	fp  *types.PublicKey
 	rbh *types.Hash
 	dna *types.PublicKey
 	rp  *types.PublicKey
-	sp  uint64
 }
 
 func (r *SystemCreateAccountRequest) ValidateRequest() error {
 	var err error
 	if r.na, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewAccount)); err != nil {
 		return errors.New("new_account: " + err.Error())
-	}
-	if r.o, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
-		return errors.New("owner: " + err.Error())
 	}
 	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -678,17 +665,6 @@ func (r *SystemCreateAccountRequest) ValidateRequest() error {
 		return errors.New("rent_payer and new_account are the same account")
 	}
 
-	space := strings.TrimSpace(r.Space)
-	if space == "" {
-		return errors.New("space is required")
-	}
-	if r.sp, err = strconv.ParseUint(space, 10, 64); err != nil {
-		return errors.New("space: must be a decimal byte count")
-	}
-	if r.sp > core.MaxPermittedDataLength {
-		return fmt.Errorf("space: %d bytes exceeds the %d byte limit", r.sp, core.MaxPermittedDataLength)
-	}
-
 	return nil
 }
 
@@ -708,16 +684,8 @@ func (r *SystemCreateAccountRequest) NewAccountKey() *types.PublicKey {
 	return r.na
 }
 
-func (r *SystemCreateAccountRequest) OwnerKey() *types.PublicKey {
-	return r.o
-}
-
 func (r *SystemCreateAccountRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
-}
-
-func (r *SystemCreateAccountRequest) ToSpace() uint64 {
-	return r.sp
 }
 
 type SystemCreateAccountResponse struct {
@@ -733,16 +701,14 @@ type SystemCreateAccountResponse struct {
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
 	// Rent reports what funds CreateAccount itself. Its lamports are always
-	// exactly the rent-exemption minimum for Space, never more or less.
+	// exactly the rent-exemption minimum for a zero-byte account, never more
+	// or less.
 	Rent SystemPayer `json:"rent"`
 
 	Fee SystemPayer `json:"fee"`
-
-	Space uint64 `json:"space"`
-	Owner string `json:"owner"`
 }
 
-func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, owner, rentPayer, feePayer, nonceAuthority *types.PublicKey, rentLamports, space, fee uint64) *SystemCreateAccountResponse {
+func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, rentPayer, feePayer, nonceAuthority *types.PublicKey, rentLamports, fee uint64) *SystemCreateAccountResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
@@ -767,25 +733,54 @@ func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, 
 		NonceAuthority:  authority,
 		Rent:            newSystemPayer(rentPayer, rentLamports),
 		Fee:             newSystemPayer(feePayer, fee),
-		Space:           space,
-		Owner:           owner.Base58(),
 	}
 }
 
 type SystemAllocateRequest struct {
-	Account  string `json:"account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
-	Space    string `json:"space" example:"128"`
+	// Account must already exist, be owned by the System Program, and not
+	// already be allocated space — Allocate only ever sets a size once, on
+	// an account that does not yet have one.
+	Account string `json:"account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+
+	Space string `json:"space" example:"128"`
+
+	// FeePayer signs and pays the transaction fee. It may be the same
+	// account as RentPayer.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	account      *types.PublicKey
-	feePayer     *types.PublicKey
-	nonceAccount *types.PublicKey
-	space        uint64
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	// RentPayer covers the shortfall, if any, between Account's current
+	// balance and the rent-exemption minimum for Space: a transfer from
+	// RentPayer for exactly that shortfall is prepended ahead of the
+	// allocation. Required even when Account already holds enough and no
+	// such transfer ends up being built. It may be the same account as
+	// Account, but only when Account already holds enough on its own — a
+	// shortfall has nowhere to come from in that case.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	account *types.PublicKey
+	fp      *types.PublicKey
+	rbh     *types.Hash
+	dna     *types.PublicKey
+	rp      *types.PublicKey
+	space   uint64
 }
 
 func (r *SystemAllocateRequest) ValidateRequest() error {
@@ -793,14 +788,30 @@ func (r *SystemAllocateRequest) ValidateRequest() error {
 	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
 		return errors.New("account: " + err.Error())
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
+	}
+
+	rp := strings.TrimSpace(r.RentPayer)
+	if rp == "" {
+		return errors.New("rent_payer is required")
+	}
+	if r.rp, err = types.NewPublicKeyFromBase58(rp); err != nil {
+		return errors.New("rent_payer: " + err.Error())
 	}
 
 	space := strings.TrimSpace(r.Space)
@@ -820,8 +831,12 @@ func (r *SystemAllocateRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *SystemAllocateRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+func (r *SystemAllocateRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemAllocateRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemAllocateRequest) AccountKey() *types.PublicKey {
@@ -829,7 +844,11 @@ func (r *SystemAllocateRequest) AccountKey() *types.PublicKey {
 }
 
 func (r *SystemAllocateRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
+}
+
+func (r *SystemAllocateRequest) RentPayerKey() *types.PublicKey {
+	return r.rp
 }
 
 func (r *SystemAllocateRequest) ToSpace() uint64 {
@@ -850,15 +869,15 @@ type SystemAllocateResponse struct {
 
 	Space uint64 `json:"space"`
 
-	// RentExempt is the balance the account must hold once it is this size.
-	// Growing an account raises its floor, so a balance that was exempt
-	// before the call can stop being exempt after it.
-	RentExempt string `json:"rent_exempt"`
+	// Rent reports RentPayer and the shortfall it covered. Its lamports are
+	// zero, and no transfer was actually prepended, when Account's balance
+	// already reached the rent-exemption minimum for Space.
+	Rent SystemPayer `json:"rent"`
 
-	Fee string `json:"fee"`
+	Fee SystemPayer `json:"fee"`
 }
 
-func NewSystemAllocateResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, space, rentExempt, fee uint64) *SystemAllocateResponse {
+func NewSystemAllocateResponse(tx *types.Transaction, raw, message []byte, rentPayer, feePayer, nonceAuthority *types.PublicKey, space, rentLamports, fee uint64) *SystemAllocateResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
@@ -882,62 +901,97 @@ func NewSystemAllocateResponse(tx *types.Transaction, raw, message []byte, nonce
 		Signers:         signers,
 		NonceAuthority:  authority,
 		Space:           space,
-		RentExempt:      strconv.FormatUint(rentExempt, 10),
-		Fee:             strconv.FormatUint(fee, 10),
+		Rent:            newSystemPayer(rentPayer, rentLamports),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
 type SystemAssignRequest struct {
-	Account  string `json:"account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
-	Owner    string `json:"owner" example:"11111111111111111111111111111111"`
+	// Account must already exist and already be owned by the System Program:
+	// only the current owner may reassign an account, and the System Program
+	// is the only owner exposing this as a callable instruction.
+	Account string `json:"account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+
+	// Owner must be executable: only the owning program may debit an account
+	// or write its data, so an account handed to a plain address is locked
+	// permanently. Pass the System Program to leave it as an ordinary account.
+	Owner string `json:"owner" example:"11111111111111111111111111111111"`
+
+	// FeePayer signs and pays the transaction fee.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// NonceAccount may be left empty, in which case a recent blockhash is
-	// fetched and the transaction expires with it. Naming one builds against
-	// the value that account stores instead, so the transaction never expires.
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	account      *types.PublicKey
-	owner        *types.PublicKey
-	feePayer     *types.PublicKey
-	nonceAccount *types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	a   *types.PublicKey
+	o   *types.PublicKey
+	fp  *types.PublicKey
+	rbh *types.Hash
+	dna *types.PublicKey
 }
 
 func (r *SystemAssignRequest) ValidateRequest() error {
 	var err error
-	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+	if r.a, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
 		return errors.New("account: " + err.Error())
 	}
-	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+	if r.o, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
 		return errors.New("owner: " + err.Error())
 	}
-	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
 	return nil
 }
 
-func (r *SystemAssignRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+func (r *SystemAssignRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SystemAssignRequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
 func (r *SystemAssignRequest) AccountKey() *types.PublicKey {
-	return r.account
+	return r.a
 }
 
 func (r *SystemAssignRequest) OwnerKey() *types.PublicKey {
-	return r.owner
+	return r.o
 }
 
 func (r *SystemAssignRequest) FeePayerKey() *types.PublicKey {
-	return r.feePayer
+	return r.fp
 }
 
 type SystemAssignResponse struct {
@@ -952,11 +1006,11 @@ type SystemAssignResponse struct {
 	// stored value rather than a fetched blockhash.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Owner string `json:"owner"`
-	Fee   string `json:"fee"`
+	Owner string      `json:"owner"`
+	Fee   SystemPayer `json:"fee"`
 }
 
-func NewSystemAssignResponse(tx *types.Transaction, raw, message []byte, owner, nonceAuthority *types.PublicKey, fee uint64) *SystemAssignResponse {
+func NewSystemAssignResponse(tx *types.Transaction, raw, message []byte, owner, feePayer, nonceAuthority *types.PublicKey, fee uint64) *SystemAssignResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
@@ -980,7 +1034,7 @@ func NewSystemAssignResponse(tx *types.Transaction, raw, message []byte, owner, 
 		Signers:         signers,
 		NonceAuthority:  authority,
 		Owner:           owner.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 

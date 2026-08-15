@@ -11,19 +11,37 @@ import (
 	"github.com/andantan/svmlab/core/types"
 )
 
+// SystemPayer is one signer's contribution: who it is and what
+// it moved, in both units.
+type SystemPayer struct {
+	Payer    string `json:"payer"`
+	Lamports string `json:"lamports"`
+	SOL      string `json:"sol"`
+}
+
+func newSystemPayer(payer *types.PublicKey, lamports uint64) SystemPayer {
+	return SystemPayer{
+		Payer:    payer.Base58(),
+		Lamports: strconv.FormatUint(lamports, 10),
+		SOL:      types.LamportsToSol(lamports),
+	}
+}
+
 type SystemTransferRequest struct {
-	// From is the account debited. It signs the transaction as the transfer
-	// authority, whether or not it also pays the fee.
-	From string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	// FundingPayer is the account debited. It signs the transaction as the
+	// transfer authority, whether or not it also pays the fee.
+	FundingPayer string `json:"funding_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// To is the account credited. It is not required to exist yet.
-	To string `json:"to"   example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	// RecipientAccount is the account credited. It must already exist: this
+	// is a plain transfer between two accounts, not a way to bring a new one
+	// into existence.
+	RecipientAccount string `json:"recipient_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
-	// Lamports is the raw amount moved from From to To.
+	// Lamports is the raw amount moved from FundingPayer to RecipientAccount.
 	Lamports string `json:"lamports" example:"1000000"`
 
 	// FeePayer signs and pays the transaction fee. It may be the same
-	// account as From.
+	// account as FundingPayer.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
 	// RecentBlockhash is always required, and there is no server-side fetch
@@ -44,8 +62,8 @@ type SystemTransferRequest struct {
 	// than a choice.
 	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
-	f   *types.PublicKey
-	t   *types.PublicKey
+	fup *types.PublicKey
+	ra  *types.PublicKey
 	fp  *types.PublicKey
 	rbh *types.Hash
 	dna *types.PublicKey
@@ -54,14 +72,14 @@ type SystemTransferRequest struct {
 
 func (r *SystemTransferRequest) ValidateRequest() error {
 	var err error
-	if r.f, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
-		return errors.New("from: " + err.Error())
+	if r.fup, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FundingPayer)); err != nil {
+		return errors.New("funding_payer: " + err.Error())
 	}
-	if r.t, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.To)); err != nil {
-		return errors.New("to: " + err.Error())
+	if r.ra, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RecipientAccount)); err != nil {
+		return errors.New("recipient_account: " + err.Error())
 	}
-	if r.f.Equal(r.t) {
-		return errors.New("from and to are the same account")
+	if r.fup.Equal(r.ra) {
+		return errors.New("funding_payer and recipient_account are the same account")
 	}
 
 	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
@@ -96,12 +114,12 @@ func (r *SystemTransferRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *SystemTransferRequest) FromKey() *types.PublicKey {
-	return r.f
+func (r *SystemTransferRequest) FundingPayerKey() *types.PublicKey {
+	return r.fup
 }
 
-func (r *SystemTransferRequest) ToKey() *types.PublicKey {
-	return r.t
+func (r *SystemTransferRequest) RecipientAccountKey() *types.PublicKey {
+	return r.ra
 }
 
 func (r *SystemTransferRequest) DurableNonceAccountKey() *types.PublicKey {
@@ -120,18 +138,72 @@ func (r *SystemTransferRequest) ToLamports() uint64 {
 	return r.l
 }
 
-type SystemTransferMaxRequest struct {
-	// From is the account drained. It signs the transaction as the transfer
-	// authority, whether or not it also pays the fee.
-	From string `json:"from" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+// SystemTransferResponse mirrors the v1 build response so that sign and send
+// accept it unchanged, and adds the resolved amount and fee.
+type SystemTransferResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
 
-	// To is the account credited. It is not required to exist yet, but if it
-	// does not, the drained amount must be at least the rent-exemption
-	// minimum, since the runtime will not create an account below it.
-	To string `json:"to"   example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+	// NonceAuthority is present only when the transaction was built against a
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries
+	// a stored value rather than a fetched blockhash and the transaction does
+	// not expire. It is reported because the request never named it: advancing
+	// the nonce is the first instruction and that key has to sign, and the
+	// server read it off the account.
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	// Funding reports the transfer itself: who sent it and how much.
+	Funding SystemPayer `json:"funding"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewSystemTransferResponse(tx *types.Transaction, raw, message []byte, fundingPayer, feePayer, nonceAuthority *types.PublicKey, lamports, fee uint64) *SystemTransferResponse {
+	// Empty unless the transaction was built against a nonce, which is what
+	// makes the field double as the signal that it was.
+	authority := ""
+	if !nonceAuthority.IsNil() {
+		authority = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SystemTransferResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  authority,
+		Funding:         newSystemPayer(fundingPayer, lamports),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+type SystemTransferMaxRequest struct {
+	// FundingPayer is the account drained. It signs the transaction as the
+	// transfer authority, whether or not it also pays the fee.
+	FundingPayer string `json:"funding_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecipientAccount is the account credited. It must already exist: this
+	// is a plain transfer between two accounts, not a way to bring a new
+	// one into existence.
+	RecipientAccount string `json:"recipient_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
 	// FeePayer signs and pays the transaction fee. It may be the same
-	// account as From, in which case the fee is deducted from what is sent.
+	// account as FundingPayer, in which case the fee is deducted from what
+	// is sent.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
 	// RecentBlockhash is always required, and there is no server-side fetch
@@ -152,8 +224,8 @@ type SystemTransferMaxRequest struct {
 	// than a choice.
 	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
-	f   *types.PublicKey
-	t   *types.PublicKey
+	fup *types.PublicKey
+	ra  *types.PublicKey
 	fp  *types.PublicKey
 	rbh *types.Hash
 	dna *types.PublicKey
@@ -161,14 +233,14 @@ type SystemTransferMaxRequest struct {
 
 func (r *SystemTransferMaxRequest) ValidateRequest() error {
 	var err error
-	if r.f, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.From)); err != nil {
-		return errors.New("from: " + err.Error())
+	if r.fup, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FundingPayer)); err != nil {
+		return errors.New("funding_payer: " + err.Error())
 	}
-	if r.t, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.To)); err != nil {
-		return errors.New("to: " + err.Error())
+	if r.ra, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RecipientAccount)); err != nil {
+		return errors.New("recipient_account: " + err.Error())
 	}
-	if r.f.Equal(r.t) {
-		return errors.New("from and to are the same account")
+	if r.fup.Equal(r.ra) {
+		return errors.New("funding_payer and recipient_account are the same account")
 	}
 
 	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
@@ -200,16 +272,60 @@ func (r *SystemTransferMaxRequest) Blockhash() *types.Hash {
 	return r.rbh
 }
 
-func (r *SystemTransferMaxRequest) FromKey() *types.PublicKey {
-	return r.f
+func (r *SystemTransferMaxRequest) FundingPayerKey() *types.PublicKey {
+	return r.fup
 }
 
-func (r *SystemTransferMaxRequest) ToKey() *types.PublicKey {
-	return r.t
+func (r *SystemTransferMaxRequest) RecipientAccountKey() *types.PublicKey {
+	return r.ra
 }
 
 func (r *SystemTransferMaxRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
+}
+
+type SystemTransferMaxResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	// NonceAuthority is present only when the transaction was built against a
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
+	// stored value rather than a fetched blockhash.
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Funding SystemPayer `json:"funding"`
+	Fee     SystemPayer `json:"fee"`
+}
+
+func NewSystemTransferMaxResponse(tx *types.Transaction, raw, message []byte, fundingPayer, feePayer, nonceAuthority *types.PublicKey, lamports, fee uint64) *SystemTransferMaxResponse {
+	authority := ""
+	if !nonceAuthority.IsNil() {
+		authority = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SystemTransferMaxResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  authority,
+		Funding:         newSystemPayer(fundingPayer, lamports),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
 }
 
 // SystemTransferSpreadTarget is one recipient and what they receive.
@@ -467,108 +583,6 @@ func NewSystemTransferSpreadResponse(tx *types.Transaction, raw, message []byte,
 	}
 }
 
-// SystemTransferResponse mirrors the v1 build response so that sign and send
-// accept it unchanged, and adds the resolved amount and fee.
-type SystemTransferResponse struct {
-	Transaction     string   `json:"transaction"`
-	Message         string   `json:"message"`
-	RecentBlockhash string   `json:"recent_blockhash"`
-	AccountKeys     []string `json:"account_keys"`
-	Signers         []string `json:"signers"`
-
-	// NonceAuthority is present only when the transaction was built against a
-	// durable nonce, so it doubles as the signal that RecentBlockhash carries
-	// a stored value rather than a fetched blockhash and the transaction does
-	// not expire. It is reported because the request never named it: advancing
-	// the nonce is the first instruction and that key has to sign, and the
-	// server read it off the account.
-	NonceAuthority string `json:"nonce_authority,omitempty"`
-
-	// Lamports and Fee are strings for the same reason the request's lamports
-	// is: a JSON number is a float, so a lamport count past 2^53 would reach a
-	// JavaScript client already rounded.
-	Lamports string `json:"lamports"`
-	SOL      string `json:"sol"`
-	Fee      string `json:"fee"`
-}
-
-func NewSystemTransferResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, lamports, fee uint64) *SystemTransferResponse {
-	// Empty unless the transaction was built against a nonce, which is what
-	// makes the field double as the signal that it was.
-	authority := ""
-	if !nonceAuthority.IsNil() {
-		authority = nonceAuthority.Base58()
-	}
-
-	keys := make([]string, len(tx.Message.AccountKeys))
-	for i, k := range tx.Message.AccountKeys {
-		keys[i] = k.Base58()
-	}
-
-	signers := make([]string, tx.Message.NumSigners())
-	for i, k := range tx.Message.Signers() {
-		signers[i] = k.Base58()
-	}
-
-	return &SystemTransferResponse{
-		Transaction:     codec.Base64.Encode(raw),
-		Message:         codec.Base64.Encode(message),
-		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:     keys,
-		Signers:         signers,
-		NonceAuthority:  authority,
-		Lamports:        strconv.FormatUint(lamports, 10),
-		SOL:             types.LamportsToSol(lamports),
-		Fee:             strconv.FormatUint(fee, 10),
-	}
-}
-
-type SystemTransferMaxResponse struct {
-	Transaction     string   `json:"transaction"`
-	Message         string   `json:"message"`
-	RecentBlockhash string   `json:"recent_blockhash"`
-	AccountKeys     []string `json:"account_keys"`
-	Signers         []string `json:"signers"`
-
-	// NonceAuthority is present only when the transaction was built against a
-	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
-	// stored value rather than a fetched blockhash.
-	NonceAuthority string `json:"nonce_authority,omitempty"`
-
-	Lamports string `json:"lamports"`
-	SOL      string `json:"sol"`
-	Fee      string `json:"fee"`
-}
-
-func NewSystemTransferMaxResponse(tx *types.Transaction, raw, message []byte, nonceAuthority *types.PublicKey, lamports, fee uint64) *SystemTransferMaxResponse {
-	authority := ""
-	if !nonceAuthority.IsNil() {
-		authority = nonceAuthority.Base58()
-	}
-
-	keys := make([]string, len(tx.Message.AccountKeys))
-	for i, k := range tx.Message.AccountKeys {
-		keys[i] = k.Base58()
-	}
-
-	signers := make([]string, tx.Message.NumSigners())
-	for i, k := range tx.Message.Signers() {
-		signers[i] = k.Base58()
-	}
-
-	return &SystemTransferMaxResponse{
-		Transaction:     codec.Base64.Encode(raw),
-		Message:         codec.Base64.Encode(message),
-		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:     keys,
-		Signers:         signers,
-		NonceAuthority:  authority,
-		Lamports:        strconv.FormatUint(lamports, 10),
-		SOL:             types.LamportsToSol(lamports),
-		Fee:             strconv.FormatUint(fee, 10),
-	}
-}
-
 type SystemCreateAccountRequest struct {
 	// FundingPayer is the funder. It signs the transaction as the account
 	// debited, whether or not it also pays the fee.
@@ -758,32 +772,16 @@ type SystemCreateAccountResponse struct {
 	// request's lamports minus what Rent already covers, since together the
 	// two reach exactly that total. Its lamports are zero, and no such
 	// instruction is built, when Rent alone already reaches it.
-	Funding SystemCreateAccountPayer `json:"funding"`
+	Funding SystemPayer `json:"funding"`
 
 	// Rent reports what funds CreateAccount itself. Its lamports are always
 	// exactly the rent-exemption minimum for Space, never more or less.
-	Rent SystemCreateAccountPayer `json:"rent"`
+	Rent SystemPayer `json:"rent"`
 
-	Fee SystemCreateAccountPayer `json:"fee"`
+	Fee SystemPayer `json:"fee"`
 
 	Space uint64 `json:"space"`
 	Owner string `json:"owner"`
-}
-
-// SystemCreateAccountPayer is one signer's contribution: who it is and what
-// it moved, in both units.
-type SystemCreateAccountPayer struct {
-	Payer    string `json:"payer"`
-	Lamports string `json:"lamports"`
-	SOL      string `json:"sol"`
-}
-
-func newSystemCreateAccountPayer(payer *types.PublicKey, lamports uint64) SystemCreateAccountPayer {
-	return SystemCreateAccountPayer{
-		Payer:    payer.Base58(),
-		Lamports: strconv.FormatUint(lamports, 10),
-		SOL:      types.LamportsToSol(lamports),
-	}
 }
 
 func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, owner, fundingPayer, rentPayer, feePayer, nonceAuthority *types.PublicKey, fundingLamports, rentLamports, space, fee uint64) *SystemCreateAccountResponse {
@@ -809,9 +807,9 @@ func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, 
 		AccountKeys:     keys,
 		Signers:         signers,
 		NonceAuthority:  authority,
-		Funding:         newSystemCreateAccountPayer(fundingPayer, fundingLamports),
-		Rent:            newSystemCreateAccountPayer(rentPayer, rentLamports),
-		Fee:             newSystemCreateAccountPayer(feePayer, fee),
+		Funding:         newSystemPayer(fundingPayer, fundingLamports),
+		Rent:            newSystemPayer(rentPayer, rentLamports),
+		Fee:             newSystemPayer(feePayer, fee),
 		Space:           space,
 		Owner:           owner.Base58(),
 	}

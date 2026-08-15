@@ -22,11 +22,11 @@ func NewSystemTransactionHandler(cfg *config.Config) *SystemTransactionHandler {
 
 // SystemTransfer godoc
 // @Summary      Build a native SOL transfer
-// @Description  Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. The recipient is not required to exist yet, but if it does not, lamports must be at least the rent-exemption minimum, since the runtime will not create an account below it. To send the sender's entire balance, use transfer/max instead.
+// @Description  Assembles a System Program transfer between two existing accounts and returns the same shape as a v1 build, so sign and send accept it unchanged. recipient_account must already exist: this is a plain balance transfer, not a way to bring a new account into existence. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. To send the sender's entire balance, use transfer/max instead.
 // @Tags         v2-transaction-system-transfer
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemTransferRequest  true  "Sender, recipient, and lamports"
+// @Param        body  body      SystemTransferRequest  true  "Funding payer, recipient, and lamports"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemTransferResponse
@@ -49,7 +49,32 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 		return
 	}
 
-	ix, err := core.System.Transfer(req.FromKey(), req.ToKey(), req.ToLamports())
+	// Every account this handler ever needs is read in one round trip.
+	// funding_payer and fee_payer are frequently the same key under
+	// different roles, and batching rather than fetching each alone is what
+	// makes that overlap cheap instead of redundant reads.
+	lookups := []*types.PublicKey{
+		req.FundingPayerKey(),
+		req.FeePayerKey(),
+		req.RecipientAccountKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	// This is a plain balance transfer, not a way to create an account: the
+	// recipient has to already be there.
+	if !accounts[req.RecipientAccountKey().Base58()].Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("recipient_account: %s does not exist", req.RecipientAccountKey()))
+		return
+	}
+
+	ix, err := core.System.Transfer(req.FundingPayerKey(), req.RecipientAccountKey(), req.ToLamports())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -72,12 +97,7 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 		}
 		priced = message
 	} else {
-		info, err := chain.Cli.AccountInfo(r.Context(), req.DurableNonceAccountKey(), rpc.CommitmentConfirmed)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
-			return
-		}
-		nonce, err := info.NonceAccount()
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
 		if err != nil {
 			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
 			return
@@ -123,50 +143,27 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 		return
 	}
 
-	// A brand-new account is the same rule from the other side: the runtime
-	// will not create one below the rent-exemption minimum, so an amount that
-	// small is caught here instead of failing once sent.
-	toExists, err := chain.Cli.Exists(r.Context(), req.ToKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read recipient account: %s", err))
-		return
+	// funding_payer and fee_payer may be the same account wearing two hats,
+	// so what each distinct key owes is summed by address rather than
+	// checked once per role.
+	spent := map[string]uint64{
+		req.FundingPayerKey().Base58(): 0,
+		req.FeePayerKey().Base58():     0,
 	}
-	if !toExists && req.ToLamports() < minRent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: %d is below the %d lamport rent-exemption minimum required to create %s", req.ToLamports(), minRent, req.ToKey()))
-		return
-	}
+	spent[req.FundingPayerKey().Base58()] += req.ToLamports()
+	spent[req.FeePayerKey().Base58()] += fee
 
-	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance: %s", err))
-		return
-	}
-
-	spent := req.ToLamports()
-	if req.FromKey().Equal(req.FeePayerKey()) {
-		spent += fee
-	}
-	if balance < spent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: balance %d does not cover %d", balance, spent))
-		return
-	}
-	if !types.RentExemptAfter(balance, spent, minRent) {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FromKey(), balance-spent, minRent))
-		return
-	}
-
-	if !req.FromKey().Equal(req.FeePayerKey()) {
-		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+	for payer, amount := range spent {
+		var balance uint64
+		if info := accounts[payer]; info.Exists() {
+			balance = info.Lamports
+		}
+		if balance < amount {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: balance %d does not cover %d", payer, balance, amount))
 			return
 		}
-		if feePayerBalance < fee {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
-			return
-		}
-		if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		if !types.RentExemptAfter(balance, amount, minRent) {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: would leave %d lamports, below the %d lamport rent-exemption minimum", payer, balance-amount, minRent))
 			return
 		}
 	}
@@ -189,16 +186,16 @@ func (h *SystemTransactionHandler) SystemTransfer(w http.ResponseWriter, r *http
 		return
 	}
 
-	handler.WriteOK(w, NewSystemTransferResponse(tx, raw, messageBytes, nonceAuthority, req.ToLamports(), fee))
+	handler.WriteOK(w, NewSystemTransferResponse(tx, raw, messageBytes, req.FundingPayerKey(), req.FeePayerKey(), nonceAuthority, req.ToLamports(), fee))
 }
 
 // SystemTransferMax godoc
 // @Summary      Build a native SOL transfer of the sender's entire balance
-// @Description  Assembles a System Program transfer moving everything the sender can send. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. The recipient is not required to exist yet, but if it does not, the drained amount must be at least the rent-exemption minimum, since the runtime will not create an account below it.
+// @Description  Assembles a System Program transfer moving everything the sender can send, between two existing accounts. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it. recipient_account must already exist: this is a plain balance transfer, not a way to bring a new account into existence. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-system-transfer
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemTransferMaxRequest  true  "Sender and recipient"
+// @Param        body  body      SystemTransferMaxRequest  true  "Funding payer and recipient"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemTransferMaxResponse
@@ -221,23 +218,42 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 		return
 	}
 
+	// Every account this handler ever needs is read in one round trip.
+	// funding_payer and fee_payer are frequently the same key under
+	// different roles, and batching rather than fetching each alone is what
+	// makes that overlap cheap instead of redundant reads.
+	lookups := []*types.PublicKey{
+		req.FundingPayerKey(),
+		req.FeePayerKey(),
+		req.RecipientAccountKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	// This is a plain balance transfer, not a way to create an account: the
+	// recipient has to already be there.
+	if !accounts[req.RecipientAccountKey().Base58()].Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("recipient_account: %s does not exist", req.RecipientAccountKey()))
+		return
+	}
+
 	// Resolving the nonce comes before pricing rather than after, unlike every
 	// endpoint that knows its amount up front. Advancing the nonce is an extra
 	// instruction whose authority signs, so leaving it out of the probe would
-	// price a transaction with one signature too few. Resolving it once here
-	// and reusing it below avoids fetching the account twice.
+	// price a transaction with one signature too few.
 	var (
 		advance        *types.Instruction
 		nonceAccount   *core.NonceAccount
 		nonceAuthority *types.PublicKey
 	)
 	if !req.DurableNonceAccountKey().IsNil() {
-		info, err := chain.Cli.AccountInfo(r.Context(), req.DurableNonceAccountKey(), rpc.CommitmentConfirmed)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
-			return
-		}
-		if nonceAccount, err = info.NonceAccount(); err != nil {
+		if nonceAccount, err = accounts[req.DurableNonceAccountKey().Base58()].NonceAccount(); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
 			return
 		}
@@ -253,7 +269,7 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 	// zero-amount probe stands in. Nothing is lost by it: a fee depends on the
 	// signature count and compute budget instructions, never on the lamports
 	// being moved, so the probe prices the real transfer exactly.
-	probeIx, err := core.System.Transfer(req.FromKey(), req.ToKey(), 0)
+	probeIx, err := core.System.Transfer(req.FundingPayerKey(), req.RecipientAccountKey(), 0)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -291,28 +307,26 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 		return
 	}
 
-	balance, err := chain.Cli.Balance(r.Context(), req.FromKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read balance: %s", err))
-		return
+	var balance uint64
+	if info := accounts[req.FundingPayerKey().Base58()]; info.Exists() {
+		balance = info.Lamports
 	}
 	if balance == 0 {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: %s has no balance", req.FromKey()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("funding_payer: %s has no balance", req.FundingPayerKey()))
 		return
 	}
 
 	lamports := balance
-	if req.FromKey().Equal(req.FeePayerKey()) {
+	if req.FundingPayerKey().Equal(req.FeePayerKey()) {
 		if balance <= fee {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: balance %d does not cover the %d lamport fee", balance, fee))
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("funding_payer: balance %d does not cover the %d lamport fee", balance, fee))
 			return
 		}
 		lamports = balance - fee
 	} else {
-		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
-			return
+		var feePayerBalance uint64
+		if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+			feePayerBalance = info.Lamports
 		}
 		if feePayerBalance < fee {
 			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
@@ -324,20 +338,7 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 		}
 	}
 
-	// A brand-new account is the same rule from the other side: the runtime
-	// will not create one below the rent-exemption minimum, so an amount that
-	// small is caught here instead of failing once sent.
-	toExists, err := chain.Cli.Exists(r.Context(), req.ToKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read recipient account: %s", err))
-		return
-	}
-	if !toExists && lamports < minRent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: %d is below the %d lamport rent-exemption minimum required to create %s", lamports, minRent, req.ToKey()))
-		return
-	}
-
-	ix, err := core.System.Transfer(req.FromKey(), req.ToKey(), lamports)
+	ix, err := core.System.Transfer(req.FundingPayerKey(), req.RecipientAccountKey(), lamports)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
@@ -346,7 +347,7 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 
 	// The real message is the one that carries the nonce, which is the whole
 	// point of naming one: it holds a value the cluster does not consider
-	// recent, so it never expires. nonceState and advance were already
+	// recent, so it never expires. nonceAccount and advance were already
 	// resolved above, so this does not fetch the nonce account again.
 	var message *types.Message
 	if req.DurableNonceAccountKey().IsNil() {
@@ -380,7 +381,7 @@ func (h *SystemTransactionHandler) SystemTransferMax(w http.ResponseWriter, r *h
 	}
 
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
-	handler.WriteOK(w, NewSystemTransferMaxResponse(tx, raw, messageBytes, nonceAuthority, lamports, fee))
+	handler.WriteOK(w, NewSystemTransferMaxResponse(tx, raw, messageBytes, req.FundingPayerKey(), req.FeePayerKey(), nonceAuthority, lamports, fee))
 }
 
 // SystemTransferSpread godoc

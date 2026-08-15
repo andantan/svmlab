@@ -2768,7 +2768,7 @@
         },
         "/svm/v2/transaction/system/transfer": {
             "post": {
-                "description": "Assembles a System Program transfer and returns the same shape as a v1 build, so sign and send accept it unchanged. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. The recipient is not required to exist yet, but if it does not, lamports must be at least the rent-exemption minimum, since the runtime will not create an account below it. To send the sender's entire balance, use transfer/max instead.",
+                "description": "Assembles a System Program transfer between two existing accounts and returns the same shape as a v1 build, so sign and send accept it unchanged. recipient_account must already exist: this is a plain balance transfer, not a way to bring a new account into existence. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. To send the sender's entire balance, use transfer/max instead.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2781,7 +2781,7 @@
                 "summary": "Build a native SOL transfer",
                 "parameters": [
                     {
-                        "description": "Sender, recipient, and lamports",
+                        "description": "Funding payer, recipient, and lamports",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2825,7 +2825,7 @@
         },
         "/svm/v2/transaction/system/transfer/max": {
             "post": {
-                "description": "Assembles a System Program transfer moving everything the sender can send. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well. The recipient is not required to exist yet, but if it does not, the drained amount must be at least the rent-exemption minimum, since the runtime will not create an account below it.",
+                "description": "Assembles a System Program transfer moving everything the sender can send, between two existing accounts. Resolving that amount needs the sender's balance and the fee, both fetched from the chain. The fee only comes out of the sender's balance when the sender is also the fee payer; with a separate fee payer the whole balance can go, which empties the account and lets the runtime reclaim it. recipient_account must already exist: this is a plain balance transfer, not a way to bring a new account into existence. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it as the first instruction; recent_blockhash then only prices the transaction, since a nonce is never among the cluster's recent blockhashes. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2838,7 +2838,7 @@
                 "summary": "Build a native SOL transfer of the sender's entire balance",
                 "parameters": [
                     {
-                        "description": "Sender and recipient",
+                        "description": "Funding payer and recipient",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -6541,20 +6541,6 @@
                 }
             }
         },
-        "v2.SystemCreateAccountPayer": {
-            "type": "object",
-            "properties": {
-                "lamports": {
-                    "type": "string"
-                },
-                "payer": {
-                    "type": "string"
-                },
-                "sol": {
-                    "type": "string"
-                }
-            }
-        },
         "v2.SystemCreateAccountRequest": {
             "type": "object",
             "properties": {
@@ -6615,13 +6601,13 @@
                     }
                 },
                 "fee": {
-                    "$ref": "#/definitions/v2.SystemCreateAccountPayer"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "funding": {
                     "description": "Funding reports the transfer that runs after CreateAccount: the\nrequest's lamports minus what Rent already covers, since together the\ntwo reach exactly that total. Its lamports are zero, and no such\ninstruction is built, when Rent alone already reaches it.",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/v2.SystemCreateAccountPayer"
+                            "$ref": "#/definitions/v2.SystemPayer"
                         }
                     ]
                 },
@@ -6642,7 +6628,7 @@
                     "description": "Rent reports what funds CreateAccount itself. Its lamports are always\nexactly the rent-exemption minimum for Space, never more or less.",
                     "allOf": [
                         {
-                            "$ref": "#/definitions/v2.SystemCreateAccountPayer"
+                            "$ref": "#/definitions/v2.SystemPayer"
                         }
                     ]
                 },
@@ -7142,6 +7128,20 @@
                 }
             }
         },
+        "v2.SystemPayer": {
+            "type": "object",
+            "properties": {
+                "lamports": {
+                    "type": "string"
+                },
+                "payer": {
+                    "type": "string"
+                },
+                "sol": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.SystemSeedAllocateRequest": {
             "type": "object",
             "properties": {
@@ -7526,12 +7526,12 @@
                     "example": ""
                 },
                 "fee_payer": {
-                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as From, in which case the fee is deducted from what is sent.",
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as FundingPayer, in which case the fee is deducted from what\nis sent.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "from": {
-                    "description": "From is the account drained. It signs the transaction as the transfer\nauthority, whether or not it also pays the fee.",
+                "funding_payer": {
+                    "description": "FundingPayer is the account drained. It signs the transaction as the\ntransfer authority, whether or not it also pays the fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -7540,8 +7540,8 @@
                     "type": "string",
                     "example": ""
                 },
-                "to": {
-                    "description": "To is the account credited. It is not required to exist yet, but if it\ndoes not, the drained amount must be at least the rent-exemption\nminimum, since the runtime will not create an account below it.",
+                "recipient_account": {
+                    "description": "RecipientAccount is the account credited. It must already exist: this\nis a plain transfer between two accounts, not a way to bring a new\none into existence.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
@@ -7557,10 +7557,10 @@
                     }
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
-                "lamports": {
-                    "type": "string"
+                "funding": {
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -7578,9 +7578,6 @@
                         "type": "string"
                     }
                 },
-                "sol": {
-                    "type": "string"
-                },
                 "transaction": {
                     "type": "string"
                 }
@@ -7595,17 +7592,17 @@
                     "example": ""
                 },
                 "fee_payer": {
-                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as From.",
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as FundingPayer.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "from": {
-                    "description": "From is the account debited. It signs the transaction as the transfer\nauthority, whether or not it also pays the fee.",
+                "funding_payer": {
+                    "description": "FundingPayer is the account debited. It signs the transaction as the\ntransfer authority, whether or not it also pays the fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "lamports": {
-                    "description": "Lamports is the raw amount moved from From to To.",
+                    "description": "Lamports is the raw amount moved from FundingPayer to RecipientAccount.",
                     "type": "string",
                     "example": "1000000"
                 },
@@ -7614,8 +7611,8 @@
                     "type": "string",
                     "example": ""
                 },
-                "to": {
-                    "description": "To is the account credited. It is not required to exist yet.",
+                "recipient_account": {
+                    "description": "RecipientAccount is the account credited. It must already exist: this\nis a plain transfer between two accounts, not a way to bring a new one\ninto existence.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
@@ -7631,11 +7628,15 @@
                     }
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
-                "lamports": {
-                    "description": "Lamports and Fee are strings for the same reason the request's lamports\nis: a JSON number is a float, so a lamport count past 2^53 would reach a\nJavaScript client already rounded.",
-                    "type": "string"
+                "funding": {
+                    "description": "Funding reports the transfer itself: who sent it and how much.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
                 },
                 "message": {
                     "type": "string"
@@ -7652,9 +7653,6 @@
                     "items": {
                         "type": "string"
                     }
-                },
-                "sol": {
-                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"

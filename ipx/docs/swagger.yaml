@@ -1742,15 +1742,6 @@ definitions:
       transaction:
         type: string
     type: object
-  v2.SystemCreateAccountPayer:
-    properties:
-      lamports:
-        type: string
-      payer:
-        type: string
-      sol:
-        type: string
-    type: object
   v2.SystemCreateAccountRequest:
     properties:
       durable_nonce_account:
@@ -1832,10 +1823,10 @@ definitions:
           type: string
         type: array
       fee:
-        $ref: '#/definitions/v2.SystemCreateAccountPayer'
+        $ref: '#/definitions/v2.SystemPayer'
       funding:
         allOf:
-        - $ref: '#/definitions/v2.SystemCreateAccountPayer'
+        - $ref: '#/definitions/v2.SystemPayer'
         description: |-
           Funding reports the transfer that runs after CreateAccount: the
           request's lamports minus what Rent already covers, since together the
@@ -1855,7 +1846,7 @@ definitions:
         type: string
       rent:
         allOf:
-        - $ref: '#/definitions/v2.SystemCreateAccountPayer'
+        - $ref: '#/definitions/v2.SystemPayer'
         description: |-
           Rent reports what funds CreateAccount itself. Its lamports are always
           exactly the rent-exemption minimum for Space, never more or less.
@@ -2290,6 +2281,15 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.SystemPayer:
+    properties:
+      lamports:
+        type: string
+      payer:
+        type: string
+      sol:
+        type: string
+    type: object
   v2.SystemSeedAllocateRequest:
     properties:
       base:
@@ -2600,13 +2600,14 @@ definitions:
       fee_payer:
         description: |-
           FeePayer signs and pays the transaction fee. It may be the same
-          account as From, in which case the fee is deducted from what is sent.
+          account as FundingPayer, in which case the fee is deducted from what
+          is sent.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
-      from:
+      funding_payer:
         description: |-
-          From is the account drained. It signs the transaction as the transfer
-          authority, whether or not it also pays the fee.
+          FundingPayer is the account drained. It signs the transaction as the
+          transfer authority, whether or not it also pays the fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       recent_blockhash:
@@ -2620,11 +2621,11 @@ definitions:
           back expired.
         example: ""
         type: string
-      to:
+      recipient_account:
         description: |-
-          To is the account credited. It is not required to exist yet, but if it
-          does not, the drained amount must be at least the rent-exemption
-          minimum, since the runtime will not create an account below it.
+          RecipientAccount is the account credited. It must already exist: this
+          is a plain transfer between two accounts, not a way to bring a new
+          one into existence.
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
@@ -2635,9 +2636,9 @@ definitions:
           type: string
         type: array
       fee:
-        type: string
-      lamports:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
+      funding:
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       nonce_authority:
@@ -2652,8 +2653,6 @@ definitions:
         items:
           type: string
         type: array
-      sol:
-        type: string
       transaction:
         type: string
     type: object
@@ -2673,17 +2672,17 @@ definitions:
       fee_payer:
         description: |-
           FeePayer signs and pays the transaction fee. It may be the same
-          account as From.
+          account as FundingPayer.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
-      from:
+      funding_payer:
         description: |-
-          From is the account debited. It signs the transaction as the transfer
-          authority, whether or not it also pays the fee.
+          FundingPayer is the account debited. It signs the transaction as the
+          transfer authority, whether or not it also pays the fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       lamports:
-        description: Lamports is the raw amount moved from From to To.
+        description: Lamports is the raw amount moved from FundingPayer to RecipientAccount.
         example: "1000000"
         type: string
       recent_blockhash:
@@ -2697,8 +2696,11 @@ definitions:
           back expired.
         example: ""
         type: string
-      to:
-        description: To is the account credited. It is not required to exist yet.
+      recipient_account:
+        description: |-
+          RecipientAccount is the account credited. It must already exist: this
+          is a plain transfer between two accounts, not a way to bring a new one
+          into existence.
         example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
         type: string
     type: object
@@ -2709,13 +2711,11 @@ definitions:
           type: string
         type: array
       fee:
-        type: string
-      lamports:
-        description: |-
-          Lamports and Fee are strings for the same reason the request's lamports
-          is: a JSON number is a float, so a lamport count past 2^53 would reach a
-          JavaScript client already rounded.
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
+      funding:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: 'Funding reports the transfer itself: who sent it and how much.'
       message:
         type: string
       nonce_authority:
@@ -2733,8 +2733,6 @@ definitions:
         items:
           type: string
         type: array
-      sol:
-        type: string
       transaction:
         type: string
     type: object
@@ -5190,20 +5188,20 @@ paths:
     post:
       consumes:
       - application/json
-      description: Assembles a System Program transfer and returns the same shape
-        as a v1 build, so sign and send accept it unchanged. recent_blockhash is always
-        required and is never fetched server-side. Left alone, it also builds the
-        message and expires whenever the runtime says it does. Naming durable_nonce_account
-        builds the message against the value that account stores instead, so the transaction
+      description: 'Assembles a System Program transfer between two existing accounts
+        and returns the same shape as a v1 build, so sign and send accept it unchanged.
+        recipient_account must already exist: this is a plain balance transfer, not
+        a way to bring a new account into existence. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
         never expires, and prepends the advance that consumes it as the first instruction;
         recent_blockhash then only prices the transaction, since a nonce is never
-        among the cluster's recent blockhashes. The response reports nonce_authority
-        in that case, which has to sign as well. The recipient is not required to
-        exist yet, but if it does not, lamports must be at least the rent-exemption
-        minimum, since the runtime will not create an account below it. To send the
-        sender's entire balance, use transfer/max instead.
+        among the cluster''s recent blockhashes. The response reports nonce_authority
+        in that case, which has to sign as well. To send the sender''s entire balance,
+        use transfer/max instead.'
       parameters:
-      - description: Sender, recipient, and lamports
+      - description: Funding payer, recipient, and lamports
         in: body
         name: body
         required: true
@@ -5239,22 +5237,22 @@ paths:
     post:
       consumes:
       - application/json
-      description: Assembles a System Program transfer moving everything the sender
-        can send. Resolving that amount needs the sender's balance and the fee, both
-        fetched from the chain. The fee only comes out of the sender's balance when
-        the sender is also the fee payer; with a separate fee payer the whole balance
-        can go, which empties the account and lets the runtime reclaim it. recent_blockhash
+      description: 'Assembles a System Program transfer moving everything the sender
+        can send, between two existing accounts. Resolving that amount needs the sender''s
+        balance and the fee, both fetched from the chain. The fee only comes out of
+        the sender''s balance when the sender is also the fee payer; with a separate
+        fee payer the whole balance can go, which empties the account and lets the
+        runtime reclaim it. recipient_account must already exist: this is a plain
+        balance transfer, not a way to bring a new account into existence. recent_blockhash
         is always required and is never fetched server-side. Left alone, it also builds
         the message and expires whenever the runtime says it does. Naming durable_nonce_account
         builds the message against the value that account stores instead, so the transaction
         never expires, and prepends the advance that consumes it as the first instruction;
         recent_blockhash then only prices the transaction, since a nonce is never
-        among the cluster's recent blockhashes. The response reports nonce_authority
-        in that case, which has to sign as well. The recipient is not required to
-        exist yet, but if it does not, the drained amount must be at least the rent-exemption
-        minimum, since the runtime will not create an account below it.
+        among the cluster''s recent blockhashes. The response reports nonce_authority
+        in that case, which has to sign as well.'
       parameters:
-      - description: Sender and recipient
+      - description: Funding payer and recipient
         in: body
         name: body
         required: true

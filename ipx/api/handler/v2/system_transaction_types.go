@@ -586,12 +586,8 @@ func NewSystemTransferSpreadResponse(tx *types.Transaction, raw, message []byte,
 }
 
 type SystemCreateAccountRequest struct {
-	// FundingPayer is the funder. It signs the transaction as the account
-	// debited, whether or not it also pays the fee.
-	FundingPayer string `json:"funding_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-
-	// NewAccount is the account created. It signs alongside FundingPayer,
-	// since an address does not exist until whoever holds its private key
+	// NewAccount is the account created. It signs alongside RentPayer, since
+	// an address does not exist until whoever holds its private key
 	// authorizes its creation. It must not already exist.
 	NewAccount string `json:"new_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 
@@ -601,18 +597,11 @@ type SystemCreateAccountRequest struct {
 	// account.
 	Owner string `json:"owner" example:"11111111111111111111111111111111"`
 
-	// Lamports is NewAccount's final balance target, not what FundingPayer
-	// alone sends: CreateAccount itself is funded by RentPayer for exactly
-	// the rent-exemption minimum for Space, and FundingPayer's own transfer
-	// covers only what that leaves, so Lamports must be at least that
-	// minimum.
-	Lamports string `json:"lamports" example:"1000000"`
-
 	// Space is the byte count allocated for NewAccount's data.
 	Space string `json:"space" example:"0"`
 
 	// FeePayer signs and pays the transaction fee. It may be the same
-	// account as FundingPayer.
+	// account as RentPayer.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
 	// RecentBlockhash is always required, and there is no server-side fetch
@@ -633,34 +622,26 @@ type SystemCreateAccountRequest struct {
 	// than a choice.
 	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
-	// RentPayer signs a transfer prepended ahead of NewAccount's creation,
-	// for exactly the rent-exemption minimum for Space — always, and only
-	// that amount, whatever FundingPayer separately sends as Lamports. It is
-	// required rather than optional so that which account is answerable for
-	// rent is never left to a default.
+	// RentPayer funds NewAccount's creation for exactly the rent-exemption
+	// minimum for Space — always, and only that amount. There is no way to
+	// fund it beyond that minimum here: this endpoint only ever brings an
+	// account into existence, and topping it up further is a separate
+	// transfer.
 	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	fup *types.PublicKey
 	na  *types.PublicKey
 	o   *types.PublicKey
 	fp  *types.PublicKey
 	rbh *types.Hash
 	dna *types.PublicKey
 	rp  *types.PublicKey
-	l   uint64
 	sp  uint64
 }
 
 func (r *SystemCreateAccountRequest) ValidateRequest() error {
 	var err error
-	if r.fup, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FundingPayer)); err != nil {
-		return errors.New("funding_payer: " + err.Error())
-	}
 	if r.na, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewAccount)); err != nil {
 		return errors.New("new_account: " + err.Error())
-	}
-	if r.fup.Equal(r.na) {
-		return errors.New("funding_payer and new_account are the same account")
 	}
 	if r.o, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
 		return errors.New("owner: " + err.Error())
@@ -697,17 +678,6 @@ func (r *SystemCreateAccountRequest) ValidateRequest() error {
 		return errors.New("rent_payer and new_account are the same account")
 	}
 
-	lamports := strings.TrimSpace(r.Lamports)
-	if lamports == "" {
-		return errors.New("lamports is required")
-	}
-	if r.l, err = strconv.ParseUint(lamports, 10, 64); err != nil {
-		return errors.New("lamports: must be a decimal lamport count")
-	}
-	if r.l == 0 {
-		return errors.New("lamports: must be greater than zero")
-	}
-
 	space := strings.TrimSpace(r.Space)
 	if space == "" {
 		return errors.New("space is required")
@@ -730,8 +700,8 @@ func (r *SystemCreateAccountRequest) Blockhash() *types.Hash {
 	return r.rbh
 }
 
-func (r *SystemCreateAccountRequest) FundingPayerKey() *types.PublicKey {
-	return r.fup
+func (r *SystemCreateAccountRequest) RentPayerKey() *types.PublicKey {
+	return r.rp
 }
 
 func (r *SystemCreateAccountRequest) NewAccountKey() *types.PublicKey {
@@ -744,14 +714,6 @@ func (r *SystemCreateAccountRequest) OwnerKey() *types.PublicKey {
 
 func (r *SystemCreateAccountRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
-}
-
-func (r *SystemCreateAccountRequest) RentPayerKey() *types.PublicKey {
-	return r.rp
-}
-
-func (r *SystemCreateAccountRequest) ToLamports() uint64 {
-	return r.l
 }
 
 func (r *SystemCreateAccountRequest) ToSpace() uint64 {
@@ -770,12 +732,6 @@ type SystemCreateAccountResponse struct {
 	// stored value rather than a fetched blockhash.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	// Funding reports the transfer that runs after CreateAccount: the
-	// request's lamports minus what Rent already covers, since together the
-	// two reach exactly that total. Its lamports are zero, and no such
-	// instruction is built, when Rent alone already reaches it.
-	Funding SystemPayer `json:"funding"`
-
 	// Rent reports what funds CreateAccount itself. Its lamports are always
 	// exactly the rent-exemption minimum for Space, never more or less.
 	Rent SystemPayer `json:"rent"`
@@ -786,7 +742,7 @@ type SystemCreateAccountResponse struct {
 	Owner string `json:"owner"`
 }
 
-func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, owner, fundingPayer, rentPayer, feePayer, nonceAuthority *types.PublicKey, fundingLamports, rentLamports, space, fee uint64) *SystemCreateAccountResponse {
+func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, owner, rentPayer, feePayer, nonceAuthority *types.PublicKey, rentLamports, space, fee uint64) *SystemCreateAccountResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
@@ -809,7 +765,6 @@ func NewSystemCreateAccountResponse(tx *types.Transaction, raw, message []byte, 
 		AccountKeys:     keys,
 		Signers:         signers,
 		NonceAuthority:  authority,
-		Funding:         newSystemPayer(fundingPayer, fundingLamports),
 		Rent:            newSystemPayer(rentPayer, rentLamports),
 		Fee:             newSystemPayer(feePayer, fee),
 		Space:           space,

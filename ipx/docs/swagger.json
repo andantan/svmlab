@@ -2027,7 +2027,7 @@
         },
         "/svm/v2/transaction/system/create-account": {
             "post": {
-                "description": "Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account handed to a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside rent_payer, which is what has no EVM counterpart: an address does not exist until whoever holds its private key authorizes its creation, and it must not already exist. lamports is the account's final balance target, not what funding_payer alone sends: rent_payer is required rather than optional, and CreateAccount itself is built funded by rent_payer for exactly the rent-exemption minimum for the requested space, since the account does not exist yet and creating it is the only instruction that may find a zero balance there. funding_payer's own transfer runs second, adding whatever lamports leaves beyond that minimum to an account that already exists and is already exempt, which carries no such restriction — so lamports must be at least that minimum. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account handed to a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside rent_payer, which is what has no EVM counterpart: an address does not exist until whoever holds its private key authorizes its creation, and it must not already exist. rent_payer funds the creation for exactly the rent-exemption minimum for the requested space — always, and only that amount. This endpoint only ever brings an account into existence; funding it further is a separate transfer to the address once it exists. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2040,7 +2040,7 @@
                 "summary": "Build a System Program account creation",
                 "parameters": [
                     {
-                        "description": "Funding payer, new account, owner, lamports, space, and rent payer",
+                        "description": "New account, owner, space, fee payer, and rent payer",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -6550,22 +6550,12 @@
                     "example": ""
                 },
                 "fee_payer": {
-                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as FundingPayer.",
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as RentPayer.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "funding_payer": {
-                    "description": "FundingPayer is the funder. It signs the transaction as the account\ndebited, whether or not it also pays the fee.",
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "lamports": {
-                    "description": "Lamports is NewAccount's final balance target, not what FundingPayer\nalone sends: CreateAccount itself is funded by RentPayer for exactly\nthe rent-exemption minimum for Space, and FundingPayer's own transfer\ncovers only what that leaves, so Lamports must be at least that\nminimum.",
-                    "type": "string",
-                    "example": "1000000"
                 },
                 "new_account": {
-                    "description": "NewAccount is the account created. It signs alongside FundingPayer,\nsince an address does not exist until whoever holds its private key\nauthorizes its creation. It must not already exist.",
+                    "description": "NewAccount is the account created. It signs alongside RentPayer, since\nan address does not exist until whoever holds its private key\nauthorizes its creation. It must not already exist.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
@@ -6580,7 +6570,7 @@
                     "example": ""
                 },
                 "rent_payer": {
-                    "description": "RentPayer signs a transfer prepended ahead of NewAccount's creation,\nfor exactly the rent-exemption minimum for Space — always, and only\nthat amount, whatever FundingPayer separately sends as Lamports. It is\nrequired rather than optional so that which account is answerable for\nrent is never left to a default.",
+                    "description": "RentPayer funds NewAccount's creation for exactly the rent-exemption\nminimum for Space — always, and only that amount. There is no way to\nfund it beyond that minimum here: this endpoint only ever brings an\naccount into existence, and topping it up further is a separate\ntransfer.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -6602,14 +6592,6 @@
                 },
                 "fee": {
                     "$ref": "#/definitions/v2.SystemPayer"
-                },
-                "funding": {
-                    "description": "Funding reports the transfer that runs after CreateAccount: the\nrequest's lamports minus what Rent already covers, since together the\ntwo reach exactly that total. Its lamports are zero, and no such\ninstruction is built, when Rent alone already reaches it.",
-                    "allOf": [
-                        {
-                            "$ref": "#/definitions/v2.SystemPayer"
-                        }
-                    ]
                 },
                 "message": {
                     "type": "string"

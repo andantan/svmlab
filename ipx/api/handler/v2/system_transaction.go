@@ -570,11 +570,11 @@ func (h *SystemTransactionHandler) SystemTransferSpread(w http.ResponseWriter, r
 
 // SystemCreateAccount godoc
 // @Summary      Build a System Program account creation
-// @Description  Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account handed to a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside rent_payer, which is what has no EVM counterpart: an address does not exist until whoever holds its private key authorizes its creation, and it must not already exist. lamports is the account's final balance target, not what funding_payer alone sends: rent_payer is required rather than optional, and CreateAccount itself is built funded by rent_payer for exactly the rent-exemption minimum for the requested space, since the account does not exist yet and creating it is the only instruction that may find a zero balance there. funding_payer's own transfer runs second, adding whatever lamports leaves beyond that minimum to an account that already exists and is already exempt, which carries no such restriction — so lamports must be at least that minimum. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Funds a new account, sizes its data, and assigns it an owner. The owner must be executable: only the owning program may debit an account or write its data, so an account handed to a plain address is locked from the moment it exists. Pass the System Program for an ordinary account. The new account signs alongside rent_payer, which is what has no EVM counterpart: an address does not exist until whoever holds its private key authorizes its creation, and it must not already exist. rent_payer funds the creation for exactly the rent-exemption minimum for the requested space — always, and only that amount. This endpoint only ever brings an account into existence; funding it further is a separate transfer to the address once it exists. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-system-account
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemCreateAccountRequest  true  "Funding payer, new account, owner, lamports, space, and rent payer"
+// @Param        body  body      SystemCreateAccountRequest  true  "New account, owner, space, fee payer, and rent payer"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemCreateAccountResponse
@@ -606,13 +606,12 @@ func (h *SystemTransactionHandler) SystemCreateAccount(w http.ResponseWriter, r 
 	}
 
 	// Every account this handler ever needs is read in one round trip.
-	// funding_payer, fee_payer, and rent_payer are frequently the same key
-	// under different roles, and batching rather than fetching each alone is
-	// what makes that overlap cheap instead of three redundant reads.
+	// rent_payer and fee_payer are frequently the same key under different
+	// roles, and batching rather than fetching each alone is what makes that
+	// overlap cheap instead of redundant reads.
 	lookups := []*types.PublicKey{
-		req.FundingPayerKey(),
-		req.FeePayerKey(),
 		req.RentPayerKey(),
+		req.FeePayerKey(),
 		req.OwnerKey(),
 		req.NewAccountKey(),
 	}
@@ -643,33 +642,15 @@ func (h *SystemTransactionHandler) SystemCreateAccount(w http.ResponseWriter, r 
 		return
 	}
 
-	// Lamports is the account's final balance target, not what funding_payer
-	// alone sends: CreateAccount itself runs first, funded by rent_payer for
-	// exactly the rent-exemption minimum — the account does not exist yet, so
-	// its own "already in use" check (a nonzero balance, not owner or space)
-	// still passes. funding_payer's own transfer runs second, adding the rest
-	// to an account that already exists and is already exempt, which carries
-	// no such restriction.
-	if req.ToLamports() < newAccountRent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("lamports: %d does not meet the %d lamport rent-exemption minimum for %d bytes", req.ToLamports(), newAccountRent, req.ToSpace()))
-		return
-	}
+	// CreateAccount is funded entirely by rent_payer, for exactly the
+	// rent-exemption minimum: this endpoint only ever brings an account into
+	// existence, never adds to it beyond that.
 	createIx, err := core.System.CreateAccount(req.RentPayerKey(), req.NewAccountKey(), req.OwnerKey(), newAccountRent, req.ToSpace())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	ixs := types.NewInstructions(createIx)
-
-	fundingLamports := req.ToLamports() - newAccountRent
-	if fundingLamports > 0 {
-		fundingIx, err := core.System.Transfer(req.FundingPayerKey(), req.NewAccountKey(), fundingLamports)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		ixs = ixs.Append(fundingIx)
-	}
 
 	// Without a nonce the message is built against the blockhash resolved
 	// above and expires with it. With one it is built against the value that
@@ -726,23 +707,18 @@ func (h *SystemTransactionHandler) SystemCreateAccount(w http.ResponseWriter, r 
 	}
 
 	// This is the floor an ordinary wallet must hold, a different number from
-	// newAccountRent: it is what funding_payer, rent_payer, and fee_payer must
-	// each keep above zero in their own accounts, not what NewAccount needs.
+	// newAccountRent: it is what rent_payer and fee_payer must each keep
+	// above zero in their own accounts, not what NewAccount needs.
 	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
 		return
 	}
 
-	// funding_payer, rent_payer, and fee_payer may be the same account
-	// wearing two or three hats, so what each distinct key owes is summed by
-	// address rather than checked once per role.
-	spent := map[string]uint64{
-		req.FundingPayerKey().Base58(): 0,
-		req.RentPayerKey().Base58():    0,
-		req.FeePayerKey().Base58():     0,
-	}
-	spent[req.FundingPayerKey().Base58()] += fundingLamports
+	// rent_payer and fee_payer may be the same account wearing two hats, so
+	// what each distinct key owes is summed by address rather than checked
+	// once per role.
+	spent := map[string]uint64{req.RentPayerKey().Base58(): 0, req.FeePayerKey().Base58(): 0}
 	spent[req.RentPayerKey().Base58()] += newAccountRent
 	spent[req.FeePayerKey().Base58()] += fee
 
@@ -780,7 +756,7 @@ func (h *SystemTransactionHandler) SystemCreateAccount(w http.ResponseWriter, r 
 	}
 
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
-	handler.WriteOK(w, NewSystemCreateAccountResponse(tx, raw, messageBytes, req.OwnerKey(), req.FundingPayerKey(), req.RentPayerKey(), req.FeePayerKey(), nonceAuthority, fundingLamports, newAccountRent, req.ToSpace(), fee))
+	handler.WriteOK(w, NewSystemCreateAccountResponse(tx, raw, messageBytes, req.OwnerKey(), req.RentPayerKey(), req.FeePayerKey(), nonceAuthority, newAccountRent, req.ToSpace(), fee))
 }
 
 // SystemAllocate godoc

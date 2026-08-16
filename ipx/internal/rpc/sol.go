@@ -380,6 +380,10 @@ func (c *Client) MinimumBalanceForRentExemptionToken(ctx context.Context) (uint6
 	return c.MinimumBalanceForRentExemption(ctx, core.TokenAccountSpace, CommitmentConfirmed)
 }
 
+func (c *Client) MinimumBalanceForRentExemptionMultisig(ctx context.Context) (uint64, error) {
+	return c.MinimumBalanceForRentExemption(ctx, core.MultisigSpace, CommitmentConfirmed)
+}
+
 func (c *Client) MinimumBalanceForRentExemptionStake(ctx context.Context) (uint64, error) {
 	return c.MinimumBalanceForRentExemption(ctx, core.StakeAccountSpace, CommitmentConfirmed)
 }

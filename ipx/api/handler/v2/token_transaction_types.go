@@ -17,36 +17,31 @@ import (
 // initialize an uninitialized Token-owned account before its intended owner
 // does, which is why these are always the same two instructions rather than
 // two endpoints.
+// CreateMintRequest funds a new account and hands it to the Token Program,
+// sized and owned correctly for a mint but not initialized.
+//
+// This is deliberately the low-level half only: initializing it is a separate
+// call (initialize-mint2, or initialize-mint for the original opcode), and
+// nothing stops somebody else from initializing it first in between with
+// their own authority. A caller who wants that race closed should build the
+// pair as two instructions in one transaction themselves; this endpoint takes
+// no mint_authority/freeze_authority/decimals at all, since it never builds
+// the instruction that would use them.
 type CreateMintRequest struct {
 	// RentPayer funds Mint's creation for exactly the rent-exemption minimum
 	// for an 82-byte account, and is a separate balance from FeePayer.
 	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// Mint is the account created and initialized. It signs alongside
-	// RentPayer, since an address does not exist until whoever holds its
-	// private key authorizes its creation. It must not already exist.
+	// Mint is the account created. It signs alongside RentPayer, since an
+	// address does not exist until whoever holds its private key authorizes
+	// its creation. It must not already exist.
 	Mint string `json:"mint" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
-
-	// MintAuthority is who can mint new supply going forward. It need not be
-	// RentPayer or FeePayer, and is not required to sign this transaction:
-	// InitializeMint2 only records it, it does not check it against a signer.
-	MintAuthority string `json:"mint_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-
-	// FreezeAuthority may be left empty, in which case the mint is created
-	// with no freeze authority at all, permanently: there is no separate flag
-	// here the way SetAuthority needs one, since a mint that does not exist
-	// yet has no prior authority a typo could accidentally clear.
-	FreezeAuthority string `json:"freeze_authority" example:""`
-
-	// Decimals fixes how the raw integer amount this mint moves is displayed
-	// as a UI amount, and cannot be changed after creation.
-	Decimals uint8 `json:"decimals" example:"6"`
 
 	// FeePayer signs and pays the transaction fee. It may be the same
 	// account as RentPayer.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// Program names the account to send the instructions to: classic Token
+	// Program names the account to send the instruction to: classic Token
 	// or Token-2022. It is required rather than defaulted, since a mint
 	// belongs to exactly one of the two forever and defaulting would make
 	// picking wrong silent. It is an address rather than a name because that
@@ -73,14 +68,12 @@ type CreateMintRequest struct {
 	// than a choice.
 	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
-	rentPayer       *types.PublicKey
-	mint            *types.PublicKey
-	mintAuthority   *types.PublicKey
-	freezeAuthority *types.PublicKey
-	feePayer        *types.PublicKey
-	rbh             *types.Hash
-	dna             *types.PublicKey
-	tokenProgramID  *types.PublicKey
+	rentPayer      *types.PublicKey
+	mint           *types.PublicKey
+	feePayer       *types.PublicKey
+	rbh            *types.Hash
+	dna            *types.PublicKey
+	tokenProgramID *types.PublicKey
 }
 
 func (r *CreateMintRequest) ValidateRequest() error {
@@ -94,22 +87,8 @@ func (r *CreateMintRequest) ValidateRequest() error {
 	if r.rentPayer.Equal(r.mint) {
 		return errors.New("rent_payer and mint are the same account")
 	}
-	if r.mintAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.MintAuthority)); err != nil {
-		return errors.New("mint_authority: " + err.Error())
-	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
-	}
-
-	// An absent freeze authority means the mint is created with none, and
-	// that decision cannot be undone later: it is not "leave it alone", it is
-	// permanent. There is no separate flag here the way SetAuthority needs
-	// one, because a mint that does not exist yet has no prior authority a
-	// typo could accidentally remove.
-	if fa := strings.TrimSpace(r.FreezeAuthority); fa != "" {
-		if r.freezeAuthority, err = types.NewPublicKeyFromBase58(fa); err != nil {
-			return errors.New("freeze_authority: " + err.Error())
-		}
 	}
 
 	rb := strings.TrimSpace(r.RecentBlockhash)
@@ -148,14 +127,6 @@ func (r *CreateMintRequest) MintKey() *types.PublicKey {
 	return r.mint
 }
 
-func (r *CreateMintRequest) MintAuthorityKey() *types.PublicKey {
-	return r.mintAuthority
-}
-
-func (r *CreateMintRequest) FreezeAuthorityKey() *types.PublicKey {
-	return r.freezeAuthority
-}
-
 func (r *CreateMintRequest) FeePayerKey() *types.PublicKey {
 	return r.feePayer
 }
@@ -168,10 +139,6 @@ func (r *CreateMintRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-func (r *CreateMintRequest) ToDecimals() uint8 {
-	return r.Decimals
-}
-
 // TokenProgramID returns the resolved program account, either
 // core.TokenProgramID or core.Token2022ProgramID. core.TokenProgram(id) turns
 // it into a builder.
@@ -181,7 +148,8 @@ func (r *CreateMintRequest) TokenProgramID() *types.PublicKey {
 
 // CreateMintResponse mirrors the v1/System build response shape, plus what
 // this endpoint had to resolve to validate: the rent-exempt minimum for an
-// 82-byte account and the mint's own field values.
+// 82-byte account. There is no mint_authority/freeze_authority/decimals to
+// report, since this never initializes Mint.
 type CreateMintResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
@@ -194,11 +162,8 @@ type CreateMintResponse struct {
 	// a stored value rather than a fetched blockhash.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Mint            string `json:"mint"`
-	Program         string `json:"program"`
-	MintAuthority   string `json:"mint_authority"`
-	FreezeAuthority string `json:"freeze_authority,omitempty"`
-	Decimals        uint8  `json:"decimals"`
+	Mint    string `json:"mint"`
+	Program string `json:"program"`
 
 	// Rent reports what funds CreateMint itself. Its lamports are always
 	// exactly the rent-exemption minimum for an 82-byte account, never more
@@ -209,17 +174,12 @@ type CreateMintResponse struct {
 
 func NewCreateMintResponse(
 	tx *types.Transaction, raw, message []byte,
-	rentPayer, feePayer, mint, tokenProgram, mintAuthority, freezeAuthority, nonceAuthority *types.PublicKey,
-	decimals uint8, rentExempt, fee uint64,
+	rentPayer, feePayer, mint, tokenProgram, nonceAuthority *types.PublicKey,
+	rentExempt, fee uint64,
 ) *CreateMintResponse {
 	authority := ""
 	if !nonceAuthority.IsNil() {
 		authority = nonceAuthority.Base58()
-	}
-
-	freeze := ""
-	if !freezeAuthority.IsNil() {
-		freeze = freezeAuthority.Base58()
 	}
 
 	keys := make([]string, len(tx.Message.AccountKeys))
@@ -241,9 +201,6 @@ func NewCreateMintResponse(
 		NonceAuthority:  authority,
 		Mint:            mint.Base58(),
 		Program:         tokenProgram.Base58(),
-		MintAuthority:   mintAuthority.Base58(),
-		FreezeAuthority: freeze,
-		Decimals:        decimals,
 		Rent:            newSystemPayer(rentPayer, rentExempt),
 		Fee:             newSystemPayer(feePayer, fee),
 	}
@@ -1012,8 +969,8 @@ func NewInitializeAccount2Response(
 // InitializeAccount3Request is InitializeAccount2Request against the 3
 // variant: owner still travels in the request and rides in the instruction
 // data, but the rent sysvar InitializeAccount2 still reads is dropped too.
-// This is what create-kta uses internally; this endpoint exposes it standing
-// alone, for callers assembling the creation separately.
+// This is the natural pairing for create-kta, which only creates the account
+// and never initializes it.
 type InitializeAccount3Request struct {
 	TokenAccount string `json:"token_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
 	Mint         string `json:"mint" example:""`
@@ -1157,8 +1114,381 @@ func NewInitializeAccount3Response(
 	}
 }
 
-// CreateKTARequest funds and initializes a 165-byte keypair token account
-// (KTA) in one transaction.
+// InitializeMultisigRequest turns an already-existing, correctly sized,
+// Token-owned account into a multisig, using the original opcode that
+// carries the rent sysvar as a read-only account alongside the multisig.
+// InitializeMultisig2Request drops it; this exists only for compatibility
+// with the original opcode. This is the natural pairing for create-multisig,
+// which only creates the account and never initializes it.
+type InitializeMultisigRequest struct {
+	// MultisigAccount is the account initialized. It must already exist,
+	// must be owned by Program, and must be exactly 355 bytes and
+	// uninitialized. It does not sign: nothing about becoming a registered
+	// signer needs proving here, only once the multisig is actually used as
+	// an authority.
+	MultisigAccount string `json:"multisig_account" example:""`
+
+	// M is how many of Signers must sign in the multisig's place, wherever
+	// it is later named as an authority. The program enforces
+	// 1 <= m <= len(signers) <= 11.
+	M uint8 `json:"m" example:"2"`
+
+	// Signers is who is enrolled. Order is preserved in the response, but the
+	// program itself treats membership as a set: any m of them may sign.
+	Signers []string `json:"signers"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It must match the program that already owns
+	// MultisigAccount.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	multisigAccount *types.PublicKey
+	signers         []*types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+}
+
+func (r *InitializeMultisigRequest) ValidateRequest() error {
+	var err error
+	if r.multisigAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.MultisigAccount)); err != nil {
+		return errors.New("multisig_account: " + err.Error())
+	}
+
+	if len(r.Signers) == 0 {
+		return errors.New("signers: at least one signer is required")
+	}
+	if len(r.Signers) > core.MaxMultisigSigners {
+		return fmt.Errorf("signers: %d exceeds the limit of %d", len(r.Signers), core.MaxMultisigSigners)
+	}
+	r.signers = make([]*types.PublicKey, len(r.Signers))
+	for i, s := range r.Signers {
+		if r.signers[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("signers[%d]: %s", i, err)
+		}
+	}
+	if int(r.M) < core.MinMultisigSigners || int(r.M) > len(r.signers) {
+		return fmt.Errorf("m: must be between 1 and %d, got %d", len(r.signers), r.M)
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *InitializeMultisigRequest) MultisigAccountKey() *types.PublicKey {
+	return r.multisigAccount
+}
+
+func (r *InitializeMultisigRequest) ToM() uint8 {
+	return r.M
+}
+
+func (r *InitializeMultisigRequest) SignerKeys() []*types.PublicKey {
+	return r.signers
+}
+
+func (r *InitializeMultisigRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *InitializeMultisigRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+
+func (r *InitializeMultisigRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *InitializeMultisigRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// InitializeMultisigResponse mirrors the other initialize-* responses, plus
+// what a multisig is: m of n named signers rather than a single authority.
+type InitializeMultisigResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	MultisigAccount string   `json:"multisig_account"`
+	Program         string   `json:"program"`
+	M               uint8    `json:"m"`
+	N               uint8    `json:"n"`
+	MultisigSigners []string `json:"multisig_signers"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewInitializeMultisigResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, multisigAccount, tokenProgram, nonceAuthority *types.PublicKey, signers []*types.PublicKey,
+	m uint8, fee uint64,
+) *InitializeMultisigResponse {
+	authority := ""
+	if !nonceAuthority.IsNil() {
+		authority = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	txSigners := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		txSigners[i] = k.Base58()
+	}
+
+	multisigSigners := make([]string, len(signers))
+	for i, s := range signers {
+		multisigSigners[i] = s.Base58()
+	}
+
+	return &InitializeMultisigResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         txSigners,
+		NonceAuthority:  authority,
+		MultisigAccount: multisigAccount.Base58(),
+		Program:         tokenProgram.Base58(),
+		M:               m,
+		N:               uint8(len(signers)),
+		MultisigSigners: multisigSigners,
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// InitializeMultisig2Request is InitializeMultisigRequest against the 2
+// variant: the rent sysvar InitializeMultisig reads is dropped. This is the
+// one create-mint's peers would use if a multisig ever gained a
+// single-transaction composite; today it exists standing alone.
+type InitializeMultisig2Request struct {
+	MultisigAccount string   `json:"multisig_account" example:""`
+	M               uint8    `json:"m" example:"2"`
+	Signers         []string `json:"signers"`
+	FeePayer        string   `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program         string   `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	RecentBlockhash     string `json:"recent_blockhash" example:""`
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	multisigAccount *types.PublicKey
+	signers         []*types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+}
+
+func (r *InitializeMultisig2Request) ValidateRequest() error {
+	var err error
+	if r.multisigAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.MultisigAccount)); err != nil {
+		return errors.New("multisig_account: " + err.Error())
+	}
+
+	if len(r.Signers) == 0 {
+		return errors.New("signers: at least one signer is required")
+	}
+	if len(r.Signers) > core.MaxMultisigSigners {
+		return fmt.Errorf("signers: %d exceeds the limit of %d", len(r.Signers), core.MaxMultisigSigners)
+	}
+	r.signers = make([]*types.PublicKey, len(r.Signers))
+	for i, s := range r.Signers {
+		if r.signers[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("signers[%d]: %s", i, err)
+		}
+	}
+	if int(r.M) < core.MinMultisigSigners || int(r.M) > len(r.signers) {
+		return fmt.Errorf("m: must be between 1 and %d, got %d", len(r.signers), r.M)
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *InitializeMultisig2Request) MultisigAccountKey() *types.PublicKey {
+	return r.multisigAccount
+}
+
+func (r *InitializeMultisig2Request) ToM() uint8 {
+	return r.M
+}
+
+func (r *InitializeMultisig2Request) SignerKeys() []*types.PublicKey {
+	return r.signers
+}
+
+func (r *InitializeMultisig2Request) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *InitializeMultisig2Request) Blockhash() *types.Hash {
+	return r.rbh
+}
+
+func (r *InitializeMultisig2Request) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *InitializeMultisig2Request) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// InitializeMultisig2Response mirrors InitializeMultisigResponse.
+type InitializeMultisig2Response struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	MultisigAccount string   `json:"multisig_account"`
+	Program         string   `json:"program"`
+	M               uint8    `json:"m"`
+	N               uint8    `json:"n"`
+	MultisigSigners []string `json:"multisig_signers"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewInitializeMultisig2Response(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, multisigAccount, tokenProgram, nonceAuthority *types.PublicKey, signers []*types.PublicKey,
+	m uint8, fee uint64,
+) *InitializeMultisig2Response {
+	authority := ""
+	if !nonceAuthority.IsNil() {
+		authority = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	txSigners := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		txSigners[i] = k.Base58()
+	}
+
+	multisigSigners := make([]string, len(signers))
+	for i, s := range signers {
+		multisigSigners[i] = s.Base58()
+	}
+
+	return &InitializeMultisig2Response{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         txSigners,
+		NonceAuthority:  authority,
+		MultisigAccount: multisigAccount.Base58(),
+		Program:         tokenProgram.Base58(),
+		M:               m,
+		N:               uint8(len(signers)),
+		MultisigSigners: multisigSigners,
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// CreateKTARequest funds a new account and hands it to the Token Program,
+// sized and owned correctly for a keypair token holder account (KTA) but not
+// initialized.
+//
+// This is deliberately the low-level half only: initializing it is a separate
+// call (initialize-account3, or initialize-account/initialize-account2 for
+// the original opcodes), and nothing stops somebody else from initializing it
+// first in between, naming their own wallet as owner. A caller who wants
+// that race closed should build the pair as two instructions in one
+// transaction themselves; this endpoint takes no mint or owner at all, since
+// it never builds the instruction that would use them.
 //
 // This produces a plain keypair account rather than an associated one (see
 // CreateATARequest): the address is whatever key was generated for it, and
@@ -1172,31 +1502,18 @@ type CreateKTARequest struct {
 	// FeePayer.
 	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// TokenAccount is created and initialized as a holder account for Mint.
-	// It signs alongside RentPayer, since an address does not exist until
-	// whoever holds its private key authorizes its creation. It must not
-	// already exist.
+	// TokenAccount is created. It signs alongside RentPayer, since an address
+	// does not exist until whoever holds its private key authorizes its
+	// creation. It must not already exist.
 	TokenAccount string `json:"token_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
-
-	// Mint is the token TokenAccount is initialized to hold, and must already
-	// exist.
-	Mint string `json:"mint" example:""`
-
-	// Owner is who can transfer, burn, or otherwise authorize spending from
-	// TokenAccount. It need not be RentPayer or FeePayer, and is not required
-	// to sign this transaction: InitializeAccount3 only records it, it does
-	// not check it against a signer, which is exactly the risk that keeps
-	// this endpoint from splitting into two.
-	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
 	// FeePayer signs and pays the transaction fee. It may be the same
 	// account as RentPayer.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// Program names the account to send the instructions to: classic Token
+	// Program names the account to send the instruction to: classic Token
 	// or Token-2022. It is required rather than defaulted, since a token
-	// account belongs to exactly one of the two forever, and it must agree
-	// with the mint's own owning program or the instruction fails on chain.
+	// account belongs to exactly one of the two forever.
 	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// RecentBlockhash is always required, and there is no server-side fetch
@@ -1219,8 +1536,6 @@ type CreateKTARequest struct {
 
 	rentPayer      *types.PublicKey
 	tokenAccount   *types.PublicKey
-	mint           *types.PublicKey
-	owner          *types.PublicKey
 	feePayer       *types.PublicKey
 	rbh            *types.Hash
 	dna            *types.PublicKey
@@ -1237,12 +1552,6 @@ func (r *CreateKTARequest) ValidateRequest() error {
 	}
 	if r.rentPayer.Equal(r.tokenAccount) {
 		return errors.New("rent_payer and token_account are the same account")
-	}
-	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
-		return errors.New("mint: " + err.Error())
-	}
-	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
-		return errors.New("owner: " + err.Error())
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -1284,14 +1593,6 @@ func (r *CreateKTARequest) TokenAccountKey() *types.PublicKey {
 	return r.tokenAccount
 }
 
-func (r *CreateKTARequest) MintKey() *types.PublicKey {
-	return r.mint
-}
-
-func (r *CreateKTARequest) OwnerKey() *types.PublicKey {
-	return r.owner
-}
-
 func (r *CreateKTARequest) FeePayerKey() *types.PublicKey {
 	return r.feePayer
 }
@@ -1313,7 +1614,8 @@ func (r *CreateKTARequest) TokenProgramID() *types.PublicKey {
 
 // CreateKTAResponse mirrors CreateMintResponse's shape for the same
 // reason: what the server had to resolve to validate is what a caller needs
-// to know to build the next transaction without guessing.
+// to know to build the next transaction without guessing. There is no mint
+// or owner to report, since this never initializes TokenAccount.
 type CreateKTAResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
@@ -1324,8 +1626,6 @@ type CreateKTAResponse struct {
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
 	TokenAccount string `json:"token_account"`
-	Mint         string `json:"mint"`
-	Owner        string `json:"owner"`
 	Program      string `json:"program"`
 
 	// Rent reports what funds CreateAccount itself. Its lamports are always
@@ -1337,7 +1637,7 @@ type CreateKTAResponse struct {
 
 func NewCreateKTAResponse(
 	tx *types.Transaction, raw, message []byte,
-	rentPayer, feePayer, tokenAccount, mint, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	rentPayer, feePayer, tokenAccount, tokenProgram, nonceAuthority *types.PublicKey,
 	rentExempt, fee uint64,
 ) *CreateKTAResponse {
 	authority := ""
@@ -1363,8 +1663,187 @@ func NewCreateKTAResponse(
 		Signers:         signers,
 		NonceAuthority:  authority,
 		TokenAccount:    tokenAccount.Base58(),
-		Mint:            mint.Base58(),
-		Owner:           owner.Base58(),
+		Program:         tokenProgram.Base58(),
+		Rent:            newSystemPayer(rentPayer, rentExempt),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// CreateMultisigRequest funds a new account and hands it to the Token
+// Program, sized and owned correctly for a multisig but not initialized.
+//
+// This is deliberately the low-level half only, the same as CreateMintRequest
+// and CreateKTARequest: initializing it is a separate call
+// (initialize-multisig2, or initialize-multisig for the original opcode),
+// and nothing stops somebody else from initializing it first in between with
+// their own m and signers. A caller who wants that race closed should build
+// create+initialize as two instructions in one transaction themselves.
+type CreateMultisigRequest struct {
+	// RentPayer funds MultisigAccount's creation for exactly the
+	// rent-exemption minimum for a 355-byte account, and is a separate
+	// balance from FeePayer.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// MultisigAccount is the account created. It signs alongside RentPayer,
+	// since an address does not exist until whoever holds its private key
+	// authorizes its creation. It must not already exist.
+	MultisigAccount string `json:"multisig_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+
+	// FeePayer signs and pays the transaction fee. It may be the same
+	// account as RentPayer.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	rentPayer       *types.PublicKey
+	multisigAccount *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+}
+
+func (r *CreateMultisigRequest) ValidateRequest() error {
+	var err error
+	if r.rentPayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RentPayer)); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+	if r.multisigAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.MultisigAccount)); err != nil {
+		return errors.New("multisig_account: " + err.Error())
+	}
+	if r.rentPayer.Equal(r.multisigAccount) {
+		return errors.New("rent_payer and multisig_account are the same account")
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *CreateMultisigRequest) RentPayerKey() *types.PublicKey {
+	return r.rentPayer
+}
+
+func (r *CreateMultisigRequest) MultisigAccountKey() *types.PublicKey {
+	return r.multisigAccount
+}
+
+func (r *CreateMultisigRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *CreateMultisigRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+
+func (r *CreateMultisigRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// TokenProgramID returns the resolved program account, either
+// core.TokenProgramID or core.Token2022ProgramID. core.TokenProgram(id) turns
+// it into a builder.
+func (r *CreateMultisigRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// CreateMultisigResponse mirrors CreateKTAResponse's shape for the same
+// reason: what the server had to resolve to validate is what a caller needs
+// to know to build the next transaction without guessing. There is no m or
+// signers to report, since this never initializes MultisigAccount.
+type CreateMultisigResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	MultisigAccount string `json:"multisig_account"`
+	Program         string `json:"program"`
+
+	// Rent reports what funds CreateMultisig itself. Its lamports are always
+	// exactly the rent-exemption minimum for a 355-byte account, never more
+	// or less.
+	Rent SystemPayer `json:"rent"`
+	Fee  SystemPayer `json:"fee"`
+}
+
+func NewCreateMultisigResponse(
+	tx *types.Transaction, raw, message []byte,
+	rentPayer, feePayer, multisigAccount, tokenProgram, nonceAuthority *types.PublicKey,
+	rentExempt, fee uint64,
+) *CreateMultisigResponse {
+	authority := ""
+	if !nonceAuthority.IsNil() {
+		authority = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &CreateMultisigResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  authority,
+		MultisigAccount: multisigAccount.Base58(),
 		Program:         tokenProgram.Base58(),
 		Rent:            newSystemPayer(rentPayer, rentExempt),
 		Fee:             newSystemPayer(feePayer, fee),

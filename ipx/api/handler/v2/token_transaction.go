@@ -22,8 +22,8 @@ func NewTokenTransactionHandler(cfg *config.Config) *TokenTransactionHandler {
 }
 
 // CreateMint godoc
-// @Summary      Fund and initialize an SPL Token mint
-// @Description  System CreateAccount and InitializeMint2 as one transaction. An uninitialized Token-owned account can be initialized by anybody else before its intended owner does, so the two never exist as separate endpoints. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Summary      Fund a new account, sized and owned for an SPL Token mint
+// @Description  System CreateAccount only, sized and owned for a mint but not initialized. This is deliberately the low-level half: nothing stops somebody else from initializing the account first, in between this transaction and the next; a caller who wants that race closed should build create+initialize as two instructions in one transaction themselves. Initializing is a separate call: initialize-mint2, or initialize-mint for the original opcode. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-mint-account
 // @Accept       json
 // @Produce      json
@@ -105,11 +105,12 @@ func (h *TokenTransactionHandler) CreateMint(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
-	instructions, err := tokenProgram.CreateMint(req.RentPayerKey(), req.MintKey(), req.MintAuthorityKey(), req.FreezeAuthorityKey(), req.ToDecimals(), rentExempt)
+	instruction, err := tokenProgram.CreateMint(req.RentPayerKey(), req.MintKey(), rentExempt)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	instructions := []*types.Instruction{instruction}
 
 	// Without a nonce the message is built against the blockhash just fetched
 	// and expires with it. With one it is built against the value that account
@@ -211,14 +212,14 @@ func (h *TokenTransactionHandler) CreateMint(w http.ResponseWriter, r *http.Requ
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
 	handler.WriteOK(w, NewCreateMintResponse(
 		tx, raw, messageBytes,
-		req.RentPayerKey(), req.FeePayerKey(), req.MintKey(), req.TokenProgramID(), req.MintAuthorityKey(), req.FreezeAuthorityKey(), nonceAuthority,
-		req.ToDecimals(), rentExempt, fee,
+		req.RentPayerKey(), req.FeePayerKey(), req.MintKey(), req.TokenProgramID(), nonceAuthority,
+		rentExempt, fee,
 	))
 }
 
 // InitializeMint godoc
 // @Summary      Initialize an already-existing account as an SPL Token mint (original opcode)
-// @Description  Raw InitializeMint, the original opcode that carries the rent sysvar as a read-only account alongside mint; the program stopped reading it once rent collection was disabled. See initialize-mint2 for the variant without it, which is what create-mint uses internally. mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Raw InitializeMint, the original opcode that carries the rent sysvar as a read-only account alongside mint; the program stopped reading it once rent collection was disabled. See initialize-mint2 for the variant without it. mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-mint-account
 // @Accept       json
 // @Produce      json
@@ -392,7 +393,7 @@ func (h *TokenTransactionHandler) InitializeMint(w http.ResponseWriter, r *http.
 
 // InitializeMint2 godoc
 // @Summary      Initialize an already-existing account as an SPL Token mint
-// @Description  Raw InitializeMint2, with no CreateAccount alongside it: mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. Nothing stops somebody else from initializing it first between its creation and this call; see create-mint for the single-transaction endpoint that avoids that race. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Raw InitializeMint2, with no CreateAccount alongside it: mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. This is the natural pairing for create-mint, which only creates the account and never initializes it; nothing stops somebody else from initializing it first in between, so a caller who wants that race closed has to build create+initialize as two instructions in one transaction themselves. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-mint-account
 // @Accept       json
 // @Produce      json
@@ -566,7 +567,7 @@ func (h *TokenTransactionHandler) InitializeMint2(w http.ResponseWriter, r *http
 
 // InitializeAccount godoc
 // @Summary      Initialize an already-existing account as an SPL Token holder account (original opcode)
-// @Description  Raw InitializeAccount, the original opcode that passes owner as a read-only account and carries the rent sysvar alongside it; the program never checks owner against a signer, and neither is read for anything but its address. See initialize-account3 for the variant without either, which is what create-kta uses internally. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Raw InitializeAccount, the original opcode that passes owner as a read-only account and carries the rent sysvar alongside it; the program never checks owner against a signer, and neither is read for anything but its address. See initialize-account3 for the variant without either. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-token-account
 // @Accept       json
 // @Produce      json
@@ -751,7 +752,7 @@ func (h *TokenTransactionHandler) InitializeAccount(w http.ResponseWriter, r *ht
 
 // InitializeAccount2 godoc
 // @Summary      Initialize an already-existing account as an SPL Token holder account (owner in data)
-// @Description  Raw InitializeAccount2: owner rides in the instruction data rather than as an account, dropping the account InitializeAccount carries; the rent sysvar is still read. See initialize-account3 for the variant without it, which is what create-kta uses internally. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Raw InitializeAccount2: owner rides in the instruction data rather than as an account, dropping the account InitializeAccount carries; the rent sysvar is still read. See initialize-account3 for the variant without it. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-token-account
 // @Accept       json
 // @Produce      json
@@ -936,7 +937,7 @@ func (h *TokenTransactionHandler) InitializeAccount2(w http.ResponseWriter, r *h
 
 // InitializeAccount3 godoc
 // @Summary      Initialize an already-existing account as an SPL Token holder account
-// @Description  Raw InitializeAccount3: owner rides in the instruction data and the rent sysvar is dropped entirely, which is what create-kta uses internally. This endpoint exposes it standing alone, for callers assembling the account's creation separately (compat, batch, or client-assembled) rather than through create-kta's single transaction. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Raw InitializeAccount3: owner rides in the instruction data and the rent sysvar is dropped entirely. This is the natural pairing for create-kta, which only creates the account and never initializes it. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-token-account
 // @Accept       json
 // @Produce      json
@@ -1119,9 +1120,357 @@ func (h *TokenTransactionHandler) InitializeAccount3(w http.ResponseWriter, r *h
 	))
 }
 
+// InitializeMultisig godoc
+// @Summary      Initialize an already-existing account as a Token multisig (original opcode)
+// @Description  Raw InitializeMultisig, the original opcode that carries the rent sysvar as a read-only account alongside multisig; the program never reads it for anything else. See initialize-multisig2 for the variant without it. multisig_account must already exist, be owned by program, be exactly 355 bytes, and be uninitialized. Anywhere the Token Program takes an authority, a multisig may stand in for it instead, and the named signers sign in its place. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-multisig
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                       true  "Cluster name"
+// @Param        X-Chain-Network  header    string                       true  "Cluster network"
+// @Param        body             body      InitializeMultisigRequest    true  "Initialize-multisig parameters"
+// @Success      200              {object}  InitializeMultisigResponse
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/initialize-multisig [post]
+func (h *TokenTransactionHandler) InitializeMultisig(w http.ResponseWriter, r *http.Request) {
+	req := new(InitializeMultisigRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.MultisigAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	multisigInfo := accounts[req.MultisigAccountKey().Base58()]
+	if !multisigInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("multisig_account: %s does not exist; create it first (see system/create-account)", req.MultisigAccountKey()))
+		return
+	}
+	if multisigInfo.Owner != req.TokenProgramID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("multisig_account: %s is not owned by %s", req.MultisigAccountKey(), req.TokenProgramID()))
+		return
+	}
+	if multisigInfo.Space != core.MultisigSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("multisig_account: %s is %d bytes, expected %d", req.MultisigAccountKey(), multisigInfo.Space, core.MultisigSpace))
+		return
+	}
+
+	raw, err := multisigInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("multisig_account: %s %s", req.MultisigAccountKey(), err))
+		return
+	}
+	decoded, err := core.DeserializeMultisig(raw)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("multisig_account: %s %s", req.MultisigAccountKey(), err))
+		return
+	}
+	if decoded.IsInitialized {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("multisig_account: %s is already initialized", req.MultisigAccountKey()))
+		return
+	}
+
+	instruction, err := tokenProgram.InitializeMultisig(req.MultisigAccountKey(), req.ToM(), req.SignerKeys())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := []*types.Instruction{instruction}
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewInitializeMultisigResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), req.MultisigAccountKey(), req.TokenProgramID(), nonceAuthority, req.SignerKeys(),
+		req.ToM(), fee,
+	))
+}
+
+// InitializeMultisig2 godoc
+// @Summary      Initialize an already-existing account as a Token multisig
+// @Description  Raw InitializeMultisig2: the rent sysvar InitializeMultisig reads is dropped. multisig_account must already exist, be owned by program, be exactly 355 bytes, and be uninitialized. Anywhere the Token Program takes an authority, a multisig may stand in for it instead, and the named signers sign in its place. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-multisig
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                        true  "Cluster name"
+// @Param        X-Chain-Network  header    string                        true  "Cluster network"
+// @Param        body             body      InitializeMultisig2Request    true  "Initialize-multisig parameters"
+// @Success      200              {object}  InitializeMultisig2Response
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/initialize-multisig2 [post]
+func (h *TokenTransactionHandler) InitializeMultisig2(w http.ResponseWriter, r *http.Request) {
+	req := new(InitializeMultisig2Request)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.MultisigAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	multisigInfo := accounts[req.MultisigAccountKey().Base58()]
+	if !multisigInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("multisig_account: %s does not exist; create it first (see system/create-account)", req.MultisigAccountKey()))
+		return
+	}
+	if multisigInfo.Owner != req.TokenProgramID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("multisig_account: %s is not owned by %s", req.MultisigAccountKey(), req.TokenProgramID()))
+		return
+	}
+	if multisigInfo.Space != core.MultisigSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("multisig_account: %s is %d bytes, expected %d", req.MultisigAccountKey(), multisigInfo.Space, core.MultisigSpace))
+		return
+	}
+
+	raw, err := multisigInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("multisig_account: %s %s", req.MultisigAccountKey(), err))
+		return
+	}
+	decoded, err := core.DeserializeMultisig(raw)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("multisig_account: %s %s", req.MultisigAccountKey(), err))
+		return
+	}
+	if decoded.IsInitialized {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("multisig_account: %s is already initialized", req.MultisigAccountKey()))
+		return
+	}
+
+	instruction, err := tokenProgram.InitializeMultisig2(req.MultisigAccountKey(), req.ToM(), req.SignerKeys())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := []*types.Instruction{instruction}
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewInitializeMultisig2Response(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), req.MultisigAccountKey(), req.TokenProgramID(), nonceAuthority, req.SignerKeys(),
+		req.ToM(), fee,
+	))
+}
+
 // CreateKTA godoc
-// @Summary      Fund and initialize a keypair SPL Token holder account (KTA)
-// @Description  System CreateAccount and InitializeAccount3 as one transaction. An uninitialized Token-owned account initialized by somebody else names their wallet as owner, which is why the two never exist as separate endpoints. This produces a plain keypair account rather than an associated one (see create-ata): the address is whatever key was generated for it, and nothing can rediscover it from the wallet and mint the way an associated token account can be. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Summary      Fund a new account, sized and owned for a keypair SPL Token holder account (KTA)
+// @Description  System CreateAccount only, sized and owned for a holder account but not initialized. This is deliberately the low-level half: nothing stops somebody else from initializing the account first, naming their own wallet as owner, in between this transaction and the next; a caller who wants that race closed should build create+initialize as two instructions in one transaction themselves. Initializing is a separate call: initialize-account3, or initialize-account/initialize-account2 for the original opcodes. This produces a plain keypair account rather than an associated one (see create-ata): the address is whatever key was generated for it, and nothing can rediscover it from the wallet and mint the way an associated token account can be. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-token-account
 // @Accept       json
 // @Produce      json
@@ -1177,7 +1526,6 @@ func (h *TokenTransactionHandler) CreateKTA(w http.ResponseWriter, r *http.Reque
 		req.RentPayerKey(),
 		req.FeePayerKey(),
 		req.TokenAccountKey(),
-		req.MintKey(),
 	}
 	if !req.DurableNonceAccountKey().IsNil() {
 		lookups = append(lookups, req.DurableNonceAccountKey())
@@ -1185,19 +1533,6 @@ func (h *TokenTransactionHandler) CreateKTA(w http.ResponseWriter, r *http.Reque
 	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
-		return
-	}
-
-	// The mint has to already exist and belong to the program the account is
-	// being opened against, or the instruction fails on chain rather than
-	// here.
-	mintInfo := accounts[req.MintKey().Base58()]
-	if !mintInfo.Exists() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", req.MintKey()))
-		return
-	}
-	if mintInfo.Owner != req.TokenProgramID().Base58() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is owned by %s, not %s", req.MintKey(), mintInfo.Owner, req.TokenProgramID()))
 		return
 	}
 
@@ -1216,11 +1551,12 @@ func (h *TokenTransactionHandler) CreateKTA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	instructions, err := tokenProgram.CreateAccount(req.RentPayerKey(), req.TokenAccountKey(), req.MintKey(), req.OwnerKey(), rentExempt)
+	instruction, err := tokenProgram.CreateAccount(req.RentPayerKey(), req.TokenAccountKey(), rentExempt)
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	instructions := []*types.Instruction{instruction}
 
 	// Without a nonce the message is built against the blockhash resolved
 	// above and expires with it. With one it is built against the value that
@@ -1322,7 +1658,203 @@ func (h *TokenTransactionHandler) CreateKTA(w http.ResponseWriter, r *http.Reque
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
 	handler.WriteOK(w, NewCreateKTAResponse(
 		tx, raw, messageBytes,
-		req.RentPayerKey(), req.FeePayerKey(), req.TokenAccountKey(), req.MintKey(), req.OwnerKey(), req.TokenProgramID(), nonceAuthority,
+		req.RentPayerKey(), req.FeePayerKey(), req.TokenAccountKey(), req.TokenProgramID(), nonceAuthority,
+		rentExempt, fee,
+	))
+}
+
+// CreateMultisig godoc
+// @Summary      Fund a new account, sized and owned for a Token multisig
+// @Description  System CreateAccount only, sized and owned for a multisig but not initialized. This is deliberately the low-level half, the same as create-mint and create-kta: nothing stops somebody else from initializing the account first, with their own m and signers, in between this transaction and the next; a caller who wants that race closed should build create+initialize as two instructions in one transaction themselves. Initializing is a separate call: initialize-multisig2, or initialize-multisig for the original opcode. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-multisig
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                    true  "Cluster name"
+// @Param        X-Chain-Network  header    string                    true  "Cluster network"
+// @Param        body             body      CreateMultisigRequest     true  "Multisig parameters"
+// @Success      200              {object}  CreateMultisigResponse
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/create-multisig [post]
+func (h *TokenTransactionHandler) CreateMultisig(w http.ResponseWriter, r *http.Request) {
+	req := new(CreateMultisigRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// The multisig has to reach its own rent-exempt minimum, a different
+	// number from a plain wallet's, a mint's, and a token account's, and is
+	// resolved before the instruction is built since CreateAccount takes it
+	// as an argument.
+	rentExempt, err := chain.Cli.MinimumBalanceForRentExemptionMultisig(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	// Every account this handler ever needs is read in one round trip.
+	// rent_payer and fee_payer are frequently the same key under different
+	// roles, and batching rather than fetching each alone is what makes that
+	// overlap cheap instead of redundant reads.
+	lookups := []*types.PublicKey{
+		req.RentPayerKey(),
+		req.FeePayerKey(),
+		req.MultisigAccountKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	// Creating an account that already exists fails on chain, and unlike a
+	// transfer to an unfunded address there is no reading of it as intent.
+	if accounts[req.MultisigAccountKey().Base58()].Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("multisig_account: %s already exists", req.MultisigAccountKey()))
+		return
+	}
+
+	// CreateMultisig's own System CreateAccount moves rent_payer's lamports
+	// the same way a plain Transfer does internally, and the runtime rejects
+	// that source outright if it carries any data, regardless of who owns it.
+	if accounts[req.RentPayerKey().Base58()].CarriesData() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("rent_payer: %s carries data and cannot fund an account's creation", req.RentPayerKey()))
+		return
+	}
+
+	instruction, err := tokenProgram.CreateMultisig(req.RentPayerKey(), req.MultisigAccountKey(), rentExempt)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := []*types.Instruction{instruction}
+
+	// Without a nonce the message is built against the blockhash resolved
+	// above and expires with it. With one it is built against the value that
+	// account stores and never expires, so which constructor runs is the
+	// whole difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	// rent_payer and fee_payer may be the same account wearing two hats, so
+	// what each distinct key owes is summed by address rather than checked
+	// once per role.
+	spent := map[string]uint64{
+		req.RentPayerKey().Base58(): 0,
+		req.FeePayerKey().Base58():  0,
+	}
+	spent[req.RentPayerKey().Base58()] += rentExempt
+	spent[req.FeePayerKey().Base58()] += fee
+
+	for payer, amount := range spent {
+		var balance uint64
+		if info := accounts[payer]; info.Exists() {
+			balance = info.Lamports
+		}
+		if balance < amount {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: balance %d does not cover %d", payer, balance, amount))
+			return
+		}
+		if !types.RentExemptAfter(balance, amount, minRent) {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: would leave %d lamports, below the %d lamport rent-exemption minimum", payer, balance-amount, minRent))
+			return
+		}
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewCreateMultisigResponse(
+		tx, raw, messageBytes,
+		req.RentPayerKey(), req.FeePayerKey(), req.MultisigAccountKey(), req.TokenProgramID(), nonceAuthority,
 		rentExempt, fee,
 	))
 }

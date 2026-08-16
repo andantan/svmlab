@@ -872,6 +872,106 @@ func (t *token) InitializeAccount3(account, mint, owner *types.PublicKey) (*type
 	), data), nil
 }
 
+// InitializeMultisig turns an existing Token-owned account of the right size
+// into a multisig, using the original opcode that carries the rent sysvar as
+// a read-only account alongside the multisig. InitializeMultisig2 drops it as
+// dead weight; this exists only for compatibility with the original opcode.
+//
+// The multisig does not sign, and neither do the signers being enrolled:
+// this only records their addresses, the same way InitializeMint2 only
+// records a mint authority without checking it against a signer. Nothing
+// about becoming a registered signer needs proving here — that only matters
+// once the multisig is actually used as an authority.
+//
+// m must be at least 1 and at most len(signers), and len(signers) must be at
+// most MaxMultisigSigners: the program enforces 1 <= m <= n <= 11, and
+// building an instruction that cannot pass that is caught here rather than
+// on chain.
+func (t *token) InitializeMultisig(multisig *types.PublicKey, m uint8, signers []*types.PublicKey) (*types.Instruction, error) {
+	if multisig.IsNil() {
+		return nil, fmt.Errorf("token initialize multisig: multisig is required")
+	}
+	if len(signers) == 0 {
+		return nil, fmt.Errorf("token initialize multisig: at least one signer is required")
+	}
+	if len(signers) > MaxMultisigSigners {
+		return nil, fmt.Errorf("token initialize multisig: %d signers exceeds the limit of %d", len(signers), MaxMultisigSigners)
+	}
+	if m < MinMultisigSigners || int(m) > len(signers) {
+		return nil, fmt.Errorf("token initialize multisig: m must be between 1 and %d, got %d", len(signers), m)
+	}
+
+	seen := make(map[string]bool, len(signers))
+	for i, s := range signers {
+		if s.IsNil() {
+			return nil, fmt.Errorf("token initialize multisig: signer[%d] is required", i)
+		}
+		if key := s.Base58(); seen[key] {
+			return nil, fmt.Errorf("token initialize multisig: signer[%d] %s is repeated", i, s)
+		} else {
+			seen[key] = true
+		}
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInitializeMultisig)
+	data = codec.Binary.AppendU8(data, m)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(multisig),
+		types.NewReadonlyAccount(Sysvar.Rent()),
+	)
+	for _, s := range signers {
+		accounts = append(accounts, types.NewReadonlyAccount(s))
+	}
+
+	return types.NewInstruction(t.id, accounts, data), nil
+}
+
+// InitializeMultisig2 turns an existing Token-owned account of the right
+// size into a multisig.
+//
+// This is the 2 variant rather than the original because the only difference
+// is that it does not take the rent sysvar, the same relationship
+// InitializeMint2 has to InitializeMint.
+func (t *token) InitializeMultisig2(multisig *types.PublicKey, m uint8, signers []*types.PublicKey) (*types.Instruction, error) {
+	if multisig.IsNil() {
+		return nil, fmt.Errorf("token initialize multisig: multisig is required")
+	}
+	if len(signers) == 0 {
+		return nil, fmt.Errorf("token initialize multisig: at least one signer is required")
+	}
+	if len(signers) > MaxMultisigSigners {
+		return nil, fmt.Errorf("token initialize multisig: %d signers exceeds the limit of %d", len(signers), MaxMultisigSigners)
+	}
+	if m < MinMultisigSigners || int(m) > len(signers) {
+		return nil, fmt.Errorf("token initialize multisig: m must be between 1 and %d, got %d", len(signers), m)
+	}
+
+	seen := make(map[string]bool, len(signers))
+	for i, s := range signers {
+		if s.IsNil() {
+			return nil, fmt.Errorf("token initialize multisig: signer[%d] is required", i)
+		}
+		if key := s.Base58(); seen[key] {
+			return nil, fmt.Errorf("token initialize multisig: signer[%d] %s is repeated", i, s)
+		} else {
+			seen[key] = true
+		}
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInitializeMultisig2)
+	data = codec.Binary.AppendU8(data, m)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(multisig),
+	)
+	for _, s := range signers {
+		accounts = append(accounts, types.NewReadonlyAccount(s))
+	}
+
+	return types.NewInstruction(t.id, accounts, data), nil
+}
+
 // TransferChecked moves tokens between two accounts of the same mint.
 //
 // It never sends to a wallet. Both ends are token accounts, and reaching a
@@ -1146,14 +1246,15 @@ func (t *token) ThawAccount(account, mint, authority *types.PublicKey, signers [
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
 }
 
-// CreateMint funds a new account, hands it to the Token Program, and
-// initializes it as a mint, as one instruction pair.
+// CreateMint funds a new account and hands it to the Token Program, sized and
+// owned correctly for a mint but not initialized.
 //
-// The pair is not a convenience. Between the two instructions the account is
-// Token-owned, correctly sized, and uninitialized, and InitializeMint2 needs no
-// signature from it, so anyone watching could initialize it first with their
-// own authority. Splitting these across two transactions is a race with a
-// stranger; keeping them together closes it, since a transaction is atomic.
+// This is deliberately the low-level half only: initializing it is a separate
+// call (InitializeMint2, or InitializeMint for the original opcode), and
+// nothing stops somebody else from initializing it first in between with
+// their own authority. A caller who wants that race closed belongs on a
+// composite instead; this is for one who accepts it, e.g. because the two
+// calls are already going to land in the same transaction some other way.
 //
 // The new mint signs, because creating an account requires the account itself
 // to authorize it. That is the one place a mint's private key is ever needed:
@@ -1161,42 +1262,42 @@ func (t *token) ThawAccount(account, mint, authority *types.PublicKey, signers [
 //
 // lamports has to cover rent exemption for MintSpace, which the caller reads
 // from the cluster rather than assuming, since it is a cluster parameter.
-func (t *token) CreateMint(payer, mint, mintAuthority, freezeAuthority *types.PublicKey, decimals uint8, lamports uint64) (types.Instructions, error) {
-	create, err := System.CreateAccount(payer, mint, t.id, lamports, MintSpace)
-	if err != nil {
-		return nil, err
-	}
-
-	initialize, err := t.InitializeMint2(mint, mintAuthority, freezeAuthority, decimals)
-	if err != nil {
-		return nil, err
-	}
-
-	return types.NewInstructions(create, initialize), nil
+func (t *token) CreateMint(payer, mint *types.PublicKey, lamports uint64) (*types.Instruction, error) {
+	return System.CreateAccount(payer, mint, t.id, lamports, MintSpace)
 }
 
-// CreateAccount funds a new account, hands it to the Token Program, and
-// initializes it as a holder account for one mint, as one instruction pair.
+// CreateAccount funds a new account and hands it to the Token Program, sized
+// and owned correctly for a holder account but not initialized.
 //
-// The same race as CreateMint applies, and worse: an uninitialized token
-// account initialized by somebody else names their wallet as owner, so the
-// funder pays rent for an account they cannot spend from.
+// This is deliberately the low-level half only: initializing it is a separate
+// call (InitializeAccount3, or InitializeAccount/InitializeAccount2 for the
+// original opcodes), and nothing stops somebody else from initializing it
+// first in between, naming their own wallet as owner. A caller who wants that
+// race closed belongs on a composite instead; this is for one who accepts it.
 //
 // This produces a plain keypair account rather than an associated one. The
 // address is whatever key was generated for it, so nothing can rediscover it
 // from the wallet and mint, which is what the associated token account exists
 // to fix. It is still what to use when a wallet wants more than one account for
 // the same mint, since the associated address is one per pair.
-func (t *token) CreateAccount(payer, account, mint, owner *types.PublicKey, lamports uint64) (types.Instructions, error) {
-	create, err := System.CreateAccount(payer, account, t.id, lamports, TokenAccountSpace)
-	if err != nil {
-		return nil, err
-	}
+func (t *token) CreateAccount(payer, account *types.PublicKey, lamports uint64) (*types.Instruction, error) {
+	return System.CreateAccount(payer, account, t.id, lamports, TokenAccountSpace)
+}
 
-	initialize, err := t.InitializeAccount3(account, mint, owner)
-	if err != nil {
-		return nil, err
-	}
-
-	return types.NewInstructions(create, initialize), nil
+// CreateMultisig funds a new account and hands it to the Token Program, sized
+// and owned correctly for a multisig but not initialized.
+//
+// This is deliberately the low-level half only, the same as CreateMint and
+// CreateAccount: initializing it is a separate call (InitializeMultisig2, or
+// InitializeMultisig for the original opcode), and nothing stops somebody
+// else from initializing it first in between with their own m and signers. A
+// caller who wants that race closed should build the pair as two
+// instructions in one transaction themselves.
+//
+// The new multisig signs, because creating an account requires the account
+// itself to authorize it. That is the one place its private key is ever
+// needed: afterwards it is only ever named as an authority, never signed for
+// directly, and the key that made it is spent.
+func (t *token) CreateMultisig(payer, multisig *types.PublicKey, lamports uint64) (*types.Instruction, error) {
+	return System.CreateAccount(payer, multisig, t.id, lamports, MultisigSpace)
 }

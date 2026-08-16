@@ -3458,7 +3458,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/create-kta": {
             "post": {
-                "description": "System CreateAccount and InitializeAccount3 as one transaction. An uninitialized Token-owned account initialized by somebody else names their wallet as owner, which is why the two never exist as separate endpoints. This produces a plain keypair account rather than an associated one (see create-ata): the address is whatever key was generated for it, and nothing can rediscover it from the wallet and mint the way an associated token account can be. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "System CreateAccount only, sized and owned for a holder account but not initialized. This is deliberately the low-level half: nothing stops somebody else from initializing the account first, naming their own wallet as owner, in between this transaction and the next; a caller who wants that race closed should build create+initialize as two instructions in one transaction themselves. Initializing is a separate call: initialize-account3, or initialize-account/initialize-account2 for the original opcodes. This produces a plain keypair account rather than an associated one (see create-ata): the address is whatever key was generated for it, and nothing can rediscover it from the wallet and mint the way an associated token account can be. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3468,7 +3468,7 @@ const docTemplate = `{
                 "tags": [
                     "v2-transaction-token-token-account"
                 ],
-                "summary": "Fund and initialize a keypair SPL Token holder account (KTA)",
+                "summary": "Fund a new account, sized and owned for a keypair SPL Token holder account (KTA)",
                 "parameters": [
                     {
                         "type": "string",
@@ -3515,7 +3515,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/create-mint": {
             "post": {
-                "description": "System CreateAccount and InitializeMint2 as one transaction. An uninitialized Token-owned account can be initialized by anybody else before its intended owner does, so the two never exist as separate endpoints. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "System CreateAccount only, sized and owned for a mint but not initialized. This is deliberately the low-level half: nothing stops somebody else from initializing the account first, in between this transaction and the next; a caller who wants that race closed should build create+initialize as two instructions in one transaction themselves. Initializing is a separate call: initialize-mint2, or initialize-mint for the original opcode. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3525,7 +3525,7 @@ const docTemplate = `{
                 "tags": [
                     "v2-transaction-token-mint-account"
                 ],
-                "summary": "Fund and initialize an SPL Token mint",
+                "summary": "Fund a new account, sized and owned for an SPL Token mint",
                 "parameters": [
                     {
                         "type": "string",
@@ -3556,6 +3556,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.CreateMintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/create-multisig": {
+            "post": {
+                "description": "System CreateAccount only, sized and owned for a multisig but not initialized. This is deliberately the low-level half, the same as create-mint and create-kta: nothing stops somebody else from initializing the account first, with their own m and signers, in between this transaction and the next; a caller who wants that race closed should build create+initialize as two instructions in one transaction themselves. Initializing is a separate call: initialize-multisig2, or initialize-multisig for the original opcode. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-multisig"
+                ],
+                "summary": "Fund a new account, sized and owned for a Token multisig",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Multisig parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.CreateMultisigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.CreateMultisigResponse"
                         }
                     },
                     "400": {
@@ -3629,7 +3686,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/initialize-account": {
             "post": {
-                "description": "Raw InitializeAccount, the original opcode that passes owner as a read-only account and carries the rent sysvar alongside it; the program never checks owner against a signer, and neither is read for anything but its address. See initialize-account3 for the variant without either, which is what create-kta uses internally. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Raw InitializeAccount, the original opcode that passes owner as a read-only account and carries the rent sysvar alongside it; the program never checks owner against a signer, and neither is read for anything but its address. See initialize-account3 for the variant without either. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3686,7 +3743,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/initialize-account2": {
             "post": {
-                "description": "Raw InitializeAccount2: owner rides in the instruction data rather than as an account, dropping the account InitializeAccount carries; the rent sysvar is still read. See initialize-account3 for the variant without it, which is what create-kta uses internally. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Raw InitializeAccount2: owner rides in the instruction data rather than as an account, dropping the account InitializeAccount carries; the rent sysvar is still read. See initialize-account3 for the variant without it. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3743,7 +3800,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/initialize-account3": {
             "post": {
-                "description": "Raw InitializeAccount3: owner rides in the instruction data and the rent sysvar is dropped entirely, which is what create-kta uses internally. This endpoint exposes it standing alone, for callers assembling the account's creation separately (compat, batch, or client-assembled) rather than through create-kta's single transaction. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Raw InitializeAccount3: owner rides in the instruction data and the rent sysvar is dropped entirely. This is the natural pairing for create-kta, which only creates the account and never initializes it. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3800,7 +3857,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/initialize-mint": {
             "post": {
-                "description": "Raw InitializeMint, the original opcode that carries the rent sysvar as a read-only account alongside mint; the program stopped reading it once rent collection was disabled. See initialize-mint2 for the variant without it, which is what create-mint uses internally. mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Raw InitializeMint, the original opcode that carries the rent sysvar as a read-only account alongside mint; the program stopped reading it once rent collection was disabled. See initialize-mint2 for the variant without it. mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3857,7 +3914,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/initialize-mint2": {
             "post": {
-                "description": "Raw InitializeMint2, with no CreateAccount alongside it: mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. Nothing stops somebody else from initializing it first between its creation and this call; see create-mint for the single-transaction endpoint that avoids that race. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Raw InitializeMint2, with no CreateAccount alongside it: mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. This is the natural pairing for create-mint, which only creates the account and never initializes it; nothing stops somebody else from initializing it first in between, so a caller who wants that race closed has to build create+initialize as two instructions in one transaction themselves. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3898,6 +3955,120 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.InitializeMint2Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/initialize-multisig": {
+            "post": {
+                "description": "Raw InitializeMultisig, the original opcode that carries the rent sysvar as a read-only account alongside multisig; the program never reads it for anything else. See initialize-multisig2 for the variant without it. multisig_account must already exist, be owned by program, be exactly 355 bytes, and be uninitialized. Anywhere the Token Program takes an authority, a multisig may stand in for it instead, and the named signers sign in its place. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-multisig"
+                ],
+                "summary": "Initialize an already-existing account as a Token multisig (original opcode)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Initialize-multisig parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.InitializeMultisigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.InitializeMultisigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/initialize-multisig2": {
+            "post": {
+                "description": "Raw InitializeMultisig2: the rent sysvar InitializeMultisig reads is dropped. multisig_account must already exist, be owned by program, be exactly 355 bytes, and be uninitialized. Anywhere the Token Program takes an authority, a multisig may stand in for it instead, and the named signers sign in its place. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-multisig"
+                ],
+                "summary": "Initialize an already-existing account as a Token multisig",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Initialize-multisig parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.InitializeMultisig2Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.InitializeMultisig2Response"
                         }
                     },
                     "400": {
@@ -4821,7 +4992,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "initialized": {
-                    "description": "Initialized is true for anything without an uninitialized state of its\nown to report — a plain wallet, a program, an account this endpoint has\nno parser for. It is only ever false for the handful of layouts that\nactually carry an initialization flag: a durable nonce account, a mint,\nor a token account allocated and assigned to a token program but not\nyet initialized by InitializeMint*/InitializeAccount*.",
+                    "description": "Initialized is true for anything without an uninitialized state of its\nown to report — a plain wallet, a program, an account this endpoint has\nno parser for. It is only ever false for the handful of layouts that\nactually carry an initialization flag: a durable nonce account, a mint,\na token account, or a multisig, allocated and assigned to the right\nprogram but not yet initialized by InitializeMint*/InitializeAccount*/\nInitializeMultisig*.",
                     "type": "boolean"
                 },
                 "lamports": {
@@ -6439,18 +6610,8 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "mint": {
-                    "description": "Mint is the token TokenAccount is initialized to hold, and must already\nexist.",
-                    "type": "string",
-                    "example": ""
-                },
-                "owner": {
-                    "description": "Owner is who can transfer, burn, or otherwise authorize spending from\nTokenAccount. It need not be RentPayer or FeePayer, and is not required\nto sign this transaction: InitializeAccount3 only records it, it does\nnot check it against a signer, which is exactly the risk that keeps\nthis endpoint from splitting into two.",
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "program": {
-                    "description": "Program names the account to send the instructions to: classic Token\nor Token-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever, and it must agree\nwith the mint's own owning program or the instruction fails on chain.",
+                    "description": "Program names the account to send the instruction to: classic Token\nor Token-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
                 },
@@ -6465,7 +6626,7 @@ const docTemplate = `{
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "token_account": {
-                    "description": "TokenAccount is created and initialized as a holder account for Mint.\nIt signs alongside RentPayer, since an address does not exist until\nwhoever holds its private key authorizes its creation. It must not\nalready exist.",
+                    "description": "TokenAccount is created. It signs alongside RentPayer, since an address\ndoes not exist until whoever holds its private key authorizes its\ncreation. It must not already exist.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
@@ -6486,13 +6647,7 @@ const docTemplate = `{
                 "message": {
                     "type": "string"
                 },
-                "mint": {
-                    "type": "string"
-                },
                 "nonce_authority": {
-                    "type": "string"
-                },
-                "owner": {
                     "type": "string"
                 },
                 "program": {
@@ -6526,11 +6681,6 @@ const docTemplate = `{
         "v2.CreateMintRequest": {
             "type": "object",
             "properties": {
-                "decimals": {
-                    "description": "Decimals fixes how the raw integer amount this mint moves is displayed\nas a UI amount, and cannot be changed after creation.",
-                    "type": "integer",
-                    "example": 6
-                },
                 "durable_nonce_account": {
                     "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
@@ -6541,23 +6691,13 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "freeze_authority": {
-                    "description": "FreezeAuthority may be left empty, in which case the mint is created\nwith no freeze authority at all, permanently: there is no separate flag\nhere the way SetAuthority needs one, since a mint that does not exist\nyet has no prior authority a typo could accidentally clear.",
-                    "type": "string",
-                    "example": ""
-                },
                 "mint": {
-                    "description": "Mint is the account created and initialized. It signs alongside\nRentPayer, since an address does not exist until whoever holds its\nprivate key authorizes its creation. It must not already exist.",
+                    "description": "Mint is the account created. It signs alongside RentPayer, since an\naddress does not exist until whoever holds its private key authorizes\nits creation. It must not already exist.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
-                "mint_authority": {
-                    "description": "MintAuthority is who can mint new supply going forward. It need not be\nRentPayer or FeePayer, and is not required to sign this transaction:\nInitializeMint2 only records it, it does not check it against a signer.",
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "program": {
-                    "description": "Program names the account to send the instructions to: classic Token\nor Token-2022. It is required rather than defaulted, since a mint\nbelongs to exactly one of the two forever and defaulting would make\npicking wrong silent. It is an address rather than a name because that\nis what actually selects the program on chain: Token-2022 is not an\nenum value, it is a different account, and a third Token\nimplementation would need no change here to be reachable.",
+                    "description": "Program names the account to send the instruction to: classic Token\nor Token-2022. It is required rather than defaulted, since a mint\nbelongs to exactly one of the two forever and defaulting would make\npicking wrong silent. It is an address rather than a name because that\nis what actually selects the program on chain: Token-2022 is not an\nenum value, it is a different account, and a third Token\nimplementation would need no change here to be reachable.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
                 },
@@ -6582,22 +6722,13 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "decimals": {
-                    "type": "integer"
-                },
                 "fee": {
                     "$ref": "#/definitions/v2.SystemPayer"
-                },
-                "freeze_authority": {
-                    "type": "string"
                 },
                 "message": {
                     "type": "string"
                 },
                 "mint": {
-                    "type": "string"
-                },
-                "mint_authority": {
                     "type": "string"
                 },
                 "nonce_authority": {
@@ -6612,6 +6743,87 @@ const docTemplate = `{
                 },
                 "rent": {
                     "description": "Rent reports what funds CreateMint itself. Its lamports are always\nexactly the rent-exemption minimum for an 82-byte account, never more\nor less.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.CreateMultisigRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as RentPayer.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "multisig_account": {
+                    "description": "MultisigAccount is the account created. It signs alongside RentPayer,\nsince an address does not exist until whoever holds its private key\nauthorizes its creation. It must not already exist.",
+                    "type": "string",
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
+                },
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "rent_payer": {
+                    "description": "RentPayer funds MultisigAccount's creation for exactly the\nrent-exemption minimum for a 355-byte account, and is a separate\nbalance from FeePayer.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.CreateMultisigResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "multisig_account": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "rent": {
+                    "description": "Rent reports what funds CreateMultisig itself. Its lamports are always\nexactly the rent-exemption minimum for a 355-byte account, never more\nor less.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/v2.SystemPayer"
@@ -7125,6 +7337,183 @@ const docTemplate = `{
                 },
                 "nonce_authority": {
                     "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries\na stored value rather than a fetched blockhash.",
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.InitializeMultisig2Request": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "m": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "multisig_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "type": "string",
+                    "example": ""
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v2.InitializeMultisig2Response": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "m": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "multisig_account": {
+                    "type": "string"
+                },
+                "multisig_signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "n": {
+                    "type": "integer"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.InitializeMultisigRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "m": {
+                    "description": "M is how many of Signers must sign in the multisig's place, wherever\nit is later named as an authority. The program enforces\n1 \u003c= m \u003c= len(signers) \u003c= 11.",
+                    "type": "integer",
+                    "example": 2
+                },
+                "multisig_account": {
+                    "description": "MultisigAccount is the account initialized. It must already exist,\nmust be owned by Program, and must be exactly 355 bytes and\nuninitialized. It does not sign: nothing about becoming a registered\nsigner needs proving here, only once the multisig is actually used as\nan authority.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It must match the program that already owns\nMultisigAccount.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "signers": {
+                    "description": "Signers is who is enrolled. Order is preserved in the response, but the\nprogram itself treats membership as a set: any m of them may sign.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v2.InitializeMultisigResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "m": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "multisig_account": {
+                    "type": "string"
+                },
+                "multisig_signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "n": {
+                    "type": "integer"
+                },
+                "nonce_authority": {
                     "type": "string"
                 },
                 "program": {

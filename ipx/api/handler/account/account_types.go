@@ -65,8 +65,9 @@ type AccountResponse struct {
 	// own to report — a plain wallet, a program, an account this endpoint has
 	// no parser for. It is only ever false for the handful of layouts that
 	// actually carry an initialization flag: a durable nonce account, a mint,
-	// or a token account allocated and assigned to a token program but not
-	// yet initialized by InitializeMint*/InitializeAccount*.
+	// a token account, or a multisig, allocated and assigned to the right
+	// program but not yet initialized by InitializeMint*/InitializeAccount*/
+	// InitializeMultisig*.
 	Initialized bool `json:"initialized"`
 }
 
@@ -110,6 +111,10 @@ func NewAccountResponse(k *types.PublicKey, info *rpc.AccountInfo) *AccountRespo
 		}
 		if account, aErr := core.DecodeTokenAccount(owner, data); aErr == nil {
 			resp.Initialized = account.Initialized()
+			return resp
+		}
+		if multisig, msErr := core.DecodeMultisig(owner, data); msErr == nil {
+			resp.Initialized = multisig.IsInitialized
 			return resp
 		}
 	}

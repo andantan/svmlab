@@ -60,6 +60,14 @@ type AccountResponse struct {
 	Executable bool   `json:"executable"`
 	Space      uint64 `json:"space"`
 	Data       string `json:"data"`
+
+	// Initialized is true for anything without an uninitialized state of its
+	// own to report — a plain wallet, a program, an account this endpoint has
+	// no parser for. It is only ever false for the handful of layouts that
+	// actually carry an initialization flag: a durable nonce account, a mint,
+	// or a token account allocated and assigned to a token program but not
+	// yet initialized by InitializeMint*/InitializeAccount*.
+	Initialized bool `json:"initialized"`
 }
 
 func NewAccountResponse(k *types.PublicKey, info *rpc.AccountInfo) *AccountResponse {
@@ -69,16 +77,44 @@ func NewAccountResponse(k *types.PublicKey, info *rpc.AccountInfo) *AccountRespo
 
 	data, _ := info.Bytes()
 
-	return &AccountResponse{
-		PublicKey:  k.Base58(),
-		Exists:     true,
-		Lamports:   strconv.FormatUint(info.Lamports, 10),
-		SOL:        types.LamportsToSol(info.Lamports),
-		Owner:      info.Owner,
-		Executable: info.Executable,
-		Space:      info.Space,
-		Data:       codec.Base64.Encode(data),
+	resp := &AccountResponse{
+		PublicKey:   k.Base58(),
+		Exists:      true,
+		Lamports:    strconv.FormatUint(info.Lamports, 10),
+		SOL:         types.LamportsToSol(info.Lamports),
+		Owner:       info.Owner,
+		Executable:  info.Executable,
+		Space:       info.Space,
+		Data:        codec.Base64.Encode(data),
+		Initialized: true,
 	}
+
+	owner, err := types.NewPublicKeyFromBase58(info.Owner)
+	if err != nil {
+		return resp
+	}
+
+	if owner.Equal(core.System.ID()) {
+		if info.Space == core.NonceAccountSpace {
+			if nonce, nErr := core.DeserializeNonceAccount(data); nErr == nil {
+				resp.Initialized = nonce.Initialized()
+			}
+		}
+		return resp
+	}
+
+	if _, err := core.TokenProgram(owner); err == nil {
+		if mint, mErr := core.DecodeMint(owner, data); mErr == nil {
+			resp.Initialized = mint.IsInitialized
+			return resp
+		}
+		if account, aErr := core.DecodeTokenAccount(owner, data); aErr == nil {
+			resp.Initialized = account.Initialized()
+			return resp
+		}
+	}
+
+	return resp
 }
 
 // TokensRequest names the wallet whose token accounts should be listed.

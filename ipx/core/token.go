@@ -707,6 +707,44 @@ func validateAuthority(op string, authority *types.PublicKey, signers []*types.P
 	return nil
 }
 
+// InitializeMint turns an existing Token-owned account of the right size into
+// a mint.
+//
+// This is the original variant: it takes the rent sysvar as a read-only
+// account alongside mint, a parameter the program stopped reading once rent
+// collection was disabled. InitializeMint2 drops it as dead weight in a
+// transaction with a hard size limit; this exists only for compatibility
+// with instruction data built against the original opcode.
+//
+// The mint does not sign. It has already been created by then, and nothing
+// about initializing it needs its authority, which is exactly why creating and
+// initializing have to travel in one transaction: between them the account is
+// Token-owned, correctly sized, and initializable by anyone.
+//
+// A nil freezeAuthority means the mint can never freeze a holder, and that
+// cannot be added later.
+func (t *token) InitializeMint(mint, mintAuthority, freezeAuthority *types.PublicKey, decimals uint8) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize mint: mint is required")
+	}
+	if mintAuthority.IsNil() {
+		return nil, fmt.Errorf("token initialize mint: mint authority is required")
+	}
+	if decimals > MaxMintDecimals {
+		return nil, fmt.Errorf("token initialize mint: %d decimals exceeds the limit of %d", decimals, MaxMintDecimals)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInitializeMint)
+	data = codec.Binary.AppendU8(data, decimals)
+	data = codec.Binary.AppendBytes(data, mintAuthority.Bytes())
+	data = appendPubkeyOption(data, freezeAuthority)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(mint),
+		types.NewReadonlyAccount(Sysvar.Rent()),
+	), data), nil
+}
+
 // InitializeMint2 turns an existing Token-owned account of the right size into
 // a mint.
 //
@@ -740,6 +778,68 @@ func (t *token) InitializeMint2(mint, mintAuthority, freezeAuthority *types.Publ
 
 	return types.NewInstruction(t.id, types.NewAccounts(
 		types.NewWritableAccount(mint),
+	), data), nil
+}
+
+// InitializeAccount turns an existing Token-owned account of the right size
+// into a holder account for one mint.
+//
+// This is the original variant: owner is passed as a read-only account rather
+// than in the instruction data, and the rent sysvar rides alongside it.
+// Neither is read for anything but its address; InitializeAccount3 drops both.
+// This exists only for compatibility with the original opcode.
+//
+// As with a mint, the account does not sign and anyone may initialize it, so
+// this belongs in the same transaction as its creation.
+func (t *token) InitializeAccount(account, mint, owner *types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token initialize account: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize account: mint is required")
+	}
+	if owner.IsNil() {
+		return nil, fmt.Errorf("token initialize account: owner is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInitializeAccount)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(mint),
+		types.NewReadonlyAccount(owner),
+		types.NewReadonlyAccount(Sysvar.Rent()),
+	), data), nil
+}
+
+// InitializeAccount2 turns an existing Token-owned account of the right size
+// into a holder account for one mint.
+//
+// The 2 variant takes the owner in the instruction data rather than as an
+// account, dropping the owner account InitializeAccount carries; the rent
+// sysvar is still read. InitializeAccount3 drops that too. This exists only
+// for compatibility with the original opcode.
+//
+// As with a mint, the account does not sign and anyone may initialize it, so
+// this belongs in the same transaction as its creation.
+func (t *token) InitializeAccount2(account, mint, owner *types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token initialize account: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize account: mint is required")
+	}
+	if owner.IsNil() {
+		return nil, fmt.Errorf("token initialize account: owner is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInitializeAccount2)
+	data = codec.Binary.AppendBytes(data, owner.Bytes())
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(mint),
+		types.NewReadonlyAccount(Sysvar.Rent()),
 	), data), nil
 }
 

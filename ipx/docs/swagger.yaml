@@ -88,6 +88,15 @@ definitions:
         type: boolean
       exists:
         type: boolean
+      initialized:
+        description: |-
+          Initialized is true for anything without an uninitialized state of its
+          own to report — a plain wallet, a program, an account this endpoint has
+          no parser for. It is only ever false for the handful of layouts that
+          actually carry an initialization flag: a durable nonce account, a mint,
+          or a token account allocated and assigned to a token program but not
+          yet initialized by InitializeMint*/InitializeAccount*.
+        type: boolean
       lamports:
         type: string
       owner:
@@ -896,6 +905,104 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.BurnCheckedMaxRequest:
+    properties:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. Burning moves no lamports
+          of its own, so this is the only balance this endpoint ever checks.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint is what TokenAccount must hold, and is the source of the decimals
+          checked against.
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a token
+          account belongs to exactly one of the two forever, and it must agree
+          with the mint's own owning program or the instruction fails on chain.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      token_account:
+        description: |-
+          TokenAccount is debited and never credited elsewhere: burning destroys
+          supply rather than moving it. It must already exist and hold Mint.
+        example: ""
+        type: string
+      token_account_authority:
+        description: |-
+          TokenAccountAuthority is TokenAccount's owner, or its delegate for no
+          more than what was delegated — checked against the balance actually
+          swept, resolved at request time, not a caller-given amount.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.BurnCheckedMaxResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      decimals:
+        type: integer
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
+      token_account_authority:
+        type: string
+      transaction:
+        type: string
+    type: object
   v2.BurnCheckedRequest:
     properties:
       amount:
@@ -1612,6 +1719,392 @@ definitions:
         type: array
       token_account:
         type: string
+      transaction:
+        type: string
+    type: object
+  v2.InitializeAccount2Request:
+    properties:
+      durable_nonce_account:
+        example: ""
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      owner:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        example: ""
+        type: string
+      token_account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.InitializeAccount2Response:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.InitializeAccount3Request:
+    properties:
+      durable_nonce_account:
+        example: ""
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      owner:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        example: ""
+        type: string
+      token_account:
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.InitializeAccount3Response:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.InitializeAccountRequest:
+    properties:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint is the token TokenAccount is initialized to hold, and must already
+          exist.
+        example: ""
+        type: string
+      owner:
+        description: |-
+          Owner is who can transfer, burn, or otherwise authorize spending from
+          TokenAccount. It is not required to sign this transaction:
+          InitializeAccount only records it, it does not check it against a
+          signer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It must match the program that already owns TokenAccount
+          and Mint.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      token_account:
+        description: |-
+          TokenAccount is the account initialized as a holder account for Mint.
+          It must already exist, must be owned by Program, and must be exactly
+          165 bytes and uninitialized. It does not sign.
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.InitializeAccountResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.InitializeMint2Request:
+    properties:
+      decimals:
+        description: |-
+          Decimals fixes how the raw integer amount this mint moves is displayed
+          as a UI amount, and cannot be changed after initialization.
+        example: 6
+        type: integer
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      freeze_authority:
+        description: |-
+          FreezeAuthority may be left empty, in which case the mint is
+          initialized with no freeze authority at all, permanently.
+        example: ""
+        type: string
+      mint:
+        description: |-
+          Mint is the account initialized. It must already exist, must be owned
+          by Program, and must be exactly 82 bytes and uninitialized. It does not
+          sign: it has already been created by the time this runs, and nothing
+          about initializing it needs its authority.
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+      mint_authority:
+        description: |-
+          MintAuthority is who can mint new supply going forward. It is not
+          required to sign this transaction: InitializeMint2 only records it, it
+          does not check it against a signer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It must match the program that already owns Mint.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.InitializeMint2Response:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      decimals:
+        type: integer
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      freeze_authority:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      mint_authority:
+        type: string
+      nonce_authority:
+        description: |-
+          NonceAuthority is present only when the transaction was built against a
+          durable nonce, so it doubles as the signal that RecentBlockhash carries
+          a stored value rather than a fetched blockhash.
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.InitializeMintRequest:
+    properties:
+      decimals:
+        description: |-
+          Decimals fixes how the raw integer amount this mint moves is displayed
+          as a UI amount, and cannot be changed after initialization.
+        example: 6
+        type: integer
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      freeze_authority:
+        description: |-
+          FreezeAuthority may be left empty, in which case the mint is
+          initialized with no freeze authority at all, permanently.
+        example: ""
+        type: string
+      mint:
+        description: |-
+          Mint is the account initialized. It must already exist, must be owned
+          by Program, and must be exactly 82 bytes and uninitialized. It does not
+          sign: it has already been created by the time this runs, and nothing
+          about initializing it needs its authority.
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+      mint_authority:
+        description: |-
+          MintAuthority is who can mint new supply going forward. It is not
+          required to sign this transaction: InitializeMint only records it, it
+          does not check it against a signer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It must match the program that already owns Mint.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.InitializeMintResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      decimals:
+        type: integer
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      freeze_authority:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      mint_authority:
+        type: string
+      nonce_authority:
+        description: |-
+          NonceAuthority is present only when the transaction was built against a
+          durable nonce, so it doubles as the signal that RecentBlockhash carries
+          a stored value rather than a fetched blockhash.
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
       transaction:
         type: string
     type: object
@@ -7135,6 +7628,55 @@ paths:
       summary: Destroy supply held by a token account
       tags:
       - v2-transaction-token-supply
+  /svm/v2/transaction/token/burn-checked/max:
+    post:
+      consumes:
+      - application/json
+      description: Same as burn-checked, except the amount destroyed is token_account's
+        current balance rather than a caller-given one. decimals is never a request
+        field, since there is no client-computed amount to protect against a wrong
+        decimals assumption; the mint's own value is used to build the instruction
+        directly. Unlike a lamport sweep, token_account carries no rent-exemption
+        floor tied to its token balance, so it is always swept all the way to zero.
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        account stores instead, so the transaction never expires, and prepends the
+        advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Burn parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.BurnCheckedMaxRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.BurnCheckedMaxResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Destroy a token account's entire balance
+      tags:
+      - v2-transaction-token-supply
   /svm/v2/transaction/token/close-account:
     post:
       consumes:
@@ -7423,6 +7965,250 @@ paths:
       summary: Suspend a token account
       tags:
       - v2-transaction-token-freeze
+  /svm/v2/transaction/token/initialize-account:
+    post:
+      consumes:
+      - application/json
+      description: Raw InitializeAccount, the original opcode that passes owner as
+        a read-only account and carries the rent sysvar alongside it; the program
+        never checks owner against a signer, and neither is read for anything but
+        its address. See initialize-account3 for the variant without either, which
+        is what create-kta uses internally. token_account must already exist, be owned
+        by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is
+        always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Initialize-account parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializeAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializeAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Initialize an already-existing account as an SPL Token holder account
+        (original opcode)
+      tags:
+      - v2-transaction-token-token-account
+  /svm/v2/transaction/token/initialize-account2:
+    post:
+      consumes:
+      - application/json
+      description: 'Raw InitializeAccount2: owner rides in the instruction data rather
+        than as an account, dropping the account InitializeAccount carries; the rent
+        sysvar is still read. See initialize-account3 for the variant without it,
+        which is what create-kta uses internally. token_account must already exist,
+        be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Initialize-account parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializeAccount2Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializeAccount2Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Initialize an already-existing account as an SPL Token holder account
+        (owner in data)
+      tags:
+      - v2-transaction-token-token-account
+  /svm/v2/transaction/token/initialize-account3:
+    post:
+      consumes:
+      - application/json
+      description: 'Raw InitializeAccount3: owner rides in the instruction data and
+        the rent sysvar is dropped entirely, which is what create-kta uses internally.
+        This endpoint exposes it standing alone, for callers assembling the account''s
+        creation separately (compat, batch, or client-assembled) rather than through
+        create-kta''s single transaction. token_account must already exist, be owned
+        by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is
+        always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Initialize-account parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializeAccount3Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializeAccount3Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Initialize an already-existing account as an SPL Token holder account
+      tags:
+      - v2-transaction-token-token-account
+  /svm/v2/transaction/token/initialize-mint:
+    post:
+      consumes:
+      - application/json
+      description: Raw InitializeMint, the original opcode that carries the rent sysvar
+        as a read-only account alongside mint; the program stopped reading it once
+        rent collection was disabled. See initialize-mint2 for the variant without
+        it, which is what create-mint uses internally. mint must already exist, be
+        owned by program, be exactly 82 bytes, and be uninitialized. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Initialize-mint parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializeMintRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializeMintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Initialize an already-existing account as an SPL Token mint (original
+        opcode)
+      tags:
+      - v2-transaction-token-mint-account
+  /svm/v2/transaction/token/initialize-mint2:
+    post:
+      consumes:
+      - application/json
+      description: 'Raw InitializeMint2, with no CreateAccount alongside it: mint
+        must already exist, be owned by program, be exactly 82 bytes, and be uninitialized.
+        Nothing stops somebody else from initializing it first between its creation
+        and this call; see create-mint for the single-transaction endpoint that avoids
+        that race. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Initialize-mint parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializeMint2Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializeMint2Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Initialize an already-existing account as an SPL Token mint
+      tags:
+      - v2-transaction-token-mint-account
   /svm/v2/transaction/token/mint-to-checked:
     post:
       consumes:

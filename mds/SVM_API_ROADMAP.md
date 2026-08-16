@@ -15,30 +15,72 @@ account model -> deterministic addresses -> assets -> application state
 Core and endpoints had come apart around Token's freeze and thaw builders, the
 same shape the first lifecycle was in before it shipped; that gap is closed.
 
-System Program's "done" row is being re-walked endpoint by endpoint for field
-fidelity against the real `SystemInstruction` set: a low-level API plays one
-role per endpoint, so `transfer`/`transfer/max`/`transfer/spread` now require
-both sides to already exist, and `funding_payer`/`rent_payer`/`fee_payer` are
-the three roles any endpoint draws from. One finding from that pass changes
-what is possible, not just what is named: the System Program's `Transfer` (and
-`CreateAccount`'s internal lamport move) reject a `from` account outright if it
-carries any data, regardless of who owns it. Combined with `Allocate` being a
-one-time, non-shrinkable operation, a System-owned account allocated to an
-arbitrary size other than the 80-byte nonce layout has no recovery path within
-System Program at all — no `system/close-account` exists or can exist, since
-System Program itself has no generic close instruction. The only account shape
-System Program can un-stick this way is a nonce account (`nonce/initialize` +
-`nonce/withdraw`/`withdraw/max`, both already live); anything else needs a
-custom-deployed program to take ownership via `assign` and drain it directly,
-which is exactly the case Vault's `vault/close` is for below.
+System Program's field-fidelity pass is done. Every endpoint plays one role per
+role name: a low-level API plays one role per endpoint, so
+`transfer`/`transfer/max`/`transfer/spread`/`transfer/collect` all require both
+sides to already exist, and `funding_payer`/`rent_payer`/`fee_payer` are the
+three roles any endpoint draws from. `recent_blockhash` is always a required
+field, never fetched server-side, and naming `durable_nonce_account` builds
+against the stored value instead and prepends the advance. One finding from
+that pass changes what is possible, not just what is named: the System
+Program's `Transfer` (and `CreateAccount`'s internal lamport move) reject a
+`from` account outright if it carries any data, regardless of who owns it.
+Combined with `Allocate` being a one-time, non-shrinkable operation, a
+System-owned account allocated to an arbitrary size other than the 80-byte
+nonce layout has no recovery path within System Program at all — no
+`system/close-account` exists or can exist, since System Program itself has no
+generic close instruction. The only account shape System Program can un-stick
+this way is a nonce account (`nonce/initialize` + `nonce/withdraw`/`withdraw/max`,
+both already live); anything else needs a custom-deployed program to take
+ownership via `assign` and drain it directly, which is exactly the case Vault's
+`vault/close` is for below. A second finding from the same pass: the runtime
+deducts the transaction fee from the fee payer in isolation, before any
+instruction runs, and independently requires what that alone leaves to be zero
+or rent-exempt — so a `max` sweep whose source is also the fee payer cannot
+assume the whole balance is reachable; `transfer/max` and `transfer/collect`
+both check this before building, not just when funding and paying overlap by
+accident.
+
+The same field-fidelity pass has now been run across every one of Token
+classic's 20 endpoints too: `recent_blockhash` required and never
+server-fetched, `nonce_account` renamed `durable_nonce_account`,
+`GetMultipleAccounts` batching in place of per-account round trips everywhere
+an endpoint reads more than one account, and every bare `authority` /
+`account` / `new_authority` field renamed to say exactly which authority or
+which role it is — `mint_authority`, `token_account_owner`,
+`token_account_close_authority`, `freeze_authority`, and so on — so a caller
+is never left guessing which of several possible meanings a generic name
+carries. `token/create-account` is renamed `token/create-kta` (keypair token
+account), paired against `create-ata`, since "create-account" was ambiguous
+with System's own endpoint of the same name. `token/transfer-to-wallet` is
+reworked into `token/transfer-from-ata`: it no longer derives or
+auto-creates a destination associated account at all, only the *source* is
+wallet-derived (owner + mint, must already exist); the destination is an
+exact token account address the caller already knows, keypair or associated,
+exactly as `transfer-checked` takes it. Three `max` endpoints were added,
+mirroring System's: `transfer-checked/max` and `transfer-from-ata/max` sweep
+the source token account's current balance (no rent-exemption floor applies
+to a token balance the way it does to lamports, so the fee-payer-overlap
+carve-out System needs does not apply here), and `approve-checked/max`
+grants the maximum representable base-unit amount instead of reading a
+balance at all — the standard effectively-unlimited approval pattern.
+
+A new read-only endpoint, `/svm/account/authority`, reports every
+authority-bearing field for whichever kind of account a public key names —
+a nonce account's authority, a mint's `mint_authority`/`freeze_authority`, a
+token account's `token_owner`/`delegate`/`close_authority`, or a multisig's
+`m`/`n`/`signers`. Every field is always present in the response rather than
+omitted when unset, and `close_authority` always reports the actual effective
+closer (`close_authority.unwrap_or(owner)`) rather than requiring the caller
+to apply that fallback themselves.
 
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
-| RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion |
-| System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi and batch transfer |
+| RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion, account/authority |
+| System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi/batch/collect transfer, field-fidelity pass done |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts; first used by ATA   |
-| SPL Token classic         | done    | done      | lifecycle, delegation, 7 set-authority, freeze/thaw all live; compat next   |
-| Associated Token Account  | done    | done      | create, create-idempotent, transfer-to-wallet; recover-nested deferred      |
+| SPL Token classic         | done    | done      | lifecycle, delegation, 7 set-authority, freeze/thaw, and max variants all live and field-fidelity complete; compat next |
+| Associated Token Account  | done    | done      | create, create-idempotent, transfer-from-ata (+max); recover-nested deferred |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
 Token-2022 left the "later" list for its classic surface. `core.Token2022` is an
@@ -67,14 +109,17 @@ ATA and Token swapped places against the original order, and both are done
 now. Token's first lifecycle worked on keypair token accounts, so it needed
 nothing from ATA, and running it first kept the endpoints verifiable without
 a derivation in the loop. ATA followed once PDA existed: create-ata,
-create-ata-idempotent, and transfer-to-wallet are all live under
-`/svm/v2/transaction/token/`. transfer-to-wallet ended up symmetric rather
-than half-derived — account and destination are both wallet addresses, and
-both associated accounts are derived, not just the recipient's — since a
-sender who already knows their own associated address was never the point;
-that case is what transfer-checked is for. A missing source associated
-account fails instead of being created, since an account nobody has funded
-has nothing to send. Closing an associated account needed nothing new:
+create-ata-idempotent, and transfer-from-ata (+max) are all live under
+`/svm/v2/transaction/token/`. transfer-from-ata only derives the *source*
+side — `owner` + `mint` — and never creates it if absent, since an account
+nobody has funded has nothing to send; `destination_token_account` is an
+exact address the caller already knows, the same contract transfer-checked
+uses. An earlier draft derived and idempotently auto-created both sides from
+two wallet addresses, which made the endpoint quietly composite in a way
+nothing else in Token v2 was; that composed convenience is deferred to a
+higher-level API generation (see the note near the end of this file) rather
+than folded into what is otherwise a one-role-per-endpoint surface. Closing an
+associated account needed nothing new:
 close-account already took any 165-byte account regardless of how its
 address came to exist, associated or keypair. What is still open is
 recover-nested, for the rare case of an associated account mistakenly used as
@@ -131,15 +176,25 @@ Live under `/svm/v2/transaction/token/`:
 ~~~
 create-ata               fails if the account already exists
 create-ata-idempotent    succeeds either way; the one to prepend to a transfer
-transfer-to-wallet       derives both sides' associated accounts and transfers
+transfer-from-ata        derives only the source's associated account
+transfer-from-ata/max    same, sweeping the source's current balance
 ~~~
 
-transfer-to-wallet takes two wallet addresses, `account` and `destination`,
-and derives an associated account for each rather than accepting either
-directly. The destination's may be created via CreateIdempotent if it does
-not exist; the source's never is, since an unfunded account has nothing to
-send. A caller who already holds an exact token account address, associated
-or not, uses transfer-checked instead — that is what it is for.
+transfer-from-ata takes `owner` + `mint` and derives only the *source's*
+associated account from them; it is never created if absent, since an
+unfunded account has nothing to send. `destination_token_account` is an
+exact token account address the caller already knows, keypair or
+associated, taken exactly the way transfer-checked takes it — no
+destination is ever derived or auto-created here. This replaced an earlier
+`transfer-to-wallet` design that derived and idempotently created *both*
+sides from two wallet addresses; that shape made the endpoint quietly
+composite (transfer bundled with a conditional create) in a way nothing
+else in Token v2 was, so it was cut down to the one derivation that only
+this endpoint can offer — the source lookup — and destination handling was
+handed back to the same exact-address contract `transfer-checked` already
+uses. A caller who wants the destination created first calls
+create-ata-idempotent, then this endpoint, as two calls rather than one
+endpoint doing both silently.
 
 No dedicated close endpoint was needed: `token/close-account` already takes
 any 165-byte Token or Token-2022 account, and an associated account is that
@@ -514,14 +569,18 @@ resulting state.
 
 All three pieces are live. PDA and the three token reads (`/svm/token/mint`,
 `/svm/token/account`, `/svm/account/tokens`) were done first; the first
-lifecycle — create-mint, create-account, mint-to-checked, transfer-checked,
-burn-checked, close-account — and ATA — create-ata, create-ata-idempotent,
-transfer-to-wallet — are all live under `/svm/v2/transaction/token/`. The
-milestone can be walked end to end: mint a token, fund either a keypair or an
-associated account, move value between wallets without either side deriving
-an address by hand, and close what is left empty. What is not in this
-milestone — delegation, freezing, and the compatibility opcodes — is
-TOKEN_API_PROPOSAL.md's next step, not a gap in this one.
+lifecycle — create-mint, create-kta, mint-to-checked, transfer-checked
+(+max), burn-checked, close-account — and ATA — create-ata,
+create-ata-idempotent, transfer-from-ata (+max) — are all live under
+`/svm/v2/transaction/token/`, delegation and administration (approve-checked
+(+max), revoke, seven set-authority endpoints, freeze-account, thaw-account)
+are live too, and every one of these twenty endpoints has been through the
+System v2 field-fidelity pass. The milestone can be walked end to end: mint a
+token, fund either a keypair or an associated account, move value between
+wallets without either side deriving an address by hand, and close what is
+left empty. What is not in this milestone — the compatibility opcodes and
+multisig initialization — is TOKEN_API_PROPOSAL.md's next step, not a gap in
+this one.
 
 ### Milestone B: Program-Controlled Assets
 
@@ -563,11 +622,12 @@ The following is the broad candidate catalogue beyond the APIs implemented so
 far. It intentionally includes both the recommended application path and
 lower-priority compatibility, inspection, and protocol-completeness APIs.
 
-### Token authority and wrapped SOL
+### Token wrapped SOL
+
+`token/freeze-account` and `token/thaw-account` are done — see group 3 above.
+Still open:
 
 ~~~text
-token/freeze-account
-token/thaw-account
 token/create-wrapped-sol
 token/wrap-sol
 token/sync-native

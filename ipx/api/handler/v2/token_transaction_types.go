@@ -1478,6 +1478,164 @@ func NewInitializeMultisig2Response(
 	}
 }
 
+// InitializeImmutableOwnerRequest permanently locks a token account's owner
+// field against SetAuthority.
+//
+// This is a Token-2022 extension instruction: it needs extension space
+// appended after the classic 165-byte layout, which classic Token accounts
+// never have, and the classic Token Program has no instruction-processor arm
+// for this opcode at all. Program is therefore restricted to Token-2022 here
+// rather than accepting either, unlike every other endpoint in this file.
+// There is no authority: nothing about locking the owner field needs
+// proving.
+type InitializeImmutableOwnerRequest struct {
+	// TokenAccount is the account whose owner field is locked. It must
+	// already exist, be owned by Program, and carry the extension space this
+	// instruction writes to — which this endpoint does not verify itself,
+	// since parsing Token-2022 extension layouts is its own separate
+	// undertaking; a mismatch fails on chain instead.
+	TokenAccount string `json:"token_account" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be the Token-2022 program address: this opcode does not
+	// exist on the classic Token Program.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount   *types.PublicKey
+	feePayer       *types.PublicKey
+	rbh            *types.Hash
+	dna            *types.PublicKey
+	tokenProgramID *types.PublicKey
+}
+
+func (r *InitializeImmutableOwnerRequest) ValidateRequest() error {
+	var err error
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not the Token-2022 program; the classic Token Program has no instruction for this", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *InitializeImmutableOwnerRequest) TokenAccountKey() *types.PublicKey {
+	return r.tokenAccount
+}
+
+func (r *InitializeImmutableOwnerRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *InitializeImmutableOwnerRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+
+func (r *InitializeImmutableOwnerRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *InitializeImmutableOwnerRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// InitializeImmutableOwnerResponse mirrors the other initialize-* responses;
+// there is no authority or role field to report, since this locks a
+// property of TokenAccount itself rather than naming anyone.
+type InitializeImmutableOwnerResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	TokenAccount string `json:"token_account"`
+	Program      string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewInitializeImmutableOwnerResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, tokenAccount, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *InitializeImmutableOwnerResponse {
+	authority := ""
+	if !nonceAuthority.IsNil() {
+		authority = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &InitializeImmutableOwnerResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  authority,
+		TokenAccount:    tokenAccount.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
 // CreateKTARequest funds a new account and hands it to the Token Program,
 // sized and owned correctly for a keypair token holder account (KTA) but not
 // initialized.

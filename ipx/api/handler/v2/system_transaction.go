@@ -2428,11 +2428,11 @@ func (h *SystemTransactionHandler) SystemSeedTransferMax(w http.ResponseWriter, 
 
 // SystemNonceCreate godoc
 // @Summary      Build a durable nonce account creation
-// @Description  Creates the account and initializes it as a durable nonce in one transaction. The nonce account appears twice: it signs for the creation, since an address does not exist until its key authorizes it, and is only writable for the initialization, which needs no authority of its own — it gains the one named here. Message compilation lists it once with the union of both, which is why it shows up among the signers. Size and funding are not choices: a nonce account is always exactly NonceAccountSpace bytes, and rent_payer funds exactly the rent-exemption minimum for that size, never more or less. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. It has to be an account other than new_nonce_account, which holds no nonce yet.
+// @Description  System CreateAccount only, sized correctly for a nonce account but not initialized. This is deliberately the low-level half: nothing stops somebody else from initializing the account first, with their own authority, in between this transaction and the next; a caller who wants that race closed should build create+initialize as two instructions in one transaction themselves. Initializing is a separate call: nonce/initialize. Size and funding are not choices: a nonce account is always exactly NonceAccountSpace bytes, and rent_payer funds exactly the rent-exemption minimum for that size, never more or less. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. It has to be an account other than new_nonce_account, which holds no nonce yet.
 // @Tags         v2-transaction-system-nonce
 // @Accept       json
 // @Produce      json
-// @Param        body  body      SystemNonceCreateRequest  true  "New nonce account, authority, fee payer, and rent payer"
+// @Param        body  body      SystemNonceCreateRequest  true  "New nonce account, fee payer, and rent payer"
 // @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  SystemNonceCreateResponse
@@ -2501,12 +2501,7 @@ func (h *SystemTransactionHandler) SystemNonceCreate(w http.ResponseWriter, r *h
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	initialize, err := core.System.InitializeNonceAccount(req.NewNonceAccountKey(), req.AuthorityKey())
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	instructions := types.NewInstructions(create, initialize)
+	instructions := types.NewInstructions(create)
 
 	// Without a nonce the message is built against the blockhash resolved
 	// above and expires with it. With one it is built against the value that
@@ -2617,12 +2612,12 @@ func (h *SystemTransactionHandler) SystemNonceCreate(w http.ResponseWriter, r *h
 	}
 
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
-	handler.WriteOK(w, NewSystemNonceCreateResponse(tx, raw, messageBytes, req.NewNonceAccountKey(), req.AuthorityKey(), req.RentPayerKey(), req.FeePayerKey(), nonceAuthority, rentExempt, fee))
+	handler.WriteOK(w, NewSystemNonceCreateResponse(tx, raw, messageBytes, req.NewNonceAccountKey(), req.RentPayerKey(), req.FeePayerKey(), nonceAuthority, rentExempt, fee))
 }
 
 // SystemNonceInitialize godoc
 // @Summary      Build a durable nonce initialization on an existing account
-// @Description  Initializes an account that already exists, is System-owned, and is already the right size. nonce/create-account does this and the creation together, so this is for an address that can no longer be created: CreateAccount refuses one that already holds lamports, which is what happens when someone funds the address first. The account is writable but does not sign, since initializing it needs no authority of its own; it gains the authority named here. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. It has to be an account other than nonce_account, which holds no nonce to build against yet.
+// @Description  Initializes an account that already exists, is System-owned, and is already the right size. This is the natural pairing for nonce/create-account, which only creates the account and never initializes it; nothing stops somebody else from initializing it first in between with their own authority, so a caller who wants that race closed has to build create+initialize as two instructions in one transaction themselves. It is also the only path left for an address that can no longer be created: CreateAccount refuses one that already holds lamports, which is what happens when someone funds the address first. The account is writable but does not sign, since initializing it needs no authority of its own; it gains the authority named here. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. It has to be an account other than nonce_account, which holds no nonce to build against yet.
 // @Tags         v2-transaction-system-nonce
 // @Accept       json
 // @Produce      json

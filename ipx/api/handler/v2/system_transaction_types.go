@@ -2194,20 +2194,23 @@ func NewSystemSeedTransferMaxResponse(tx *types.Transaction, raw, message []byte
 	}
 }
 
-// SystemNonceCreateRequest creates and initializes a durable nonce account in
-// one transaction.
+// SystemNonceCreateRequest funds a new account and hands it to the System
+// Program, sized correctly for a nonce account but not initialized.
 //
-// Neither the size nor the funding is a field. A nonce account is always
-// exactly NonceAccountSpace bytes, and the amount that has to sit in it is the
-// rent-exempt minimum for that size, so both follow from what the account is
-// rather than from a choice the caller makes.
+// This is deliberately the low-level half only: initializing it is a
+// separate call (nonce/initialize), and nothing stops somebody else from
+// initializing it first in between with their own authority. A caller who
+// wants that race closed should build create+initialize as two instructions
+// in one transaction themselves. Neither the size nor the funding is a
+// field. A nonce account is always exactly NonceAccountSpace bytes, and the
+// amount that has to sit in it is the rent-exempt minimum for that size, so
+// both follow from what the account is rather than from a choice the caller
+// makes.
 type SystemNonceCreateRequest struct {
 	// NewNonceAccount is the account created. It signs alongside RentPayer,
 	// since an address does not exist until whoever holds its private key
 	// authorizes its creation. It must not already exist.
 	NewNonceAccount string `json:"new_nonce_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
-
-	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
 	// FeePayer signs and pays the transaction fee. It may be the same
 	// account as RentPayer.
@@ -2241,7 +2244,6 @@ type SystemNonceCreateRequest struct {
 
 	rp  *types.PublicKey
 	nna *types.PublicKey
-	a   *types.PublicKey
 	fp  *types.PublicKey
 	rbh *types.Hash
 	dna *types.PublicKey
@@ -2251,9 +2253,6 @@ func (r *SystemNonceCreateRequest) ValidateRequest() error {
 	var err error
 	if r.nna, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NewNonceAccount)); err != nil {
 		return errors.New("new_nonce_account: " + err.Error())
-	}
-	if r.a, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
 	}
 	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -2306,10 +2305,6 @@ func (r *SystemNonceCreateRequest) NewNonceAccountKey() *types.PublicKey {
 	return r.nna
 }
 
-func (r *SystemNonceCreateRequest) AuthorityKey() *types.PublicKey {
-	return r.a
-}
-
 func (r *SystemNonceCreateRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
@@ -2321,13 +2316,12 @@ type SystemNonceCreateResponse struct {
 	AccountKeys     []string `json:"account_keys"`
 	Signers         []string `json:"signers"`
 	NewNonceAccount string   `json:"new_nonce_account"`
-	Authority       string   `json:"authority"`
 
 	// NonceAuthority is present only when the transaction was built against a
-	// durable nonce, so it doubles as the signal that RecentBlockhash carries a
-	// stored value rather than a fetched blockhash. It belongs to
-	// durable_nonce_account, not to NewNonceAccount — Authority above is what
-	// the new account gains.
+	// durable nonce, so it doubles as the signal that RecentBlockhash carries
+	// a stored value rather than a fetched blockhash. It belongs to
+	// durable_nonce_account, not to NewNonceAccount: this endpoint never
+	// initializes NewNonceAccount, so it gains no authority of its own here.
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
 	Space uint64 `json:"space"`
@@ -2340,7 +2334,7 @@ type SystemNonceCreateResponse struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewSystemNonceCreateResponse(tx *types.Transaction, raw, message []byte, newNonceAccount, authority, rentPayer, feePayer, nonceAuthority *types.PublicKey, rentLamports, fee uint64) *SystemNonceCreateResponse {
+func NewSystemNonceCreateResponse(tx *types.Transaction, raw, message []byte, newNonceAccount, rentPayer, feePayer, nonceAuthority *types.PublicKey, rentLamports, fee uint64) *SystemNonceCreateResponse {
 	nonceAuthorityBase58 := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuthorityBase58 = nonceAuthority.Base58()
@@ -2363,7 +2357,6 @@ func NewSystemNonceCreateResponse(tx *types.Transaction, raw, message []byte, ne
 		AccountKeys:     keys,
 		Signers:         signers,
 		NewNonceAccount: newNonceAccount.Base58(),
-		Authority:       authority.Base58(),
 		NonceAuthority:  nonceAuthorityBase58,
 		Space:           core.NonceAccountSpace,
 		Rent:            newSystemPayer(rentPayer, rentLamports),
@@ -2374,10 +2367,14 @@ func NewSystemNonceCreateResponse(tx *types.Transaction, raw, message []byte, ne
 // SystemNonceInitializeRequest turns an account that already exists into a
 // durable nonce account.
 //
-// nonce/create-account covers the ordinary case in one transaction. This one
-// is for an address that cannot be created any more: CreateAccount refuses an
-// account that already holds lamports, so an address someone funded first can
-// only become a nonce account through the initializer alone.
+// This is the natural pairing for nonce/create-account, which only creates
+// the account and never initializes it. Nothing stops somebody else from
+// initializing it first in between, with their own authority; a caller who
+// wants that race closed should build create+initialize as two instructions
+// in one transaction themselves. This is also the only path left for an
+// address that cannot be created any more: CreateAccount refuses an account
+// that already holds lamports, so an address someone funded first can only
+// become a nonce account through this initializer alone.
 type SystemNonceInitializeRequest struct {
 	// NonceAccount must already exist, be owned by the System Program, and be
 	// exactly NonceAccountSpace bytes — this endpoint doesn't create it, only

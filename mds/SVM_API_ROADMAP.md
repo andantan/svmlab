@@ -104,12 +104,53 @@ account's 165), so a freshly allocated, uninitialized multisig always
 reported `initialized: true`; fixed by adding the missing `DecodeMultisig`
 branch.
 
+The unchecked classic opcodes are live too: `transfer`, `approve`, `mint-to`,
+`burn` (+`max` on the first three; minting has no balance to sweep), and
+`initialize-immutable-owner`. The unchecked variants take no mint or decimals
+field at all — resolving mint server-side from the account instead — since
+neither is named or verified against the accounts on chain, which is exactly
+the failure mode the checked variants exist to catch.
+`initialize-immutable-owner` is Token-2022-only: the classic Token Program's
+deployed instruction processor has no arm for this opcode, so `program` is
+restricted to Token-2022 here rather than accepting either, unlike every
+other endpoint. It also has to run before `initialize-account*`, never after
+— the program requires the base layout to still be `Uninitialized` when an
+extension attaches — and this is checked client-side as a 400 by decoding
+just the base 165 bytes, the same "is this already initialized" question
+`initialize-mint*`/`initialize-account*` already answer for themselves.
+
+Getting there also fixed a real bug shared by all five `initialize-mint*`/
+`initialize-account*` endpoints: each required its target account to be
+*exactly* 82 or 165 bytes, which silently rejected every Token-2022 account
+with extension space appended past the base layout (a 170-byte
+immutable-owner account, for instance). The check is now "at least" that
+many bytes, and the two `DeserializeMint`/`DeserializeTokenAccount` calls
+that used to receive the whole account buffer now receive only the base
+slice (`raw[:core.MintSpace]`/`raw[:core.TokenAccountSpace]`), so extension
+bytes past it are never mistaken for base-layout fields.
+
+What is not caught client-side: `set-authority/owner/replace` (and any other
+endpoint touching a property an extension can override) has no way to tell
+that a token account carries the `ImmutableOwner` extension before sending
+it, so an attempt to reassign one still only fails on chain, correctly, just
+not as an early 400. Closing that gap for real needs a genuine Token-2022
+extension TLV parser — walking the variable-length, multi-type extension
+list past `core.TokenAccountTypeOffset` and matching against each
+extension's real protocol ordinal — which is a meaningfully bigger,
+separate undertaking than the single-field "is the base state Uninitialized"
+check above, and is exactly the boundary this project has already drawn
+around Token-2022 extensions generally (see the Token-2022 Program section
+below and `TOKEN_2022_API_PROPOSAL.md`'s eventual scope). Guessing at an
+unverified extension-type ordinal here would risk the worse failure mode of
+wrongly rejecting a legitimate request, so this stays deferred rather than
+half-built.
+
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion, account/authority |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi/batch/collect transfer, field-fidelity pass done |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts; first used by ATA   |
-| SPL Token classic         | done    | done      | lifecycle (create-only + initialize-* pairing), delegation, 7 set-authority, freeze/thaw, max variants, and multisig lifecycle all live; unchecked/compat opcodes next |
+| SPL Token classic         | done    | done      | lifecycle (create-only + initialize-* pairing), delegation, 7 set-authority, freeze/thaw, max variants, multisig lifecycle, unchecked opcodes (+max), and initialize-immutable-owner all live; native SOL and read-return-data next |
 | Associated Token Account  | done    | done      | create, create-idempotent, transfer-from-ata (+max); recover-nested deferred |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
@@ -126,7 +167,8 @@ System (done)
 -> Associated Token Account (done)
 -> SPL Token classic delegation and administration (done)
 -> SPL Token classic multisig lifecycle (done)
--> SPL Token classic compatibility opcodes  <- here
+-> SPL Token classic compatibility opcodes (done)
+-> SPL Token classic native SOL and read-return-data  <- here
 -> Vault custom program
 -> Compute Budget
 -> Address Lookup Table
@@ -253,20 +295,49 @@ transfer-checked (+max), burn-checked (+max), close-account,
 approve-checked (+max), revoke, seven set-authority endpoints,
 freeze-account, thaw-account, create-multisig, initialize-mint,
 initialize-mint2, initialize-account, initialize-account2,
-initialize-account3, initialize-multisig, and initialize-multisig2 are all
-live under `/svm/v2/transaction/token/`, alongside the reads at
+initialize-account3, initialize-multisig, initialize-multisig2, transfer
+(+max), approve (+max), mint-to, burn (+max), and initialize-immutable-owner
+are all live under `/svm/v2/transaction/token/`, alongside the reads at
 `/svm/token/mint`, `/svm/token/account`, and `/svm/account/tokens`. Every one
 of them checks what a live cluster would reject before building the
 instruction — decimals against the mint, an account's mint against the
 request's, frozen state, authority against owner or delegate (transfer, burn)
 or against the mint's own authority (mint-to, freeze, thaw), close authority
 as its own separate axis, and — for the raw `initialize-*` endpoints — that
-the target account already exists, is owned by the right program, is
-correctly sized, and is not already initialized — so a mismatch comes back as
-a 400 with the reason instead of a signed transaction failing on chain.
+the target account already exists, is owned by the right program, is at
+least correctly sized (Token-2022 extensions may make it larger, never
+smaller), and is not already initialized — so a mismatch comes back as a 400
+with the reason instead of a signed transaction failing on chain.
 freeze-account and thaw-account were the last builders sitting in `core` with
 nothing serving them, and were verified by signing and sending both
 directions on devnet rather than only building the transaction.
+
+transfer/approve/mint-to/burn are the original, unchecked opcodes: none of
+them names or verifies a mint or decimals against the accounts involved,
+which is exactly the failure mode the checked variants exist to catch. mint
+is still resolved server-side (from the account itself) and reported in the
+response even though the request never supplies it, so a caller is not left
+blind about what actually moved. transfer, approve, and burn round out with
+`/max` sweep variants matching their checked counterparts; mint-to has no
+`/max`, since supply has no balance to sweep.
+
+initialize-immutable-owner is Token-2022-only: the classic Token Program's
+deployed instruction processor has no arm for this opcode at all, so
+`program` is restricted to Token-2022 specifically here, unlike every other
+endpoint's either-program rule. It has to run before initialize-account*, not
+after — the program requires the base layout to still be Uninitialized when
+an extension attaches — which is checked client-side as a 400 the same way
+initialize-mint*/initialize-account* check their own "already initialized"
+question, by decoding just the base 165 bytes. What is not caught anywhere
+client-side is the reverse direction: set-authority/owner/replace (and
+anything else touching a property an extension can override) has no way to
+tell a token account already carries this extension before sending, since
+that requires walking the Token-2022 extension TLV list past
+core.TokenAccountTypeOffset and matching real protocol ordinals — a
+genuinely bigger, separate undertaking than a single base-state check, and
+exactly the boundary already drawn around Token-2022 extensions generally
+(group 7 below). An attempt to reassign an immutable-owner account still
+fails, correctly, just on chain rather than as an early 400.
 
 create-mint, create-kta, and create-multisig are deliberately creation-only:
 each is a bare `System.CreateAccount` sized and owned for its target layout,
@@ -283,9 +354,9 @@ extension for it. Replacing a multisig means creating a new one and
 repointing whatever named the old one as an authority through
 `set-authority`.
 
-Still open here: the unchecked/compatibility opcodes
-(`transfer`/`approve`/`mint-to`/`burn`, `initialize-immutable-owner`) and the
-return-data/native-SOL utilities. Detailed coverage:
+Still open here: the return-data/native-SOL utilities (`account-data-size`,
+`amount-to-ui`, `ui-to-amount`, wrapped SOL) and the two unverified opcodes
+(`withdraw-excess-lamports`, `batch`). Detailed coverage:
 
 ~~~
 TOKEN_API_PROPOSAL.md
@@ -635,8 +706,10 @@ close against. Every one of these endpoints has been through the System v2
 field-fidelity pass. The milestone can be walked end to end: mint a token,
 fund either a keypair or an associated account, move value between wallets
 without either side deriving an address by hand, close what is left empty,
-and hand authority to an m-of-n multisig instead of a single wallet. What is
-not in this milestone — the unchecked/compatibility opcodes and the
+and hand authority to an m-of-n multisig instead of a single wallet. The
+unchecked opcodes (transfer/approve/mint-to/burn, +max) and
+initialize-immutable-owner are live too, alongside the checked variants they
+exist to guard against. What is not in this milestone — the
 return-data/native-SOL utilities — is TOKEN_API_PROPOSAL.md's next step, not
 a gap in this one.
 
@@ -700,15 +773,11 @@ program accepts it on Devnet.
 
 `token/initialize-mint`, `token/initialize-mint2`, `token/initialize-account`,
 `token/initialize-account2`, `token/initialize-account3`,
-`token/initialize-multisig`, and `token/initialize-multisig2` are done — see
-group 3 above. Still open:
+`token/initialize-multisig`, `token/initialize-multisig2`, `token/transfer`
+(+max), `token/approve` (+max), `token/mint-to`, `token/burn` (+max), and
+`token/initialize-immutable-owner` are done — see group 3 above. Still open:
 
 ~~~text
-token/transfer
-token/approve
-token/mint-to
-token/burn
-token/initialize-immutable-owner
 token/account-data-size
 token/amount-to-ui
 token/ui-to-amount

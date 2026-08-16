@@ -872,6 +872,34 @@ func (t *token) InitializeAccount3(account, mint, owner *types.PublicKey) (*type
 	), data), nil
 }
 
+// InitializeImmutableOwner permanently locks a token account's owner field
+// against SetAuthority, so it can never be reassigned to a different wallet.
+//
+// This is a Token-2022 extension instruction: it operates on extension space
+// appended after the classic 165-byte layout, which classic Token accounts
+// never have. The classic Token Program's deployed instruction processor
+// predates this opcode and has no arm for it at all, so sending this to a
+// classic account is not merely a no-op, it fails outright. This exists for
+// Token-2022 accounts specifically; the Associated Token Account program
+// initializes this automatically on every Token-2022 ATA it creates, which
+// is what keeps "this address is always this wallet's account for this
+// mint" true even against a malicious SetAuthority.
+//
+// account does not sign, and there is no authority: nothing about locking
+// the owner field needs proving, the same as any other initialize-shaped
+// instruction.
+func (t *token) InitializeImmutableOwner(account *types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token initialize immutable owner: account is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInitializeImmutableOwner)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(account),
+	), data), nil
+}
+
 // InitializeMultisig turns an existing Token-owned account of the right size
 // into a multisig, using the original opcode that carries the rent sysvar as
 // a read-only account alongside the multisig. InitializeMultisig2 drops it as

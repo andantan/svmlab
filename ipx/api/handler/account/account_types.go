@@ -117,6 +117,18 @@ func NewAccountResponse(k *types.PublicKey, info *rpc.AccountInfo) *AccountRespo
 			resp.Initialized = multisig.IsInitialized
 			return resp
 		}
+
+		// None of the three known base layouts matched, which is expected for
+		// a Token-2022 account still being assembled: extensions are appended
+		// past core.TokenAccountTypeOffset, so its size is neither a mint's
+		// nor a token account's nor a multisig's until the base layout is
+		// initialized. That is unambiguous, not merely unparsed, when the
+		// type tag byte itself reads Uninitialized: this account is owned by
+		// a token program, large enough to carry a tag, and that tag says
+		// InitializeMint*/InitializeAccount* has not run yet.
+		if uint64(len(data)) > core.TokenAccountTypeOffset && data[core.TokenAccountTypeOffset] == core.TokenAccountTypeUninitialized {
+			resp.Initialized = false
+		}
 	}
 
 	return resp

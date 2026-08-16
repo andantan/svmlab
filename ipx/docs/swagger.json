@@ -2255,7 +2255,7 @@
         },
         "/svm/v2/transaction/system/nonce/create-account": {
             "post": {
-                "description": "Creates the account and initializes it as a durable nonce in one transaction. The nonce account appears twice: it signs for the creation, since an address does not exist until its key authorizes it, and is only writable for the initialization, which needs no authority of its own — it gains the one named here. Message compilation lists it once with the union of both, which is why it shows up among the signers. Size and funding are not choices: a nonce account is always exactly NonceAccountSpace bytes, and rent_payer funds exactly the rent-exemption minimum for that size, never more or less. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. It has to be an account other than new_nonce_account, which holds no nonce yet.",
+                "description": "System CreateAccount only, sized correctly for a nonce account but not initialized. This is deliberately the low-level half: nothing stops somebody else from initializing the account first, with their own authority, in between this transaction and the next; a caller who wants that race closed should build create+initialize as two instructions in one transaction themselves. Initializing is a separate call: nonce/initialize. Size and funding are not choices: a nonce account is always exactly NonceAccountSpace bytes, and rent_payer funds exactly the rent-exemption minimum for that size, never more or less. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. It has to be an account other than new_nonce_account, which holds no nonce yet.",
                 "consumes": [
                     "application/json"
                 ],
@@ -2268,7 +2268,7 @@
                 "summary": "Build a durable nonce account creation",
                 "parameters": [
                     {
-                        "description": "New nonce account, authority, fee payer, and rent payer",
+                        "description": "New nonce account, fee payer, and rent payer",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2312,7 +2312,7 @@
         },
         "/svm/v2/transaction/system/nonce/initialize": {
             "post": {
-                "description": "Initializes an account that already exists, is System-owned, and is already the right size. nonce/create-account does this and the creation together, so this is for an address that can no longer be created: CreateAccount refuses one that already holds lamports, which is what happens when someone funds the address first. The account is writable but does not sign, since initializing it needs no authority of its own; it gains the authority named here. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. It has to be an account other than nonce_account, which holds no nonce to build against yet.",
+                "description": "Initializes an account that already exists, is System-owned, and is already the right size. This is the natural pairing for nonce/create-account, which only creates the account and never initializes it; nothing stops somebody else from initializing it first in between with their own authority, so a caller who wants that race closed has to build create+initialize as two instructions in one transaction themselves. It is also the only path left for an address that can no longer be created: CreateAccount refuses one that already holds lamports, which is what happens when someone funds the address first. The account is writable but does not sign, since initializing it needs no authority of its own; it gains the authority named here. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. It has to be an account other than nonce_account, which holds no nonce to build against yet.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3908,7 +3908,7 @@
         },
         "/svm/v2/transaction/token/initialize-account": {
             "post": {
-                "description": "Raw InitializeAccount, the original opcode that passes owner as a read-only account and carries the rent sysvar alongside it; the program never checks owner against a signer, and neither is read for anything but its address. See initialize-account3 for the variant without either. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Raw InitializeAccount, the original opcode that passes owner as a read-only account and carries the rent sysvar alongside it; the program never checks owner against a signer, and neither is read for anything but its address. See initialize-account3 for the variant without either. token_account must already exist, be owned by program, be at least 165 bytes (Token-2022 extensions may make it larger), and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3965,7 +3965,7 @@
         },
         "/svm/v2/transaction/token/initialize-account2": {
             "post": {
-                "description": "Raw InitializeAccount2: owner rides in the instruction data rather than as an account, dropping the account InitializeAccount carries; the rent sysvar is still read. See initialize-account3 for the variant without it. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Raw InitializeAccount2: owner rides in the instruction data rather than as an account, dropping the account InitializeAccount carries; the rent sysvar is still read. See initialize-account3 for the variant without it. token_account must already exist, be owned by program, be at least 165 bytes (Token-2022 extensions may make it larger), and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4022,7 +4022,7 @@
         },
         "/svm/v2/transaction/token/initialize-account3": {
             "post": {
-                "description": "Raw InitializeAccount3: owner rides in the instruction data and the rent sysvar is dropped entirely. This is the natural pairing for create-kta, which only creates the account and never initializes it. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Raw InitializeAccount3: owner rides in the instruction data and the rent sysvar is dropped entirely. This is the natural pairing for create-kta, which only creates the account and never initializes it. token_account must already exist, be owned by program, be at least 165 bytes (Token-2022 extensions may make it larger), and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4077,9 +4077,66 @@
                 }
             }
         },
+        "/svm/v2/transaction/token/initialize-immutable-owner": {
+            "post": {
+                "description": "Locks token_account's owner field against SetAuthority forever. This is a Token-2022 extension instruction: it needs extension space appended after the classic 165-byte layout, and the classic Token Program has no instruction-processor arm for this opcode at all, so program must be Token-2022. token_account must already exist, be owned by program, be at least 165 bytes, and — critically — still be Uninitialized at the base layout: the program itself requires extensions to attach before initialize-account*/initialize-mint* commits the account, not after, so this has to run first or it fails on chain. Whether the extension space itself is actually reserved is not verified here (Token-2022 extension TLV parsing is its own separate undertaking), so that specific mismatch still fails on chain rather than as a 400. There is no authority: nothing about locking the owner field needs proving. The Associated Token Account program calls this automatically on every Token-2022 ATA it creates, before its own initialize-account3 equivalent. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-token-account"
+                ],
+                "summary": "Permanently lock a token account's owner field",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Initialize-immutable-owner parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.InitializeImmutableOwnerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.InitializeImmutableOwnerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/initialize-mint": {
             "post": {
-                "description": "Raw InitializeMint, the original opcode that carries the rent sysvar as a read-only account alongside mint; the program stopped reading it once rent collection was disabled. See initialize-mint2 for the variant without it. mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Raw InitializeMint, the original opcode that carries the rent sysvar as a read-only account alongside mint; the program stopped reading it once rent collection was disabled. See initialize-mint2 for the variant without it. mint must already exist, be owned by program, be at least 82 bytes (Token-2022 extensions may make it larger), and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4136,7 +4193,7 @@
         },
         "/svm/v2/transaction/token/initialize-mint2": {
             "post": {
-                "description": "Raw InitializeMint2, with no CreateAccount alongside it: mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. This is the natural pairing for create-mint, which only creates the account and never initializes it; nothing stops somebody else from initializing it first in between, so a caller who wants that race closed has to build create+initialize as two instructions in one transaction themselves. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Raw InitializeMint2, with no CreateAccount alongside it: mint must already exist, be owned by program, be at least 82 bytes (Token-2022 extensions may make it larger), and be uninitialized. This is the natural pairing for create-mint, which only creates the account and never initializes it; nothing stops somebody else from initializing it first in between, so a caller who wants that race closed has to build create+initialize as two instructions in one transaction themselves. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -7939,6 +7996,74 @@
                 }
             }
         },
+        "v2.InitializeImmutableOwnerRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "program": {
+                    "description": "Program must be the Token-2022 program address: this opcode does not\nexist on the classic Token Program.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "token_account": {
+                    "description": "TokenAccount is the account whose owner field is locked. It must\nalready exist, be owned by Program, and carry the extension space this\ninstruction writes to — which this endpoint does not verify itself,\nsince parsing Token-2022 extension layouts is its own separate\nundertaking; a mismatch fails on chain instead.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.InitializeImmutableOwnerResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "token_account": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.InitializeMint2Request": {
             "type": "object",
             "properties": {
@@ -9572,10 +9697,6 @@
         "v2.SystemNonceCreateRequest": {
             "type": "object",
             "properties": {
-                "authority": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "durable_nonce_account": {
                     "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice. It has to be an account other than NewNonceAccount, which\nholds no nonce yet.",
                     "type": "string",
@@ -9612,9 +9733,6 @@
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "fee": {
                     "$ref": "#/definitions/v2.SystemPayer"
                 },
@@ -9625,7 +9743,7 @@
                     "type": "string"
                 },
                 "nonce_authority": {
-                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries a\nstored value rather than a fetched blockhash. It belongs to\ndurable_nonce_account, not to NewNonceAccount — Authority above is what\nthe new account gains.",
+                    "description": "NonceAuthority is present only when the transaction was built against a\ndurable nonce, so it doubles as the signal that RecentBlockhash carries\na stored value rather than a fetched blockhash. It belongs to\ndurable_nonce_account, not to NewNonceAccount: this endpoint never\ninitializes NewNonceAccount, so it gains no authority of its own here.",
                     "type": "string"
                 },
                 "recent_blockhash": {

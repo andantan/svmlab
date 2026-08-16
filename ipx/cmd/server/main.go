@@ -174,6 +174,7 @@ func run() error {
 			r.Post("/initialize-multisig", tk.InitializeMultisig)
 			r.Post("/initialize-multisig2", tk.InitializeMultisig2)
 			r.Post("/create-multisig", tk.CreateMultisig)
+			r.Post("/initialize-immutable-owner", tk.InitializeImmutableOwner)
 			r.Post("/create-kta", tk.CreateKTA)
 			r.Post("/transfer", tk.Transfer)
 			r.Post("/transfer/max", tk.TransferMax)

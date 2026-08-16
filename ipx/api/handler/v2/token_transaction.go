@@ -219,7 +219,7 @@ func (h *TokenTransactionHandler) CreateMint(w http.ResponseWriter, r *http.Requ
 
 // InitializeMint godoc
 // @Summary      Initialize an already-existing account as an SPL Token mint (original opcode)
-// @Description  Raw InitializeMint, the original opcode that carries the rent sysvar as a read-only account alongside mint; the program stopped reading it once rent collection was disabled. See initialize-mint2 for the variant without it. mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Raw InitializeMint, the original opcode that carries the rent sysvar as a read-only account alongside mint; the program stopped reading it once rent collection was disabled. See initialize-mint2 for the variant without it. mint must already exist, be owned by program, be at least 82 bytes (Token-2022 extensions may make it larger), and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-mint-account
 // @Accept       json
 // @Produce      json
@@ -280,8 +280,8 @@ func (h *TokenTransactionHandler) InitializeMint(w http.ResponseWriter, r *http.
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is not owned by %s", req.MintKey(), req.TokenProgramID()))
 		return
 	}
-	if mintInfo.Space != core.MintSpace {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is %d bytes, expected %d", req.MintKey(), mintInfo.Space, core.MintSpace))
+	if mintInfo.Space < core.MintSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is %d bytes, expected at least %d", req.MintKey(), mintInfo.Space, core.MintSpace))
 		return
 	}
 
@@ -290,7 +290,9 @@ func (h *TokenTransactionHandler) InitializeMint(w http.ResponseWriter, r *http.
 		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("mint: %s %s", req.MintKey(), err))
 		return
 	}
-	decoded, err := core.DeserializeMint(raw)
+	// raw may carry Token-2022 extension bytes past core.MintSpace; only the
+	// base layout is ever decoded here.
+	decoded, err := core.DeserializeMint(raw[:core.MintSpace])
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("mint: %s %s", req.MintKey(), err))
 		return
@@ -393,7 +395,7 @@ func (h *TokenTransactionHandler) InitializeMint(w http.ResponseWriter, r *http.
 
 // InitializeMint2 godoc
 // @Summary      Initialize an already-existing account as an SPL Token mint
-// @Description  Raw InitializeMint2, with no CreateAccount alongside it: mint must already exist, be owned by program, be exactly 82 bytes, and be uninitialized. This is the natural pairing for create-mint, which only creates the account and never initializes it; nothing stops somebody else from initializing it first in between, so a caller who wants that race closed has to build create+initialize as two instructions in one transaction themselves. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Raw InitializeMint2, with no CreateAccount alongside it: mint must already exist, be owned by program, be at least 82 bytes (Token-2022 extensions may make it larger), and be uninitialized. This is the natural pairing for create-mint, which only creates the account and never initializes it; nothing stops somebody else from initializing it first in between, so a caller who wants that race closed has to build create+initialize as two instructions in one transaction themselves. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-mint-account
 // @Accept       json
 // @Produce      json
@@ -454,8 +456,8 @@ func (h *TokenTransactionHandler) InitializeMint2(w http.ResponseWriter, r *http
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is not owned by %s", req.MintKey(), req.TokenProgramID()))
 		return
 	}
-	if mintInfo.Space != core.MintSpace {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is %d bytes, expected %d", req.MintKey(), mintInfo.Space, core.MintSpace))
+	if mintInfo.Space < core.MintSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is %d bytes, expected at least %d", req.MintKey(), mintInfo.Space, core.MintSpace))
 		return
 	}
 
@@ -464,7 +466,9 @@ func (h *TokenTransactionHandler) InitializeMint2(w http.ResponseWriter, r *http
 		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("mint: %s %s", req.MintKey(), err))
 		return
 	}
-	decoded, err := core.DeserializeMint(raw)
+	// raw may carry Token-2022 extension bytes past core.MintSpace; only the
+	// base layout is ever decoded here.
+	decoded, err := core.DeserializeMint(raw[:core.MintSpace])
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("mint: %s %s", req.MintKey(), err))
 		return
@@ -567,7 +571,7 @@ func (h *TokenTransactionHandler) InitializeMint2(w http.ResponseWriter, r *http
 
 // InitializeAccount godoc
 // @Summary      Initialize an already-existing account as an SPL Token holder account (original opcode)
-// @Description  Raw InitializeAccount, the original opcode that passes owner as a read-only account and carries the rent sysvar alongside it; the program never checks owner against a signer, and neither is read for anything but its address. See initialize-account3 for the variant without either. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Raw InitializeAccount, the original opcode that passes owner as a read-only account and carries the rent sysvar alongside it; the program never checks owner against a signer, and neither is read for anything but its address. See initialize-account3 for the variant without either. token_account must already exist, be owned by program, be at least 165 bytes (Token-2022 extensions may make it larger), and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-token-account
 // @Accept       json
 // @Produce      json
@@ -639,8 +643,8 @@ func (h *TokenTransactionHandler) InitializeAccount(w http.ResponseWriter, r *ht
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is not owned by %s", req.TokenAccountKey(), req.TokenProgramID()))
 		return
 	}
-	if tokenAccountInfo.Space != core.TokenAccountSpace {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is %d bytes, expected %d", req.TokenAccountKey(), tokenAccountInfo.Space, core.TokenAccountSpace))
+	if tokenAccountInfo.Space < core.TokenAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is %d bytes, expected at least %d", req.TokenAccountKey(), tokenAccountInfo.Space, core.TokenAccountSpace))
 		return
 	}
 
@@ -649,7 +653,9 @@ func (h *TokenTransactionHandler) InitializeAccount(w http.ResponseWriter, r *ht
 		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("token_account: %s %s", req.TokenAccountKey(), err))
 		return
 	}
-	decoded, err := core.DeserializeTokenAccount(raw)
+	// raw may carry Token-2022 extension bytes past core.TokenAccountSpace;
+	// only the base layout is ever decoded here.
+	decoded, err := core.DeserializeTokenAccount(raw[:core.TokenAccountSpace])
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("token_account: %s %s", req.TokenAccountKey(), err))
 		return
@@ -752,7 +758,7 @@ func (h *TokenTransactionHandler) InitializeAccount(w http.ResponseWriter, r *ht
 
 // InitializeAccount2 godoc
 // @Summary      Initialize an already-existing account as an SPL Token holder account (owner in data)
-// @Description  Raw InitializeAccount2: owner rides in the instruction data rather than as an account, dropping the account InitializeAccount carries; the rent sysvar is still read. See initialize-account3 for the variant without it. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Raw InitializeAccount2: owner rides in the instruction data rather than as an account, dropping the account InitializeAccount carries; the rent sysvar is still read. See initialize-account3 for the variant without it. token_account must already exist, be owned by program, be at least 165 bytes (Token-2022 extensions may make it larger), and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-token-account
 // @Accept       json
 // @Produce      json
@@ -824,8 +830,8 @@ func (h *TokenTransactionHandler) InitializeAccount2(w http.ResponseWriter, r *h
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is not owned by %s", req.TokenAccountKey(), req.TokenProgramID()))
 		return
 	}
-	if tokenAccountInfo.Space != core.TokenAccountSpace {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is %d bytes, expected %d", req.TokenAccountKey(), tokenAccountInfo.Space, core.TokenAccountSpace))
+	if tokenAccountInfo.Space < core.TokenAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is %d bytes, expected at least %d", req.TokenAccountKey(), tokenAccountInfo.Space, core.TokenAccountSpace))
 		return
 	}
 
@@ -834,7 +840,9 @@ func (h *TokenTransactionHandler) InitializeAccount2(w http.ResponseWriter, r *h
 		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("token_account: %s %s", req.TokenAccountKey(), err))
 		return
 	}
-	decoded, err := core.DeserializeTokenAccount(raw)
+	// raw may carry Token-2022 extension bytes past core.TokenAccountSpace;
+	// only the base layout is ever decoded here.
+	decoded, err := core.DeserializeTokenAccount(raw[:core.TokenAccountSpace])
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("token_account: %s %s", req.TokenAccountKey(), err))
 		return
@@ -937,7 +945,7 @@ func (h *TokenTransactionHandler) InitializeAccount2(w http.ResponseWriter, r *h
 
 // InitializeAccount3 godoc
 // @Summary      Initialize an already-existing account as an SPL Token holder account
-// @Description  Raw InitializeAccount3: owner rides in the instruction data and the rent sysvar is dropped entirely. This is the natural pairing for create-kta, which only creates the account and never initializes it. token_account must already exist, be owned by program, be exactly 165 bytes, and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Raw InitializeAccount3: owner rides in the instruction data and the rent sysvar is dropped entirely. This is the natural pairing for create-kta, which only creates the account and never initializes it. token_account must already exist, be owned by program, be at least 165 bytes (Token-2022 extensions may make it larger), and be uninitialized. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-token-account
 // @Accept       json
 // @Produce      json
@@ -1009,8 +1017,8 @@ func (h *TokenTransactionHandler) InitializeAccount3(w http.ResponseWriter, r *h
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is not owned by %s", req.TokenAccountKey(), req.TokenProgramID()))
 		return
 	}
-	if tokenAccountInfo.Space != core.TokenAccountSpace {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is %d bytes, expected %d", req.TokenAccountKey(), tokenAccountInfo.Space, core.TokenAccountSpace))
+	if tokenAccountInfo.Space < core.TokenAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is %d bytes, expected at least %d", req.TokenAccountKey(), tokenAccountInfo.Space, core.TokenAccountSpace))
 		return
 	}
 
@@ -1019,7 +1027,9 @@ func (h *TokenTransactionHandler) InitializeAccount3(w http.ResponseWriter, r *h
 		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("token_account: %s %s", req.TokenAccountKey(), err))
 		return
 	}
-	decoded, err := core.DeserializeTokenAccount(raw)
+	// raw may carry Token-2022 extension bytes past core.TokenAccountSpace;
+	// only the base layout is ever decoded here.
+	decoded, err := core.DeserializeTokenAccount(raw[:core.TokenAccountSpace])
 	if err != nil {
 		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("token_account: %s %s", req.TokenAccountKey(), err))
 		return
@@ -1465,6 +1475,186 @@ func (h *TokenTransactionHandler) InitializeMultisig2(w http.ResponseWriter, r *
 		tx, txRaw, messageBytes,
 		req.FeePayerKey(), req.MultisigAccountKey(), req.TokenProgramID(), nonceAuthority, req.SignerKeys(),
 		req.ToM(), fee,
+	))
+}
+
+// InitializeImmutableOwner godoc
+// @Summary      Permanently lock a token account's owner field
+// @Description  Locks token_account's owner field against SetAuthority forever. This is a Token-2022 extension instruction: it needs extension space appended after the classic 165-byte layout, and the classic Token Program has no instruction-processor arm for this opcode at all, so program must be Token-2022. token_account must already exist, be owned by program, be at least 165 bytes, and — critically — still be Uninitialized at the base layout: the program itself requires extensions to attach before initialize-account*/initialize-mint* commits the account, not after, so this has to run first or it fails on chain. Whether the extension space itself is actually reserved is not verified here (Token-2022 extension TLV parsing is its own separate undertaking), so that specific mismatch still fails on chain rather than as a 400. There is no authority: nothing about locking the owner field needs proving. The Associated Token Account program calls this automatically on every Token-2022 ATA it creates, before its own initialize-account3 equivalent. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-token-account
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                              true  "Cluster name"
+// @Param        X-Chain-Network  header    string                              true  "Cluster network"
+// @Param        body             body      InitializeImmutableOwnerRequest    true  "Initialize-immutable-owner parameters"
+// @Success      200              {object}  InitializeImmutableOwnerResponse
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/initialize-immutable-owner [post]
+func (h *TokenTransactionHandler) InitializeImmutableOwner(w http.ResponseWriter, r *http.Request) {
+	req := new(InitializeImmutableOwnerRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.TokenAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	tokenAccountInfo := accounts[req.TokenAccountKey().Base58()]
+	if !tokenAccountInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s does not exist", req.TokenAccountKey()))
+		return
+	}
+	if tokenAccountInfo.Owner != req.TokenProgramID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is not owned by %s", req.TokenAccountKey(), req.TokenProgramID()))
+		return
+	}
+	if tokenAccountInfo.Space < core.TokenAccountSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is %d bytes, expected at least %d", req.TokenAccountKey(), tokenAccountInfo.Space, core.TokenAccountSpace))
+		return
+	}
+
+	// The base layout has to still be Uninitialized: the program itself
+	// requires this (unpack_uninitialized), since extensions have to be
+	// attached before InitializeAccount* commits the account, not after. This
+	// reads only the base 165 bytes, not the extension TLV data past it,
+	// which is enough to answer that one question without a full Token-2022
+	// extension parser.
+	raw, err := tokenAccountInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("token_account: %s %s", req.TokenAccountKey(), err))
+		return
+	}
+	decoded, err := core.DeserializeTokenAccount(raw[:core.TokenAccountSpace])
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("token_account: %s %s", req.TokenAccountKey(), err))
+		return
+	}
+	if decoded.Initialized() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is already initialized; immutable owner has to be set up before initialize-account*, not after", req.TokenAccountKey()))
+		return
+	}
+
+	instruction, err := tokenProgram.InitializeImmutableOwner(req.TokenAccountKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := []*types.Instruction{instruction}
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewInitializeImmutableOwnerResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), req.TokenAccountKey(), req.TokenProgramID(), nonceAuthority,
+		fee,
 	))
 }
 

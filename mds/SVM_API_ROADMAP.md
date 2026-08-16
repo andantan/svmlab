@@ -74,12 +74,42 @@ omitted when unset, and `close_authority` always reports the actual effective
 closer (`close_authority.unwrap_or(owner)`) rather than requiring the caller
 to apply that fallback themselves.
 
+Token's multisig lifecycle is now live: `initialize-multisig`/
+`initialize-multisig2` (the original and 2 opcodes, differing only in
+whether the rent sysvar rides along) and `create-multisig`, the
+`System.CreateAccount`-only composite that pairs with them. `burn-checked/max`
+rounds out the max-sweep family (`transfer-checked/max`,
+`transfer-from-ata/max`, `approve-checked/max`), sweeping a token account's
+entire balance the same way the others do. A multisig, once initialized, can
+never have its members or `m` changed and can never be closed — the classic
+Token Program has no instruction for either, and unlike a mint there is no
+Token-2022 extension that adds one; replacing a multisig means creating a new
+one and repointing whatever named the old one as an authority through the
+existing `set-authority` endpoints.
+
+Building `create-multisig` forced a reconsideration of `create-mint` and
+`create-kta`, which used to bundle `CreateAccount` with initialization in one
+transaction specifically to close the race where somebody else initializes
+the account first with their own authority. That race-closing is not this
+API's job at the low level: a caller who wants it closed can build the two
+instructions into one transaction themselves, the same as any other pairing
+of a raw `create-*` and `initialize-*` endpoint. So `create-mint` and
+`create-kta` were cut down to `CreateAccount` only — dropping
+`mint_authority`/`freeze_authority`/`decimals` and `owner` respectively —
+and now pair with `initialize-mint2`/`initialize-account3` exactly the way
+`create-multisig` pairs with `initialize-multisig2`. This also surfaced a
+real bug in `/svm/account/state`: its `initialized` field never recognized a
+multisig account at all (355 bytes matches neither a mint's 82 nor a token
+account's 165), so a freshly allocated, uninitialized multisig always
+reported `initialized: true`; fixed by adding the missing `DecodeMultisig`
+branch.
+
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion, account/authority |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi/batch/collect transfer, field-fidelity pass done |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts; first used by ATA   |
-| SPL Token classic         | done    | done      | lifecycle, delegation, 7 set-authority, freeze/thaw, and max variants all live and field-fidelity complete; compat next |
+| SPL Token classic         | done    | done      | lifecycle (create-only + initialize-* pairing), delegation, 7 set-authority, freeze/thaw, max variants, and multisig lifecycle all live; unchecked/compat opcodes next |
 | Associated Token Account  | done    | done      | create, create-idempotent, transfer-from-ata (+max); recover-nested deferred |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
@@ -95,7 +125,8 @@ System (done)
 -> SPL Token classic first lifecycle (done)
 -> Associated Token Account (done)
 -> SPL Token classic delegation and administration (done)
--> SPL Token classic compatibility opcodes and multisig  <- here
+-> SPL Token classic multisig lifecycle (done)
+-> SPL Token classic compatibility opcodes  <- here
 -> Vault custom program
 -> Compute Budget
 -> Address Lookup Table
@@ -215,24 +246,46 @@ The original Token Program has fixed 82-byte mint and 165-byte account layouts.
 It covers minting, holder accounts, transfer, delegation, burning, authority
 changes, freezing, multisig, wrapped SOL, and return-data utilities.
 
-Core, the first lifecycle, and delegation are done: the three layouts parse,
-all 25 classic opcodes are declared, and create-mint, create-account,
-mint-to-checked, transfer-checked, burn-checked, close-account,
-approve-checked, revoke, seven set-authority endpoints, freeze-account, and
-thaw-account are live under `/svm/v2/transaction/token/`, alongside the reads
-at `/svm/token/mint`, `/svm/token/account`, and `/svm/account/tokens`. Every
-one of them checks what a live cluster would reject before building the
+Core, the first lifecycle, delegation, and the multisig lifecycle are done:
+the four layouts (mint, token account, nonce, multisig) parse, all 25 classic
+opcodes are declared, and create-mint, create-kta, mint-to-checked,
+transfer-checked (+max), burn-checked (+max), close-account,
+approve-checked (+max), revoke, seven set-authority endpoints,
+freeze-account, thaw-account, create-multisig, initialize-mint,
+initialize-mint2, initialize-account, initialize-account2,
+initialize-account3, initialize-multisig, and initialize-multisig2 are all
+live under `/svm/v2/transaction/token/`, alongside the reads at
+`/svm/token/mint`, `/svm/token/account`, and `/svm/account/tokens`. Every one
+of them checks what a live cluster would reject before building the
 instruction — decimals against the mint, an account's mint against the
 request's, frozen state, authority against owner or delegate (transfer, burn)
-or against the mint's own authority (mint-to, freeze, thaw), and close
-authority as its own separate axis — so a mismatch comes back as a 400 with
-the reason instead of a signed transaction failing on chain. freeze-account
-and thaw-account were the last builders sitting in `core` with nothing serving
-them, and were verified by signing and sending both directions on devnet
-rather than only building the transaction.
+or against the mint's own authority (mint-to, freeze, thaw), close authority
+as its own separate axis, and — for the raw `initialize-*` endpoints — that
+the target account already exists, is owned by the right program, is
+correctly sized, and is not already initialized — so a mismatch comes back as
+a 400 with the reason instead of a signed transaction failing on chain.
+freeze-account and thaw-account were the last builders sitting in `core` with
+nothing serving them, and were verified by signing and sending both
+directions on devnet rather than only building the transaction.
 
-Still open here: the compatibility opcodes and multisig initialization.
-Detailed coverage:
+create-mint, create-kta, and create-multisig are deliberately creation-only:
+each is a bare `System.CreateAccount` sized and owned for its target layout,
+with no initialization bundled in and no authority/decimals/owner fields to
+take, since it never builds the instruction that would use them. Pairing
+create with initialize in one transaction — closing the race where somebody
+else initializes the account first — is left to a caller who wants it, built
+as two instructions themselves; this API surface plays one role per
+endpoint. A multisig carries this further than a mint or token account can:
+once initialized, its `m` and enrolled signers can never be changed, and it
+can never be closed, since the classic Token Program has no instruction for
+either and — unlike a mint's `MintCloseAuthority` — Token-2022 adds no
+extension for it. Replacing a multisig means creating a new one and
+repointing whatever named the old one as an authority through
+`set-authority`.
+
+Still open here: the unchecked/compatibility opcodes
+(`transfer`/`approve`/`mint-to`/`burn`, `initialize-immutable-owner`) and the
+return-data/native-SOL utilities. Detailed coverage:
 
 ~~~
 TOKEN_API_PROPOSAL.md
@@ -570,17 +623,22 @@ resulting state.
 All three pieces are live. PDA and the three token reads (`/svm/token/mint`,
 `/svm/token/account`, `/svm/account/tokens`) were done first; the first
 lifecycle — create-mint, create-kta, mint-to-checked, transfer-checked
-(+max), burn-checked, close-account — and ATA — create-ata,
+(+max), burn-checked (+max), close-account — and ATA — create-ata,
 create-ata-idempotent, transfer-from-ata (+max) — are all live under
 `/svm/v2/transaction/token/`, delegation and administration (approve-checked
 (+max), revoke, seven set-authority endpoints, freeze-account, thaw-account)
-are live too, and every one of these twenty endpoints has been through the
-System v2 field-fidelity pass. The milestone can be walked end to end: mint a
-token, fund either a keypair or an associated account, move value between
-wallets without either side deriving an address by hand, and close what is
-left empty. What is not in this milestone — the compatibility opcodes and
-multisig initialization — is TOKEN_API_PROPOSAL.md's next step, not a gap in
-this one.
+are live too, and so is the multisig lifecycle (create-multisig,
+initialize-multisig, initialize-multisig2) alongside the raw
+initialize-mint/initialize-mint2/initialize-account/initialize-account2/
+initialize-account3 pairing that create-mint/create-kta/create-multisig now
+close against. Every one of these endpoints has been through the System v2
+field-fidelity pass. The milestone can be walked end to end: mint a token,
+fund either a keypair or an associated account, move value between wallets
+without either side deriving an address by hand, close what is left empty,
+and hand authority to an m-of-n multisig instead of a single wallet. What is
+not in this milestone — the unchecked/compatibility opcodes and the
+return-data/native-SOL utilities — is TOKEN_API_PROPOSAL.md's next step, not
+a gap in this one.
 
 ### Milestone B: Program-Controlled Assets
 
@@ -640,18 +698,16 @@ program accepts it on Devnet.
 
 ### Classic Token compatibility and low-level instructions
 
+`token/initialize-mint`, `token/initialize-mint2`, `token/initialize-account`,
+`token/initialize-account2`, `token/initialize-account3`,
+`token/initialize-multisig`, and `token/initialize-multisig2` are done — see
+group 3 above. Still open:
+
 ~~~text
 token/transfer
 token/approve
 token/mint-to
 token/burn
-token/initialize-mint
-token/initialize-mint2
-token/initialize-account
-token/initialize-account2
-token/initialize-account3
-token/initialize-multisig
-token/initialize-multisig2
 token/initialize-immutable-owner
 token/account-data-size
 token/amount-to-ui
@@ -875,7 +931,7 @@ composed API generation (v4/v5-ish) rather than this low-level v2 pass.
 ## Recommended expanded sequence
 
 ~~~text
-Token compatibility opcodes and multisig
+Token compatibility opcodes
 -> wrapped SOL
 -> PDA HTTP utilities
 -> transaction composer and Compute Budget

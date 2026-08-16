@@ -3167,7 +3167,7 @@
         },
         "/svm/v2/transaction/token/close-account": {
             "post": {
-                "description": "The account must already hold no tokens; the balance is not swept, it has to be zero. A wrapped SOL account is the exception, since its lamports are its balance, and closing it is how SOL is unwrapped. authority must be the account's owner or its close authority. The reclaimed lamports go to destination.",
+                "description": "token_account must already hold no tokens; the balance is not swept, it has to be zero. A wrapped SOL account is the exception, since its lamports are its balance, and closing it is how SOL is unwrapped. token_account_close_authority must be token_account's owner or its close authority. The reclaimed lamports go to recipient_account. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3224,7 +3224,7 @@
         },
         "/svm/v2/transaction/token/create-ata": {
             "post": {
-                "description": "Derives the associated token address and creates it. The address is not a request field: it follows from wallet, mint, and program, so nothing generates a keypair for it and nothing has to remember it. The account itself does not sign, unlike a keypair token account, because a program derived address has no private key. Fails if the account already exists; use create-ata-idempotent when that is not known in advance.",
+                "description": "Derives the associated token address and creates it. The address is not a request field: it follows from owner, mint, and program, so nothing generates a keypair for it and nothing has to remember it. The account itself does not sign, unlike a keypair token account, because a program derived address has no private key. Fails if the account already exists; use create-ata-idempotent when that is not known in advance. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3234,7 +3234,7 @@
                 "tags": [
                     "v2-transaction-token-ata"
                 ],
-                "summary": "Create the canonical token account for a wallet and mint",
+                "summary": "Create the canonical token account for an owner and mint",
                 "parameters": [
                     {
                         "type": "string",
@@ -3281,7 +3281,7 @@
         },
         "/svm/v2/transaction/token/create-ata-idempotent": {
             "post": {
-                "description": "Same as create-ata, except the instruction succeeds rather than fails when the account is already there. This is the one to prepend to a transfer: checking first and creating only if absent leaves a window in which somebody else creates it, and the plain create would then fail the whole transaction over an account that exists and is correct.",
+                "description": "Same as create-ata, except the instruction succeeds rather than fails when the account is already there. This is the one to prepend to a transfer: checking first and creating only if absent leaves a window in which somebody else creates it, and the plain create would then fail the whole transaction over an account that exists and is correct. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4206,6 +4206,7 @@
             "type": "object",
             "properties": {
                 "close_authority": {
+                    "description": "CloseAuthority reports who can actually close this token account,\nwhich is never blank once Type is token_account: the program checks\nclose_authority.unwrap_or(owner), so this is TokenOwner whenever the\naccount carries no close authority of its own, and the stored value\notherwise. It is never left for the caller to resolve that fallback.",
                     "type": "string"
                 },
                 "delegate": {
@@ -4222,14 +4223,14 @@
                     "type": "integer"
                 },
                 "mint_authority": {
-                    "description": "MintAuthority and FreezeAuthority are set only when Type is mint.\nEither may still be empty: both are optional on a mint, and removing\none is one-way.",
+                    "description": "MintAuthority and FreezeAuthority are relevant only when Type is mint.\nEither can be permanently removed on a real mint, and empty here means\nexactly that: gone for good, not merely unset.",
                     "type": "string"
                 },
                 "n": {
                     "type": "integer"
                 },
                 "nonce_authority": {
-                    "description": "NonceAuthority is set only when Type is nonce_account and it is\ninitialized; an account sized for a nonce but never initialized reports\nthe type with this left empty.",
+                    "description": "NonceAuthority is relevant only when Type is nonce_account, and even\nthen only once initialized — it is always present in the response\n(empty when it does not apply) rather than silently omitted, so an\nempty string is never ambiguous between \"not this kind of account\" and\n\"this account has none\".",
                     "type": "string"
                 },
                 "owner": {
@@ -4245,7 +4246,7 @@
                     }
                 },
                 "token_owner": {
-                    "description": "TokenOwner, Delegate, and CloseAuthority are set only when Type is\ntoken_account. Delegate and CloseAuthority are both optional; close\nauthority only exists at all under Token-2022.",
+                    "description": "TokenOwner and Delegate are relevant only when Type is token_account.\nDelegate empty means no delegate is currently approved.",
                     "type": "string"
                 },
                 "type": {
@@ -5400,19 +5401,13 @@
         "v2.CloseAccountRequest": {
             "type": "object",
             "properties": {
-                "account": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
-                "authority": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "destination": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -5423,36 +5418,44 @@
                         "type": "string"
                     }
                 },
-                "nonce_account": {
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever, and it must agree\nwith the mint's own owning program or the instruction fails on chain.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
                     "example": ""
                 },
-                "program": {
+                "recipient_account": {
+                    "description": "RecipientAccount receives TokenAccount's entire reclaimed lamport\nbalance. It must already exist; this is not a way to bring a new\naccount into existence.",
                     "type": "string",
-                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "token_account": {
+                    "description": "TokenAccount is closed. It must already hold no tokens (a wrapped SOL\naccount is the one exception, closed to unwrap its lamport balance).",
+                    "type": "string",
+                    "example": ""
+                },
+                "token_account_close_authority": {
+                    "description": "TokenAccountCloseAuthority is checked against\nclose_authority.unwrap_or(owner): once a close authority is set on\nTokenAccount, it alone may close it, and the owner who set it can no\nlonger do so directly.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
         "v2.CloseAccountResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
-                "destination": {
-                    "type": "string"
-                },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -5466,15 +5469,28 @@
                 "recent_blockhash": {
                     "type": "string"
                 },
-                "reclaimed_lamports": {
-                    "description": "ReclaimedLamports is the account's balance at the moment it was read,\nwhich is what closing hands to destination. It can change between this\nresponse and the transaction landing if anything else touches the\naccount first.",
+                "recipient_account": {
                     "type": "string"
+                },
+                "reclaimed": {
+                    "description": "Reclaimed reports TokenAccount's balance at the moment it was read,\nwhich is what closing hands to recipient_account. It can change\nbetween this response and the transaction landing if anything else\ntouches the account first.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
                 },
                 "signers": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "token_account": {
+                    "type": "string"
+                },
+                "token_account_close_authority": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -5484,49 +5500,60 @@
         "v2.CreateATAIdempotentRequest": {
             "type": "object",
             "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as RentPayer.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
+                    "description": "Mint is the token the associated account is derived and initialized to\nhold, and must already exist.",
                     "type": "string",
                     "example": ""
                 },
-                "nonce_account": {
+                "owner": {
+                    "description": "Owner is who ends up owning the account, which need not be RentPayer.\nFunding somebody else's associated account is ordinary: the address is\ntheirs either way.",
                     "type": "string",
-                    "example": ""
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
                 "program": {
+                    "description": "Program is a seed of the derived address, not only the program the\naccount belongs to, so one owner has a different associated account\nfor classic Token than for Token-2022 over the same mint.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
                 },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
                 "rent_payer": {
+                    "description": "RentPayer covers the rent-exemption deposit, distinct from FeePayer:\nthe two are separate balances to check, and a caller funding somebody\nelse's associated account pays this one without necessarily paying the\ntransaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "wallet": {
-                    "type": "string",
-                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
             }
         },
         "v2.CreateATAIdempotentResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
+                "associated_token_account": {
+                    "type": "string"
+                },
                 "bump": {
                     "type": "integer"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -5537,14 +5564,22 @@
                 "nonce_authority": {
                     "type": "string"
                 },
+                "owner": {
+                    "type": "string"
+                },
                 "program": {
                     "type": "string"
                 },
                 "recent_blockhash": {
                     "type": "string"
                 },
-                "rent_exempt": {
-                    "type": "string"
+                "rent": {
+                    "description": "Rent reports what funds the associated account's creation. Its\nlamports are always exactly the rent-exemption minimum for a 165-byte\naccount, never more or less.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
                 },
                 "signers": {
                     "type": "array",
@@ -5553,9 +5588,6 @@
                     }
                 },
                 "transaction": {
-                    "type": "string"
-                },
-                "wallet": {
                     "type": "string"
                 }
             }
@@ -5563,52 +5595,60 @@
         "v2.CreateATARequest": {
             "type": "object",
             "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as RentPayer.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
+                    "description": "Mint is the token the associated account is derived and initialized to\nhold, and must already exist.",
                     "type": "string",
                     "example": ""
                 },
-                "nonce_account": {
+                "owner": {
+                    "description": "Owner is who ends up owning the account, which need not be RentPayer.\nFunding somebody else's associated account is ordinary: the address is\ntheirs either way.",
                     "type": "string",
-                    "example": ""
+                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
                 "program": {
-                    "description": "Program is a seed of the derived address, not only the program the\naccount belongs to, so one wallet has a different associated account\nfor classic Token than for Token-2022 over the same mint.",
+                    "description": "Program is a seed of the derived address, not only the program the\naccount belongs to, so one owner has a different associated account\nfor classic Token than for Token-2022 over the same mint.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
                 },
                 "rent_payer": {
                     "description": "RentPayer covers the rent-exemption deposit, distinct from FeePayer:\nthe two are separate balances to check, and a caller funding somebody\nelse's associated account pays this one without necessarily paying the\ntransaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
-                "wallet": {
-                    "description": "Wallet is who ends up owning the account, which need not be RentPayer.\nFunding somebody else's associated account is ordinary: the address is\ntheirs either way.",
-                    "type": "string",
-                    "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 }
             }
         },
         "v2.CreateATAResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
+                "associated_token_account": {
+                    "type": "string"
+                },
                 "bump": {
                     "type": "integer"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -5619,14 +5659,22 @@
                 "nonce_authority": {
                     "type": "string"
                 },
+                "owner": {
+                    "type": "string"
+                },
                 "program": {
                     "type": "string"
                 },
                 "recent_blockhash": {
                     "type": "string"
                 },
-                "rent_exempt": {
-                    "type": "string"
+                "rent": {
+                    "description": "Rent reports what funds the associated account's creation. Its\nlamports are always exactly the rent-exemption minimum for a 165-byte\naccount, never more or less.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
                 },
                 "signers": {
                     "type": "array",
@@ -5635,9 +5683,6 @@
                     }
                 },
                 "transaction": {
-                    "type": "string"
-                },
-                "wallet": {
                     "type": "string"
                 }
             }

@@ -377,23 +377,30 @@ type AccountAuthorityResponse struct {
 	Owner     string `json:"owner"`
 	Type      string `json:"type"`
 
-	// NonceAuthority is set only when Type is nonce_account and it is
-	// initialized; an account sized for a nonce but never initialized reports
-	// the type with this left empty.
-	NonceAuthority string `json:"nonce_authority,omitempty"`
+	// NonceAuthority is relevant only when Type is nonce_account, and even
+	// then only once initialized — it is always present in the response
+	// (empty when it does not apply) rather than silently omitted, so an
+	// empty string is never ambiguous between "not this kind of account" and
+	// "this account has none".
+	NonceAuthority string `json:"nonce_authority"`
 
-	// MintAuthority and FreezeAuthority are set only when Type is mint.
-	// Either may still be empty: both are optional on a mint, and removing
-	// one is one-way.
-	MintAuthority   string `json:"mint_authority,omitempty"`
-	FreezeAuthority string `json:"freeze_authority,omitempty"`
+	// MintAuthority and FreezeAuthority are relevant only when Type is mint.
+	// Either can be permanently removed on a real mint, and empty here means
+	// exactly that: gone for good, not merely unset.
+	MintAuthority   string `json:"mint_authority"`
+	FreezeAuthority string `json:"freeze_authority"`
 
-	// TokenOwner, Delegate, and CloseAuthority are set only when Type is
-	// token_account. Delegate and CloseAuthority are both optional; close
-	// authority only exists at all under Token-2022.
-	TokenOwner     string `json:"token_owner,omitempty"`
-	Delegate       string `json:"delegate,omitempty"`
-	CloseAuthority string `json:"close_authority,omitempty"`
+	// TokenOwner and Delegate are relevant only when Type is token_account.
+	// Delegate empty means no delegate is currently approved.
+	TokenOwner string `json:"token_owner"`
+	Delegate   string `json:"delegate"`
+
+	// CloseAuthority reports who can actually close this token account,
+	// which is never blank once Type is token_account: the program checks
+	// close_authority.unwrap_or(owner), so this is TokenOwner whenever the
+	// account carries no close authority of its own, and the stored value
+	// otherwise. It is never left for the caller to resolve that fallback.
+	CloseAuthority string `json:"close_authority"`
 
 	// M, N, and Signers are set only when Type is multisig.
 	M       uint8    `json:"m,omitempty"`
@@ -462,6 +469,12 @@ func NewAccountAuthorityResponse(k *types.PublicKey, info *rpc.AccountInfo) (*Ac
 			if !account.Delegate.IsNil() {
 				resp.Delegate = account.Delegate.Base58()
 			}
+
+			// The program checks close_authority.unwrap_or(owner): a token
+			// account is never actually closable by nobody, so the effective
+			// closer is reported directly rather than leaving the caller to
+			// apply this fallback themselves.
+			resp.CloseAuthority = resp.TokenOwner
 			if !account.CloseAuthority.IsNil() {
 				resp.CloseAuthority = account.CloseAuthority.Base58()
 			}

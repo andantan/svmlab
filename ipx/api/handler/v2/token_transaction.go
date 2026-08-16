@@ -1230,7 +1230,7 @@ func (h *TokenTransactionHandler) BurnChecked(w http.ResponseWriter, r *http.Req
 
 // CloseAccount godoc
 // @Summary      Close a token account and reclaim its rent
-// @Description  The account must already hold no tokens; the balance is not swept, it has to be zero. A wrapped SOL account is the exception, since its lamports are its balance, and closing it is how SOL is unwrapped. authority must be the account's owner or its close authority. The reclaimed lamports go to destination.
+// @Description  token_account must already hold no tokens; the balance is not swept, it has to be zero. A wrapped SOL account is the exception, since its lamports are its balance, and closing it is how SOL is unwrapped. token_account_close_authority must be token_account's owner or its close authority. The reclaimed lamports go to recipient_account. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-token-account
 // @Accept       json
 // @Produce      json
@@ -1263,33 +1263,47 @@ func (h *TokenTransactionHandler) CloseAccount(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	accountInfo, err := chain.Cli.AccountInfo(r.Context(), req.AccountKey(), rpc.CommitmentConfirmed)
+	// Every account this handler ever needs is read in one round trip.
+	// token_account_close_authority is always included, whether or not
+	// multisig_signers is empty, since fetching it once here is cheaper than
+	// a conditional second round trip for the multisig branch below.
+	lookups := []*types.PublicKey{
+		req.TokenAccountKey(),
+		req.RecipientAccountKey(),
+		req.FeePayerKey(),
+		req.TokenAccountCloseAuthorityKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
 	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read account: %s", err))
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
 		return
 	}
-	if accountInfo == nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s does not exist", req.AccountKey()))
+
+	accountInfo := accounts[req.TokenAccountKey().Base58()]
+	if !accountInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s does not exist", req.TokenAccountKey()))
 		return
 	}
 	accountData, err := accountInfo.Bytes()
 	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account: %s", err))
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode token_account: %s", err))
 		return
 	}
 	accountOwner, err := types.NewPublicKeyFromBase58(accountInfo.Owner)
 	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account owner: %s", err))
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode token_account owner: %s", err))
 		return
 	}
 	if !accountOwner.Equal(req.TokenProgramID()) {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"account: %s is owned by %s, not %s", req.AccountKey(), accountOwner, req.TokenProgramID()))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s is owned by %s, not %s", req.TokenAccountKey(), accountOwner, req.TokenProgramID()))
 		return
 	}
 	account, err := core.DecodeTokenAccount(accountOwner, accountData)
 	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s", err))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s", err))
 		return
 	}
 
@@ -1298,8 +1312,7 @@ func (h *TokenTransactionHandler) CloseAccount(w http.ResponseWriter, r *http.Re
 	// Amount: closing it is how the SOL is unwrapped, not a way to destroy
 	// tokens without burning them.
 	if !account.IsNative && account.Amount != 0 {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"account: %s holds a balance of %d and must be emptied first", req.AccountKey(), account.Amount))
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account: %s holds a balance of %d and must be emptied first", req.TokenAccountKey(), account.Amount))
 		return
 	}
 
@@ -1312,115 +1325,68 @@ func (h *TokenTransactionHandler) CloseAccount(w http.ResponseWriter, r *http.Re
 	if !account.CloseAuthority.IsNil() {
 		requiredAuthority = account.CloseAuthority
 	}
-	if !requiredAuthority.Equal(req.AuthorityKey()) {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"authority: %s is not the current close authority of %s", req.AuthorityKey(), req.AccountKey()))
+	if !requiredAuthority.Equal(req.TokenAccountCloseAuthorityKey()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account_close_authority: %s is not the current close authority of %s", req.TokenAccountCloseAuthorityKey(), req.TokenAccountKey()))
 		return
 	}
 
-	destExists, err := chain.Cli.Exists(r.Context(), req.DestinationKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to check destination: %s", err))
-		return
-	}
-	if !destExists {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s does not exist", req.DestinationKey()))
+	if !accounts[req.RecipientAccountKey().Base58()].Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("recipient_account: %s does not exist", req.RecipientAccountKey()))
 		return
 	}
 
 	if signers := req.ToMultisigSigners(); len(signers) > 0 {
-		info, err := chain.Cli.AccountInfo(r.Context(), req.AuthorityKey(), rpc.CommitmentConfirmed)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read authority: %s", err))
+		info := accounts[req.TokenAccountCloseAuthorityKey().Base58()]
+		if !info.Exists() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account_close_authority: %s does not exist", req.TokenAccountCloseAuthorityKey()))
 			return
 		}
-		if info == nil {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("authority: %s does not exist", req.AuthorityKey()))
-			return
-		}
-		owner, err := types.NewPublicKeyFromBase58(info.Owner)
+		authorityOwner, err := types.NewPublicKeyFromBase58(info.Owner)
 		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode authority owner: %s", err))
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode token_account_close_authority owner: %s", err))
 			return
 		}
 		data, err := info.Bytes()
 		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode authority: %s", err))
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode token_account_close_authority: %s", err))
 			return
 		}
-		if _, err := core.RequireMultisigAuthority(req.TokenProgramID(), owner, data, signers); err != nil {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("authority: %s: %s", req.AuthorityKey(), err))
+		if _, err := core.RequireMultisigAuthority(req.TokenProgramID(), authorityOwner, data, signers); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("token_account_close_authority: %s: %s", req.TokenAccountCloseAuthorityKey(), err))
 			return
 		}
 	}
 
-	ix, err := tokenProgram.CloseAccount(req.AccountKey(), req.DestinationKey(), req.AuthorityKey(), req.ToMultisigSigners())
+	ix, err := tokenProgram.CloseAccount(req.TokenAccountKey(), req.RecipientAccountKey(), req.TokenAccountCloseAuthorityKey(), req.ToMultisigSigners())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	instructions := types.NewInstructions(ix)
 
-	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
-		return
-	}
-
-	// Without a nonce the message is built against the blockhash just fetched
-	// and expires with it. With one it is built against the value that account
-	// stores and never expires, so which constructor runs is the whole
-	// difference between the two.
+	// Without a nonce the message is built against the blockhash resolved
+	// above and expires with it. With one it is built against the value that
+	// account stores and never expires, so which constructor runs is the
+	// whole difference between the two.
 	var (
 		message        *types.Message
 		priced         *types.Message
 		nonceAuthority *types.PublicKey
 	)
-	if req.NonceAccountKey().IsNil() {
-		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		priced = message
 	} else {
-		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
 		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
-			return
-		}
-		if info == nil {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
-			return
-		}
-		if info.Owner != core.System.ID().Base58() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-				req.NonceAccountKey(), info.Owner))
-			return
-		}
-		if info.Space != core.NonceAccountSpace {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is %d bytes, and a nonce account is %d",
-				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
 			return
 		}
 
-		data, err := info.Bytes()
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
-			return
-		}
-		nonce, err := core.DeserializeNonceAccount(data)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if !nonce.Initialized() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
-			return
-		}
-
-		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
 		if err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -1434,7 +1400,7 @@ func (h *TokenTransactionHandler) CloseAccount(w http.ResponseWriter, r *http.Re
 		// real message comes back as expired. The fee follows from the
 		// signature count and any compute budget instructions, never from the
 		// blockhash, so the same shape against a live one prices it exactly.
-		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -1457,17 +1423,16 @@ func (h *TokenTransactionHandler) CloseAccount(w http.ResponseWriter, r *http.Re
 		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
 		return
 	}
-	feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
-		return
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
 	}
 	if feePayerBalance < fee {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
 		return
 	}
-	if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
 		return
 	}
 
@@ -1492,14 +1457,14 @@ func (h *TokenTransactionHandler) CloseAccount(w http.ResponseWriter, r *http.Re
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
 	handler.WriteOK(w, NewCloseAccountResponse(
 		tx, raw, messageBytes,
-		req.AccountKey(), req.DestinationKey(), req.AuthorityKey(), req.TokenProgramID(), nonceAuthority,
+		req.FeePayerKey(), req.TokenAccountKey(), req.RecipientAccountKey(), req.TokenAccountCloseAuthorityKey(), req.TokenProgramID(), nonceAuthority,
 		accountInfo.Lamports, fee,
 	))
 }
 
 // CreateATA godoc
-// @Summary      Create the canonical token account for a wallet and mint
-// @Description  Derives the associated token address and creates it. The address is not a request field: it follows from wallet, mint, and program, so nothing generates a keypair for it and nothing has to remember it. The account itself does not sign, unlike a keypair token account, because a program derived address has no private key. Fails if the account already exists; use create-ata-idempotent when that is not known in advance.
+// @Summary      Create the canonical token account for an owner and mint
+// @Description  Derives the associated token address and creates it. The address is not a request field: it follows from owner, mint, and program, so nothing generates a keypair for it and nothing has to remember it. The account itself does not sign, unlike a keypair token account, because a program derived address has no private key. Fails if the account already exists; use create-ata-idempotent when that is not known in advance. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-ata
 // @Accept       json
 // @Produce      json
@@ -1526,109 +1491,102 @@ func (h *TokenTransactionHandler) CreateATA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// The mint has to exist and belong to the program that is a seed of the
-	// address, or the derived account would be for a mint that is not there.
-	mintInfo, err := chain.Cli.AccountInfo(r.Context(), req.MintKey(), rpc.CommitmentConfirmed)
+	// The payer funds a 165-byte token account, the same size a keypair one
+	// takes, since being derived changes the address and not the layout.
+	rentExempt, err := chain.Cli.MinimumBalanceForRentExemptionToken(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read mint: %s", err))
-		return
-	}
-	if mintInfo == nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", req.MintKey()))
-		return
-	}
-	if mintInfo.Owner != req.TokenProgramID().Base58() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"mint: %s is owned by %s, not %s", req.MintKey(), mintInfo.Owner, req.TokenProgramID()))
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
 		return
 	}
 
-	account, bump, err := core.ATA.Derive(req.WalletKey(), req.MintKey(), req.TokenProgramID())
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	associatedTokenAccount, bump, err := core.ATA.Derive(req.OwnerKey(), req.MintKey(), req.TokenProgramID())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	// The plain create fails on an account that is already there, so the
-	// caller learns that here rather than from a rejected transaction.
-	exists, err := chain.Cli.Exists(r.Context(), account, rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to check associated account: %s", err))
-		return
+	// Every account this handler ever needs is read in one round trip.
+	// rent_payer and fee_payer are frequently the same key under different
+	// roles, and batching rather than fetching each alone is what makes that
+	// overlap cheap instead of redundant reads.
+	lookups := []*types.PublicKey{
+		req.MintKey(),
+		req.RentPayerKey(),
+		req.FeePayerKey(),
+		associatedTokenAccount,
 	}
-	if exists {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"account: %s already exists; use create-ata-idempotent", account))
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
 		return
 	}
 
-	ix, err := core.ATA.Create(req.RentPayerKey(), req.WalletKey(), req.MintKey(), req.TokenProgramID())
+	// The mint has to exist and belong to the program that is a seed of the
+	// address, or the derived account would be for a mint that is not there.
+	mintInfo := accounts[req.MintKey().Base58()]
+	if !mintInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", req.MintKey()))
+		return
+	}
+	if mintInfo.Owner != req.TokenProgramID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is owned by %s, not %s", req.MintKey(), mintInfo.Owner, req.TokenProgramID()))
+		return
+	}
+
+	// The plain create fails on an account that is already there, so the
+	// caller learns that here rather than from a rejected transaction.
+	if accounts[associatedTokenAccount.Base58()].Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("associated_token_account: %s already exists; use create-ata-idempotent", associatedTokenAccount))
+		return
+	}
+
+	// CreateATA moves rent_payer's lamports the same way a plain Transfer
+	// does internally, and the runtime rejects that source outright if it
+	// carries any data, regardless of who owns it.
+	if accounts[req.RentPayerKey().Base58()].CarriesData() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("rent_payer: %s carries data and cannot fund an account's creation", req.RentPayerKey()))
+		return
+	}
+
+	ix, err := core.ATA.Create(req.RentPayerKey(), req.OwnerKey(), req.MintKey(), req.TokenProgramID())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	instructions := types.NewInstructions(ix)
 
-	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
-		return
-	}
-
-	// Without a nonce the message is built against the blockhash just fetched
-	// and expires with it. With one it is built against the value that account
-	// stores and never expires, so which constructor runs is the whole
-	// difference between the two.
+	// Without a nonce the message is built against the blockhash resolved
+	// above and expires with it. With one it is built against the value that
+	// account stores and never expires, so which constructor runs is the
+	// whole difference between the two.
 	var (
 		message        *types.Message
 		priced         *types.Message
 		nonceAuthority *types.PublicKey
 	)
-	if req.NonceAccountKey().IsNil() {
-		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		priced = message
 	} else {
-		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
 		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
-			return
-		}
-		if info == nil {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
-			return
-		}
-		if info.Owner != core.System.ID().Base58() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-				req.NonceAccountKey(), info.Owner))
-			return
-		}
-		if info.Space != core.NonceAccountSpace {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is %d bytes, and a nonce account is %d",
-				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
 			return
 		}
 
-		data, err := info.Bytes()
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
-			return
-		}
-		nonce, err := core.DeserializeNonceAccount(data)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if !nonce.Initialized() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
-			return
-		}
-
-		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
 		if err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -1642,7 +1600,7 @@ func (h *TokenTransactionHandler) CreateATA(w http.ResponseWriter, r *http.Reque
 		// real message comes back as expired. The fee follows from the
 		// signature count and any compute budget instructions, never from the
 		// blockhash, so the same shape against a live one prices it exactly.
-		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -1660,51 +1618,27 @@ func (h *TokenTransactionHandler) CreateATA(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	// The payer funds a 165-byte token account, the same size a keypair one
-	// takes, since being derived changes the address and not the layout.
-	rentExempt, err := chain.Cli.MinimumBalanceForRentExemptionToken(r.Context())
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
-		return
+	// rent_payer and fee_payer may be the same account wearing two hats, so
+	// what each distinct key owes is summed by address rather than checked
+	// once per role.
+	spent := map[string]uint64{
+		req.RentPayerKey().Base58(): 0,
+		req.FeePayerKey().Base58():  0,
 	}
+	spent[req.RentPayerKey().Base58()] += rentExempt
+	spent[req.FeePayerKey().Base58()] += fee
 
-	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
-		return
-	}
-
-	balance, err := chain.Cli.Balance(r.Context(), req.RentPayerKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read payer balance: %s", err))
-		return
-	}
-
-	spent := rentExempt
-	if req.RentPayerKey().Equal(req.FeePayerKey()) {
-		spent += fee
-	}
-	if balance < spent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("rent_payer: balance %d lamports does not cover %d lamports", balance, spent))
-		return
-	}
-	if remaining := balance - spent; remaining != 0 && remaining < minRent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("rent_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.RentPayerKey(), remaining, minRent))
-		return
-	}
-
-	if !req.RentPayerKey().Equal(req.FeePayerKey()) {
-		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+	for payer, amount := range spent {
+		var balance uint64
+		if info := accounts[payer]; info.Exists() {
+			balance = info.Lamports
+		}
+		if balance < amount {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: balance %d does not cover %d", payer, balance, amount))
 			return
 		}
-		if feePayerBalance < fee {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
-			return
-		}
-		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		if !types.RentExemptAfter(balance, amount, minRent) {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: would leave %d lamports, below the %d lamport rent-exemption minimum", payer, balance-amount, minRent))
 			return
 		}
 	}
@@ -1730,14 +1664,14 @@ func (h *TokenTransactionHandler) CreateATA(w http.ResponseWriter, r *http.Reque
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
 	handler.WriteOK(w, NewCreateATAResponse(
 		tx, raw, messageBytes,
-		account, req.WalletKey(), req.MintKey(), req.TokenProgramID(), nonceAuthority,
+		req.RentPayerKey(), req.FeePayerKey(), associatedTokenAccount, req.OwnerKey(), req.MintKey(), req.TokenProgramID(), nonceAuthority,
 		bump, rentExempt, fee,
 	))
 }
 
 // CreateATAIdempotent godoc
 // @Summary      Create the canonical token account, succeeding if it exists
-// @Description  Same as create-ata, except the instruction succeeds rather than fails when the account is already there. This is the one to prepend to a transfer: checking first and creating only if absent leaves a window in which somebody else creates it, and the plain create would then fail the whole transaction over an account that exists and is correct.
+// @Description  Same as create-ata, except the instruction succeeds rather than fails when the account is already there. This is the one to prepend to a transfer: checking first and creating only if absent leaves a window in which somebody else creates it, and the plain create would then fail the whole transaction over an account that exists and is correct. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-ata
 // @Accept       json
 // @Produce      json
@@ -1764,103 +1698,96 @@ func (h *TokenTransactionHandler) CreateATAIdempotent(w http.ResponseWriter, r *
 		return
 	}
 
-	mintInfo, err := chain.Cli.AccountInfo(r.Context(), req.MintKey(), rpc.CommitmentConfirmed)
+	rentExempt, err := chain.Cli.MinimumBalanceForRentExemptionToken(r.Context())
 	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read mint: %s", err))
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
 		return
 	}
-	if mintInfo == nil {
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	associatedTokenAccount, bump, err := core.ATA.Derive(req.OwnerKey(), req.MintKey(), req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Every account this handler ever needs is read in one round trip.
+	// rent_payer and fee_payer are frequently the same key under different
+	// roles, and batching rather than fetching each alone is what makes that
+	// overlap cheap instead of redundant reads.
+	lookups := []*types.PublicKey{
+		req.MintKey(),
+		req.RentPayerKey(),
+		req.FeePayerKey(),
+		associatedTokenAccount,
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	mintInfo := accounts[req.MintKey().Base58()]
+	if !mintInfo.Exists() {
 		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", req.MintKey()))
 		return
 	}
 	if mintInfo.Owner != req.TokenProgramID().Base58() {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-			"mint: %s is owned by %s, not %s", req.MintKey(), mintInfo.Owner, req.TokenProgramID()))
-		return
-	}
-
-	account, bump, err := core.ATA.Derive(req.WalletKey(), req.MintKey(), req.TokenProgramID())
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is owned by %s, not %s", req.MintKey(), mintInfo.Owner, req.TokenProgramID()))
 		return
 	}
 
 	// No existence check here, deliberately: tolerating an account that is
 	// already there is the entire difference between this endpoint and the
 	// plain create.
-	exists, err := chain.Cli.Exists(r.Context(), account, rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to check associated account: %s", err))
+	exists := accounts[associatedTokenAccount.Base58()].Exists()
+
+	// CreateATAIdempotent moves rent_payer's lamports the same way a plain
+	// Transfer does internally, and the runtime rejects that source outright
+	// if it carries any data, regardless of who owns it.
+	if accounts[req.RentPayerKey().Base58()].CarriesData() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("rent_payer: %s carries data and cannot fund an account's creation", req.RentPayerKey()))
 		return
 	}
 
-	ix, err := core.ATA.CreateIdempotent(req.RentPayerKey(), req.WalletKey(), req.MintKey(), req.TokenProgramID())
+	ix, err := core.ATA.CreateIdempotent(req.RentPayerKey(), req.OwnerKey(), req.MintKey(), req.TokenProgramID())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	instructions := types.NewInstructions(ix)
 
-	blockhash, _, err := chain.Cli.LatestBlockhash(r.Context(), rpc.CommitmentFinalized)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to fetch blockhash: %s", err))
-		return
-	}
-
-	// Without a nonce the message is built against the blockhash just fetched
-	// and expires with it. With one it is built against the value that account
-	// stores and never expires, so which constructor runs is the whole
-	// difference between the two.
+	// Without a nonce the message is built against the blockhash resolved
+	// above and expires with it. With one it is built against the value that
+	// account stores and never expires, so which constructor runs is the
+	// whole difference between the two.
 	var (
 		message        *types.Message
 		priced         *types.Message
 		nonceAuthority *types.PublicKey
 	)
-	if req.NonceAccountKey().IsNil() {
-		if message, err = types.NewMessage(req.FeePayerKey(), blockhash, instructions); err != nil {
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
 		priced = message
 	} else {
-		info, err := chain.Cli.AccountInfo(r.Context(), req.NonceAccountKey(), rpc.CommitmentConfirmed)
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
 		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read nonce account: %s", err))
-			return
-		}
-		if info == nil {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s does not exist", req.NonceAccountKey()))
-			return
-		}
-		if info.Owner != core.System.ID().Base58() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is owned by %s, and a nonce account is owned by the System Program",
-				req.NonceAccountKey(), info.Owner))
-			return
-		}
-		if info.Space != core.NonceAccountSpace {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf(
-				"nonce_account: %s is %d bytes, and a nonce account is %d",
-				req.NonceAccountKey(), info.Space, core.NonceAccountSpace))
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
 			return
 		}
 
-		data, err := info.Bytes()
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode account data: %s", err))
-			return
-		}
-		nonce, err := core.DeserializeNonceAccount(data)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadRequest, err.Error())
-			return
-		}
-		if !nonce.Initialized() {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("nonce_account: %s is not initialized", req.NonceAccountKey()))
-			return
-		}
-
-		advance, err := core.System.AdvanceNonceAccount(req.NonceAccountKey(), nonce.Authority)
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
 		if err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
@@ -1874,7 +1801,7 @@ func (h *TokenTransactionHandler) CreateATAIdempotent(w http.ResponseWriter, r *
 		// real message comes back as expired. The fee follows from the
 		// signature count and any compute budget instructions, never from the
 		// blockhash, so the same shape against a live one prices it exactly.
-		if priced, err = types.NewNonceMessage(req.FeePayerKey(), blockhash, advance, instructions); err != nil {
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
 			handler.WriteError(w, http.StatusBadRequest, err.Error())
 			return
 		}
@@ -1892,55 +1819,31 @@ func (h *TokenTransactionHandler) CreateATAIdempotent(w http.ResponseWriter, r *
 		return
 	}
 
-	rentExempt, err := chain.Cli.MinimumBalanceForRentExemptionToken(r.Context())
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
-		return
+	// rent_payer and fee_payer may be the same account wearing two hats, so
+	// what each distinct key owes is summed by address rather than checked
+	// once per role. An account that is already there costs nothing to rent,
+	// so requiring the payer to hold what it would have cost would reject a
+	// transaction that spends only the fee.
+	spent := map[string]uint64{
+		req.RentPayerKey().Base58(): 0,
+		req.FeePayerKey().Base58():  0,
 	}
-
-	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
-		return
-	}
-
-	balance, err := chain.Cli.Balance(r.Context(), req.RentPayerKey(), rpc.CommitmentConfirmed)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read payer balance: %s", err))
-		return
-	}
-
-	// An account that is already there costs nothing to rent, so requiring the
-	// payer to hold what it would have cost would reject a transaction that
-	// spends only the fee.
-	spent := uint64(0)
 	if !exists {
-		spent = rentExempt
+		spent[req.RentPayerKey().Base58()] += rentExempt
 	}
-	if req.RentPayerKey().Equal(req.FeePayerKey()) {
-		spent += fee
-	}
-	if balance < spent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("rent_payer: balance %d lamports does not cover %d lamports", balance, spent))
-		return
-	}
-	if remaining := balance - spent; remaining != 0 && remaining < minRent {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("rent_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.RentPayerKey(), remaining, minRent))
-		return
-	}
+	spent[req.FeePayerKey().Base58()] += fee
 
-	if !req.RentPayerKey().Equal(req.FeePayerKey()) {
-		feePayerBalance, err := chain.Cli.Balance(r.Context(), req.FeePayerKey(), rpc.CommitmentConfirmed)
-		if err != nil {
-			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read fee payer balance: %s", err))
+	for payer, amount := range spent {
+		var balance uint64
+		if info := accounts[payer]; info.Exists() {
+			balance = info.Lamports
+		}
+		if balance < amount {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: balance %d does not cover %d", payer, balance, amount))
 			return
 		}
-		if feePayerBalance < fee {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
-			return
-		}
-		if remaining := feePayerBalance - fee; remaining != 0 && remaining < minRent {
-			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), remaining, minRent))
+		if !types.RentExemptAfter(balance, amount, minRent) {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: would leave %d lamports, below the %d lamport rent-exemption minimum", payer, balance-amount, minRent))
 			return
 		}
 	}
@@ -1966,7 +1869,7 @@ func (h *TokenTransactionHandler) CreateATAIdempotent(w http.ResponseWriter, r *
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
 	handler.WriteOK(w, NewCreateATAIdempotentResponse(
 		tx, raw, messageBytes,
-		account, req.WalletKey(), req.MintKey(), req.TokenProgramID(), nonceAuthority,
+		req.RentPayerKey(), req.FeePayerKey(), associatedTokenAccount, req.OwnerKey(), req.MintKey(), req.TokenProgramID(), nonceAuthority,
 		bump, rentExempt, fee,
 	))
 }

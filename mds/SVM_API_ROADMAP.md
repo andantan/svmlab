@@ -177,7 +177,7 @@ needed no equivalent change: it was already creation-only.
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion, account/authority |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi/batch/collect transfer, field-fidelity pass done |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts; first used by ATA   |
-| SPL Token classic         | done    | done      | lifecycle (create-only + initialize-* pairing), delegation, 7 set-authority, freeze/thaw, max variants, multisig lifecycle, unchecked opcodes (+max), and initialize-immutable-owner all live; native SOL and read-return-data next |
+| SPL Token classic         | done    | done      | lifecycle (create-only + initialize-* pairing), delegation, 7 set-authority, freeze/thaw, max variants, multisig lifecycle, unchecked opcodes (+max), initialize-immutable-owner, and withdraw-excess-lamports all live; native SOL and read-return-data next |
 | Associated Token Account  | done    | done      | create, create-idempotent, transfer-from-ata (+max); recover-nested deferred |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
@@ -381,9 +381,26 @@ extension for it. Replacing a multisig means creating a new one and
 repointing whatever named the old one as an authority through
 `set-authority`.
 
+`withdraw-excess-lamports` is live too, recovering whatever lamports a
+Token-owned account holds beyond its own rent-exemption minimum without
+consuming the account the way close-account does — a plain System transfer
+landing on a mint, token account, or multisig by mistake is the ordinary way
+one ends up overfunded, since System's own Transfer takes any account
+regardless of who owns it. It works generically across all three account
+kinds, so its `account`/`authority` fields stay deliberately unqualified
+rather than named `token_account`/`token_account_authority`: which role
+authority actually has to satisfy depends on which of the three account is
+(a mint's close authority extension, a token account's
+close_authority.unwrap_or(owner), or a multisig's own enrolled signers), and
+this endpoint has no Token-2022 extension parser to resolve that ahead of
+time, so a wrong authority still fails on chain rather than as a 400. The
+opcode itself remains unverified pending a live-cluster check — it was
+implemented on the strength of `TOKEN_API_PROPOSAL.md`'s existing opcode
+number (38) rather than confirmed sent successfully yet.
+
 Still open here: the return-data/native-SOL utilities (`account-data-size`,
-`amount-to-ui`, `ui-to-amount`, wrapped SOL) and the two unverified opcodes
-(`withdraw-excess-lamports`, `batch`). Detailed coverage:
+`amount-to-ui`, `ui-to-amount`, wrapped SOL) and the one remaining unverified
+opcode, `batch`. Detailed coverage:
 
 ~~~
 TOKEN_API_PROPOSAL.md
@@ -801,21 +818,23 @@ program accepts it on Devnet.
 `token/initialize-mint`, `token/initialize-mint2`, `token/initialize-account`,
 `token/initialize-account2`, `token/initialize-account3`,
 `token/initialize-multisig`, `token/initialize-multisig2`, `token/transfer`
-(+max), `token/approve` (+max), `token/mint-to`, `token/burn` (+max), and
-`token/initialize-immutable-owner` are done — see group 3 above. Still open:
+(+max), `token/approve` (+max), `token/mint-to`, `token/burn` (+max),
+`token/initialize-immutable-owner`, and `token/withdraw-excess-lamports` are
+done — see group 3 above. Still open:
 
 ~~~text
 token/account-data-size
 token/amount-to-ui
 token/ui-to-amount
-token/withdraw-excess-lamports
 token/batch
 ~~~
 
 Checked variants remain the normal public path. This group is mainly for
 learning, backwards compatibility, and custom composition. Confirm unverified
 opcodes (`unwrap-lamports`, `withdraw-excess-lamports`, and `batch`) against a
-live cluster before documenting them as usable.
+live cluster before treating them as reliable — `withdraw-excess-lamports` is
+implemented on the strength of its documented opcode number (38) alone, not
+a confirmed successful send yet.
 
 ### ATA helpers
 

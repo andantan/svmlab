@@ -906,6 +906,168 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.ApproveMaxRequest:
+    properties:
+      delegate:
+        example: ""
+        type: string
+      durable_nonce_account:
+        example: ""
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        items:
+          type: string
+        type: array
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        example: ""
+        type: string
+      token_account:
+        example: ""
+        type: string
+      token_account_owner:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ApproveMaxResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      delegate:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      max_amount:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
+      token_account_owner:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.ApproveRequest:
+    properties:
+      amount:
+        description: |-
+          Amount is the raw base-unit count Delegate may spend, not a UI decimal
+          string.
+        example: "500000"
+        type: string
+      delegate:
+        description: |-
+          Delegate is who may spend up to Amount from TokenAccount going
+          forward, replacing any prior delegation entirely rather than adding to
+          it.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      token_account:
+        description: |-
+          TokenAccount is debited if the delegation is ever spent. It must
+          already exist.
+        example: ""
+        type: string
+      token_account_owner:
+        description: |-
+          TokenAccountOwner must be TokenAccount's owner, never an existing
+          delegate: re-delegating would let a delegate hand its own spending
+          rights to a third party the owner never chose.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ApproveResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      delegate:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
+      token_account_owner:
+        type: string
+      transaction:
+        type: string
+    type: object
   v2.BurnCheckedMaxRequest:
     properties:
       durable_nonce_account:
@@ -1093,6 +1255,159 @@ definitions:
         type: string
       decimals:
         type: integer
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
+      token_account_authority:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.BurnMaxRequest:
+    properties:
+      durable_nonce_account:
+        example: ""
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        items:
+          type: string
+        type: array
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        example: ""
+        type: string
+      token_account:
+        example: ""
+        type: string
+      token_account_authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.BurnMaxResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
+      token_account_authority:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.BurnRequest:
+    properties:
+      amount:
+        description: Amount is the raw base-unit count to destroy, not a UI decimal
+          string.
+        example: "1000"
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: Mint is what TokenAccount must hold.
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      token_account:
+        description: |-
+          TokenAccount is debited and never credited elsewhere: burning destroys
+          supply rather than moving it. It must already exist and hold Mint.
+        example: ""
+        type: string
+      token_account_authority:
+        description: |-
+          TokenAccountAuthority is TokenAccount's owner, or its delegate for no
+          more than what was delegated.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.BurnResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
       fee:
         $ref: '#/definitions/v2.SystemPayer'
       message:
@@ -2381,6 +2696,101 @@ definitions:
         type: string
       decimals:
         type: integer
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      mint_authority:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.MintToRequest:
+    properties:
+      amount:
+        description: Amount is the raw base-unit count to mint, not a UI decimal string.
+        example: "1000000"
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint is the token whose supply grows. It must already exist, and its
+          own MintAuthority is what this request has to name to be honored.
+        example: ""
+        type: string
+      mint_authority:
+        description: |-
+          MintAuthority is Mint's mint authority, not TokenAccount's owner or
+          delegate.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      token_account:
+        description: |-
+          TokenAccount is credited with the newly minted supply. It must already
+          exist and hold Mint.
+        example: ""
+        type: string
+    type: object
+  v2.MintToResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
       fee:
         $ref: '#/definitions/v2.SystemPayer'
       message:
@@ -5262,6 +5672,169 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.TransferMaxRequest:
+    properties:
+      destination_token_account:
+        example: ""
+        type: string
+      durable_nonce_account:
+        example: ""
+        type: string
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        items:
+          type: string
+        type: array
+      program:
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        example: ""
+        type: string
+      source_token_account:
+        example: ""
+        type: string
+      source_token_account_authority:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.TransferMaxResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      destination_token_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      source_token_account:
+        type: string
+      source_token_account_authority:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.TransferRequest:
+    properties:
+      amount:
+        description: Amount is the raw base-unit count to move, not a UI decimal string.
+        example: "250000"
+        type: string
+      destination_token_account:
+        description: |-
+          DestinationTokenAccount is credited. It must already exist, hold the
+          same mint as SourceTokenAccount, and not be frozen: a transfer moves
+          between *token accounts*, never to a wallet address directly.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. A transfer moves no
+          lamports of its own, so this is the only balance this endpoint ever
+          checks.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token
+          or Token-2022. It must agree with both accounts' own owning program
+          or the instruction fails on chain.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      source_token_account:
+        description: |-
+          SourceTokenAccount is debited. It must already exist and not be
+          frozen.
+        example: ""
+        type: string
+      source_token_account_authority:
+        description: |-
+          SourceTokenAccountAuthority is SourceTokenAccount's owner, or its
+          delegate for no more than what was delegated.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.TransferResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        type: string
+      destination_token_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      source_token_account:
+        type: string
+      source_token_account_authority:
+        type: string
+      transaction:
+        type: string
+    type: object
 host: localhost:33153
 info:
   contact: {}
@@ -7661,6 +8234,54 @@ paths:
       summary: Build one transaction paying several recipients
       tags:
       - v2-transaction-system-transfer
+  /svm/v2/transaction/token/approve:
+    post:
+      consumes:
+      - application/json
+      description: 'Raw Approve, the original opcode: neither the mint nor its decimals
+        is named or verified against the account. mint is still resolved server-side
+        from token_account''s own stored value and reported in the response. token_account_owner
+        must be token_account''s owner, never an existing delegate. This is for compatibility
+        with the original opcode; approve-checked remains the normal public path.
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        account stores instead, so the transaction never expires, and prepends the
+        advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Approve parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ApproveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ApproveResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Grant a delegate spending rights over a token account (original opcode)
+      tags:
+      - v2-transaction-token-delegation
   /svm/v2/transaction/token/approve-checked:
     post:
       consumes:
@@ -7710,7 +8331,7 @@ paths:
             type: object
       summary: Grant a delegate limited spending rights over a token account
       tags:
-      - v2-transaction-token-delegate
+      - v2-transaction-token-delegation
   /svm/v2/transaction/token/approve-checked/max:
     post:
       consumes:
@@ -7764,7 +8385,105 @@ paths:
       summary: Grant a delegate effectively unlimited spending rights over a token
         account
       tags:
-      - v2-transaction-token-delegate
+      - v2-transaction-token-delegation
+  /svm/v2/transaction/token/approve/max:
+    post:
+      consumes:
+      - application/json
+      description: 'Same as approve, except no amount is read at all: it grants the
+        maximum representable base-unit amount directly, mirroring approve-checked/max
+        and the standard effectively-unlimited approval pattern. Neither the mint
+        nor decimals is named or verified against the account, the same as approve;
+        mint is still resolved server-side and reported in the response. token_account_owner
+        must be token_account''s owner, never an existing delegate. This is for compatibility
+        with the original opcode; approve-checked/max remains the normal public path.
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        account stores instead, so the transaction never expires, and prepends the
+        advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Approve parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ApproveMaxRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ApproveMaxResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Grant a delegate the maximum representable amount over a token account
+        (original opcode)
+      tags:
+      - v2-transaction-token-delegation
+  /svm/v2/transaction/token/burn:
+    post:
+      consumes:
+      - application/json
+      description: 'Raw Burn, the original opcode: decimals is neither named nor verified
+        against the mint. token_account_authority must be token_account''s owner,
+        or its delegate for no more than the delegated amount. This is for compatibility
+        with the original opcode; burn-checked remains the normal public path. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Burn parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.BurnRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.BurnResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Destroy supply held by a token account (original opcode)
+      tags:
+      - v2-transaction-token-supply
   /svm/v2/transaction/token/burn-checked:
     post:
       consumes:
@@ -7861,6 +8580,55 @@ paths:
               type: string
             type: object
       summary: Destroy a token account's entire balance
+      tags:
+      - v2-transaction-token-supply
+  /svm/v2/transaction/token/burn/max:
+    post:
+      consumes:
+      - application/json
+      description: Same as burn, except the amount destroyed is token_account's current
+        balance rather than a caller-given one. decimals is neither named nor verified
+        against the mint, the same as burn. Unlike a lamport sweep, token_account
+        carries no rent-exemption floor tied to its token balance, so it is always
+        swept all the way to zero. This is for compatibility with the original opcode;
+        burn-checked/max remains the normal public path. recent_blockhash is always
+        required and is never fetched server-side. Left alone, it also builds the
+        message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Burn parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.BurnMaxRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.BurnMaxResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Destroy a token account's entire balance (original opcode)
       tags:
       - v2-transaction-token-supply
   /svm/v2/transaction/token/close-account:
@@ -8549,6 +9317,53 @@ paths:
       summary: Initialize an already-existing account as a Token multisig
       tags:
       - v2-transaction-token-multisig
+  /svm/v2/transaction/token/mint-to:
+    post:
+      consumes:
+      - application/json
+      description: 'Raw MintTo, the original opcode: decimals is neither named nor
+        verified against the mint. mint_authority must be mint''s own mint authority.
+        This is for compatibility with the original opcode; mint-to-checked remains
+        the normal public path. recent_blockhash is always required and is never fetched
+        server-side. Left alone, it also builds the message and expires whenever the
+        runtime says it does. Naming durable_nonce_account builds the message against
+        the value that account stores instead, so the transaction never expires, and
+        prepends the advance that consumes it; recent_blockhash then only prices the
+        transaction. The response reports nonce_authority in that case, which has
+        to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.MintToRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.MintToResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create new supply into an existing token account (original opcode)
+      tags:
+      - v2-transaction-token-supply
   /svm/v2/transaction/token/mint-to-checked:
     post:
       consumes:
@@ -8643,7 +9458,7 @@ paths:
             type: object
       summary: Clear whatever delegation an account currently has
       tags:
-      - v2-transaction-token-delegate
+      - v2-transaction-token-delegation
   /svm/v2/transaction/token/set-authority/close/clear:
     post:
       consumes:
@@ -9010,6 +9825,56 @@ paths:
       summary: Resume a suspended token account
       tags:
       - v2-transaction-token-freeze
+  /svm/v2/transaction/token/transfer:
+    post:
+      consumes:
+      - application/json
+      description: 'Raw Transfer, the original opcode: neither the mint nor its decimals
+        is named or verified against the accounts, which is exactly the failure mode
+        transfer-checked exists to catch. mint is still resolved server-side from
+        source_token_account''s own stored value and reported in the response; destination_token_account
+        is still checked against it. source_token_account_authority must be source_token_account''s
+        owner, or its delegate for no more than the delegated amount. This is for
+        compatibility with the original opcode; transfer-checked remains the normal
+        public path. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Transfer parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.TransferRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.TransferResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Move a balance between two token accounts (original opcode)
+      tags:
+      - v2-transaction-token-transfer
   /svm/v2/transaction/token/transfer-checked:
     post:
       consumes:
@@ -9211,4 +10076,56 @@ paths:
       summary: Sweep an owner's associated token account balance to any token account
       tags:
       - v2-transaction-token-ata
+  /svm/v2/transaction/token/transfer/max:
+    post:
+      consumes:
+      - application/json
+      description: 'Same as transfer, except the amount moved is source_token_account''s
+        current balance rather than a caller-given one. Neither the mint nor decimals
+        is named or verified against the accounts, the same as transfer; mint is still
+        resolved server-side and reported in the response. Unlike a lamport sweep,
+        source_token_account carries no rent-exemption floor: a token account can
+        hold zero tokens and still exist, so it is always swept all the way to zero,
+        even when it is also fee_payer. This is for compatibility with the original
+        opcode; transfer-checked/max remains the normal public path. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Transfer parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.TransferMaxRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.TransferMaxResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Sweep a token account's entire balance to another token account (original
+        opcode)
+      tags:
+      - v2-transaction-token-transfer
 swagger: "2.0"

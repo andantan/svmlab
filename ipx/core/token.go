@@ -972,6 +972,121 @@ func (t *token) InitializeMultisig2(multisig *types.PublicKey, m uint8, signers 
 	return types.NewInstruction(t.id, accounts, data), nil
 }
 
+// Transfer moves tokens between two accounts, the original opcode.
+//
+// Unlike TransferChecked, neither the mint nor its decimals is named or
+// verified: the program trusts amount against whatever source's own mint and
+// decimals turn out to be, which is exactly the failure mode the checked
+// variant exists to catch. This is for compatibility with the original
+// opcode; TransferChecked remains the normal public path.
+func (t *token) Transfer(source, destination, authority *types.PublicKey, signers []*types.PublicKey, amount uint64) (*types.Instruction, error) {
+	if source.IsNil() {
+		return nil, fmt.Errorf("token transfer: source is required")
+	}
+	if destination.IsNil() {
+		return nil, fmt.Errorf("token transfer: destination is required")
+	}
+	if source.Equal(destination) {
+		return nil, fmt.Errorf("token transfer: source and destination are the same account")
+	}
+	if err := validateAuthority("token transfer", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionTransfer)
+	data = codec.Binary.AppendU64(data, amount)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(source),
+		types.NewWritableAccount(destination),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// Approve grants a delegate spending rights over an account, the original
+// opcode.
+//
+// Unlike ApproveChecked, neither the mint nor its decimals is named or
+// verified. This is for compatibility with the original opcode;
+// ApproveChecked remains the normal public path.
+func (t *token) Approve(account, delegate, authority *types.PublicKey, signers []*types.PublicKey, amount uint64) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token approve: account is required")
+	}
+	if delegate.IsNil() {
+		return nil, fmt.Errorf("token approve: delegate is required")
+	}
+	if err := validateAuthority("token approve", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionApprove)
+	data = codec.Binary.AppendU64(data, amount)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(delegate),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// MintTo creates new supply in a holder account, the original opcode.
+//
+// Unlike MintToChecked, decimals is neither named nor verified against the
+// mint. The account list is otherwise identical: the mint is writable for
+// the same reason — supply lives on it. This is for compatibility with the
+// original opcode; MintToChecked remains the normal public path.
+func (t *token) MintTo(mint, destination, authority *types.PublicKey, signers []*types.PublicKey, amount uint64) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token mint to: mint is required")
+	}
+	if destination.IsNil() {
+		return nil, fmt.Errorf("token mint to: destination is required")
+	}
+	if err := validateAuthority("token mint to", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionMintTo)
+	data = codec.Binary.AppendU64(data, amount)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(mint),
+		types.NewWritableAccount(destination),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// Burn destroys supply held by an account, the original opcode.
+//
+// Unlike BurnChecked, decimals is neither named nor verified against the
+// mint. The account list is otherwise identical. This is for compatibility
+// with the original opcode; BurnChecked remains the normal public path.
+func (t *token) Burn(account, mint, authority *types.PublicKey, signers []*types.PublicKey, amount uint64) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token burn: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token burn: mint is required")
+	}
+	if err := validateAuthority("token burn", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionBurn)
+	data = codec.Binary.AppendU64(data, amount)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewWritableAccount(mint),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
 // TransferChecked moves tokens between two accounts of the same mint.
 //
 // It never sends to a wallet. Both ends are token accounts, and reaching a

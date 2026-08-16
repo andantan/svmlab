@@ -5330,6 +5330,63 @@
                     }
                 }
             }
+        },
+        "/svm/v2/transaction/token/withdraw-excess-lamports": {
+            "post": {
+                "description": "Recovers whatever lamports account holds beyond its own rent-exemption minimum, to destination. Unlike close-account, account is never consumed — it stays exactly as it was, rent-exempt and still carrying whatever mint, token, or multisig state it held. This is for the ordinary way an account ends up overfunded: a plain System transfer landing on it by mistake, since System's own Transfer takes any account regardless of who owns it. Which role authority actually has to be depends on what account is (a mint's close authority extension, a token account's close_authority.unwrap_or(owner), or a multisig's own enrolled signers) and this endpoint has no Token-2022 extension parser to settle that ahead of time, so a wrong authority fails on chain rather than as a 400. estimated_recovered in the response is exactly that — an estimate computed from account's balance and size at read time, not the value the program itself will use, which is computed fresh at landing time. This opcode is unverified: confirm it exists on the deployed program before relying on it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-token-account"
+                ],
+                "summary": "Recover a Token-owned account's excess lamports above its rent-exemption minimum",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Withdraw-excess-lamports parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.WithdrawExcessLamportsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.WithdrawExcessLamportsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -11578,6 +11635,100 @@
                 },
                 "source_token_account_authority": {
                     "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.WithdrawExcessLamportsRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "description": "Account is read for its excess, never closed or resized. It must\nalready exist and be owned by Program; it may be a mint, a token\naccount, or a multisig.",
+                    "type": "string",
+                    "example": ""
+                },
+                "authority": {
+                    "description": "Authority is whichever role Account's actual type requires — see the\ntype doc. It is not verified against Account here.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "destination": {
+                    "description": "Destination receives the recovered lamports. It must already exist;\nthis is not a way to bring a new account into existence.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.WithdrawExcessLamportsResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "estimated_recovered": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "transaction": {
                     "type": "string"

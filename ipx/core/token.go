@@ -43,7 +43,33 @@ const (
 	TokenInstructionInitializeImmutableOwner
 	TokenInstructionAmountToUiAmount
 	TokenInstructionUiAmountToAmount
+	TokenInstructionInitializeMintCloseAuthority
+	TokenInstructionTransferFeeExtension
+	TokenInstructionConfidentialTransferExtension
+	TokenInstructionDefaultAccountStateExtension
+	TokenInstructionReallocate
+	TokenInstructionMemoTransferExtension
+	TokenInstructionCreateNativeMint
+	TokenInstructionInitializeNonTransferableMint
+	TokenInstructionInterestBearingMintExtension
+	TokenInstructionCpiGuardExtension
+	TokenInstructionInitializePermanentDelegate
+	TokenInstructionTransferHookExtension
+	TokenInstructionConfidentialTransferFeeExtension
+	TokenInstructionWithdrawExcessLamports
+	TokenInstructionMetadataPointerExtension
+	TokenInstructionGroupPointerExtension
+	TokenInstructionGroupMemberPointerExtension
+	TokenInstructionConfidentialMintBurnExtension
+	TokenInstructionScaledUiAmountExtension
+	TokenInstructionPausableExtension
+	TokenInstructionUnwrapLamports
+	TokenInstructionPermissionedBurnExtension
 )
+
+// TokenInstructionBatch is not contiguous with anything above and stands alone at the top of
+// the u8 range.
+const TokenInstructionBatch uint8 = 255
 
 // Authority types SetAuthority accepts, a u8 selecting which of an account's
 // roles is being handed over.
@@ -1239,6 +1265,49 @@ func (t *token) CloseAccount(account, destination, authority *types.PublicKey, s
 
 	accounts := types.NewAccounts(
 		types.NewWritableAccount(account),
+		types.NewWritableAccount(destination),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// WithdrawExcessLamports recovers whatever lamports a Token-owned account
+// holds beyond its own rent-exempt minimum.
+//
+// Unlike CloseAccount, source is not consumed: it stays exactly as it was,
+// still holding its rent-exempt floor and whatever token state it carries.
+// This exists for the ordinary way an account ends up overfunded — a plain
+// System transfer landing on it by mistake, since Transfer takes any
+// account regardless of who owns it — not for anything CloseAccount already
+// covers.
+//
+// Which authority the program actually checks depends on what source is: a
+// mint checks its close authority extension if Token-2022 added one, a
+// token account checks close_authority.unwrap_or(owner), and a multisig
+// checks its own enrolled signers. This builder does not attempt to resolve
+// that itself and just takes whatever authority is given, the same as any
+// other endpoint that lets the chain be the final word on a role it cannot
+// fully resolve client-side; a wrong one fails on chain rather than here.
+//
+// Unverified against a live cluster.
+func (t *token) WithdrawExcessLamports(source, destination, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if source.IsNil() {
+		return nil, fmt.Errorf("token withdraw excess lamports: source is required")
+	}
+	if destination.IsNil() {
+		return nil, fmt.Errorf("token withdraw excess lamports: destination is required")
+	}
+	if source.Equal(destination) {
+		return nil, fmt.Errorf("token withdraw excess lamports: source and destination are the same account")
+	}
+	if err := validateAuthority("token withdraw excess lamports", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionWithdrawExcessLamports)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(source),
 		types.NewWritableAccount(destination),
 	)
 

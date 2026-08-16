@@ -5899,6 +5899,98 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.WithdrawExcessLamportsRequest:
+    properties:
+      account:
+        description: |-
+          Account is read for its excess, never closed or resized. It must
+          already exist and be owned by Program; it may be a mint, a token
+          account, or a multisig.
+        example: ""
+        type: string
+      authority:
+        description: |-
+          Authority is whichever role Account's actual type requires — see the
+          type doc. It is not verified against Account here.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      destination:
+        description: |-
+          Destination receives the recovered lamports. It must already exist;
+          this is not a way to bring a new account into existence.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.WithdrawExcessLamportsResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      destination:
+        type: string
+      estimated_recovered:
+        $ref: '#/definitions/v2.SystemPayer'
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
 host: localhost:33153
 info:
   contact: {}
@@ -10255,4 +10347,63 @@ paths:
         opcode)
       tags:
       - v2-transaction-token-transfer
+  /svm/v2/transaction/token/withdraw-excess-lamports:
+    post:
+      consumes:
+      - application/json
+      description: 'Recovers whatever lamports account holds beyond its own rent-exemption
+        minimum, to destination. Unlike close-account, account is never consumed —
+        it stays exactly as it was, rent-exempt and still carrying whatever mint,
+        token, or multisig state it held. This is for the ordinary way an account
+        ends up overfunded: a plain System transfer landing on it by mistake, since
+        System''s own Transfer takes any account regardless of who owns it. Which
+        role authority actually has to be depends on what account is (a mint''s close
+        authority extension, a token account''s close_authority.unwrap_or(owner),
+        or a multisig''s own enrolled signers) and this endpoint has no Token-2022
+        extension parser to settle that ahead of time, so a wrong authority fails
+        on chain rather than as a 400. estimated_recovered in the response is exactly
+        that — an estimate computed from account''s balance and size at read time,
+        not the value the program itself will use, which is computed fresh at landing
+        time. This opcode is unverified: confirm it exists on the deployed program
+        before relying on it. recent_blockhash is always required and is never fetched
+        server-side. Left alone, it also builds the message and expires whenever the
+        runtime says it does. Naming durable_nonce_account builds the message against
+        the value that account stores instead, so the transaction never expires, and
+        prepends the advance that consumes it; recent_blockhash then only prices the
+        transaction. The response reports nonce_authority in that case, which has
+        to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Withdraw-excess-lamports parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.WithdrawExcessLamportsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.WithdrawExcessLamportsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Recover a Token-owned account's excess lamports above its rent-exemption
+        minimum
+      tags:
+      - v2-transaction-token-token-account
 swagger: "2.0"

@@ -5235,6 +5235,210 @@ func (h *TokenTransactionHandler) CloseAccount(w http.ResponseWriter, r *http.Re
 	))
 }
 
+// WithdrawExcessLamports godoc
+// @Summary      Recover a Token-owned account's excess lamports above its rent-exemption minimum
+// @Description  Recovers whatever lamports account holds beyond its own rent-exemption minimum, to destination. Unlike close-account, account is never consumed — it stays exactly as it was, rent-exempt and still carrying whatever mint, token, or multisig state it held. This is for the ordinary way an account ends up overfunded: a plain System transfer landing on it by mistake, since System's own Transfer takes any account regardless of who owns it. Which role authority actually has to be depends on what account is (a mint's close authority extension, a token account's close_authority.unwrap_or(owner), or a multisig's own enrolled signers) and this endpoint has no Token-2022 extension parser to settle that ahead of time, so a wrong authority fails on chain rather than as a 400. estimated_recovered in the response is exactly that — an estimate computed from account's balance and size at read time, not the value the program itself will use, which is computed fresh at landing time. This opcode is unverified: confirm it exists on the deployed program before relying on it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-token-account
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                           true  "Cluster name"
+// @Param        X-Chain-Network  header    string                           true  "Cluster network"
+// @Param        body             body      WithdrawExcessLamportsRequest   true  "Withdraw-excess-lamports parameters"
+// @Success      200              {object}  WithdrawExcessLamportsResponse
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/withdraw-excess-lamports [post]
+func (h *TokenTransactionHandler) WithdrawExcessLamports(w http.ResponseWriter, r *http.Request) {
+	req := new(WithdrawExcessLamportsRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// Every account this handler ever needs is read in one round trip.
+	// authority is always included, whether or not multisig_signers is
+	// empty, since fetching it once here is cheaper than a conditional
+	// second round trip for the multisig branch below.
+	lookups := []*types.PublicKey{
+		req.AccountKey(),
+		req.DestinationKey(),
+		req.FeePayerKey(),
+		req.AuthorityKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	accountInfo := accounts[req.AccountKey().Base58()]
+	if !accountInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s does not exist", req.AccountKey()))
+		return
+	}
+	if accountInfo.Owner != req.TokenProgramID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s is not owned by %s", req.AccountKey(), req.TokenProgramID()))
+		return
+	}
+
+	if !accounts[req.DestinationKey().Base58()].Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s does not exist", req.DestinationKey()))
+		return
+	}
+
+	// This only verifies that authority, if named, is itself a valid
+	// multisig satisfied by signers — a structural check independent of
+	// which role account's real type requires, which is not resolved here.
+	if signers := req.ToMultisigSigners(); len(signers) > 0 {
+		info := accounts[req.AuthorityKey().Base58()]
+		if !info.Exists() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("authority: %s does not exist", req.AuthorityKey()))
+			return
+		}
+		authorityOwner, err := types.NewPublicKeyFromBase58(info.Owner)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode authority owner: %s", err))
+			return
+		}
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode authority: %s", err))
+			return
+		}
+		if _, err := core.RequireMultisigAuthority(req.TokenProgramID(), authorityOwner, data, signers); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("authority: %s: %s", req.AuthorityKey(), err))
+			return
+		}
+	}
+
+	ix, err := tokenProgram.WithdrawExcessLamports(req.AccountKey(), req.DestinationKey(), req.AuthorityKey(), req.ToMultisigSigners())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := types.NewInstructions(ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d lamports does not cover the %d lamport fee", feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %s with %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	// The account's own rent-exemption minimum depends on its actual size,
+	// which may include Token-2022 extension bytes past the base layout —
+	// this reads exactly what is there rather than assuming core.MintSpace
+	// or core.TokenAccountSpace.
+	accountRentExempt, err := chain.Cli.MinimumBalanceForRentExemption(r.Context(), accountInfo.Space, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+	var estimatedRecovered uint64
+	if accountInfo.Lamports > accountRentExempt {
+		estimatedRecovered = accountInfo.Lamports - accountRentExempt
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewWithdrawExcessLamportsResponse(
+		tx, raw, messageBytes,
+		req.FeePayerKey(), req.AccountKey(), req.DestinationKey(), req.AuthorityKey(), req.TokenProgramID(), nonceAuthority,
+		estimatedRecovered, fee,
+	))
+}
+
 // CreateATA godoc
 // @Summary      Create the canonical token account for an owner and mint
 // @Description  Derives the associated token address and creates it. The address is not a request field: it follows from owner, mint, and program, so nothing generates a keypair for it and nothing has to remember it. The account itself does not sign, unlike a keypair token account, because a program derived address has no private key. Fails if the account already exists; use create-ata-idempotent when that is not known in advance. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.

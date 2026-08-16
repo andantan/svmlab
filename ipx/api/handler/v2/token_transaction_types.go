@@ -4584,6 +4584,201 @@ func NewCloseAccountResponse(
 	}
 }
 
+// WithdrawExcessLamportsRequest recovers whatever lamports a Token-owned
+// account holds beyond its own rent-exempt minimum.
+//
+// Unlike close-account, Account is never consumed: it stays exactly as it
+// was, still rent-exempt and still carrying whatever mint, token, or
+// multisig state it held. This is for the ordinary way an account ends up
+// overfunded — a plain System transfer landing on it by mistake, since
+// System's own Transfer takes any account regardless of who owns it — not
+// for anything close-account already covers.
+//
+// Authority is not resolved client-side. Which role the program actually
+// checks depends on what Account is (a mint's close authority extension, a
+// token account's close_authority.unwrap_or(owner), or a multisig's own
+// enrolled signers), and this endpoint has no Token-2022 extension parser to
+// settle that ahead of time, so a wrong Authority fails on chain rather than
+// as a 400. Unverified opcode: confirm this instruction exists on the
+// deployed program before relying on it.
+type WithdrawExcessLamportsRequest struct {
+	// Account is read for its excess, never closed or resized. It must
+	// already exist and be owned by Program; it may be a mint, a token
+	// account, or a multisig.
+	Account string `json:"account" example:""`
+
+	// Destination receives the recovered lamports. It must already exist;
+	// this is not a way to bring a new account into existence.
+	Destination string `json:"destination" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Authority is whichever role Account's actual type requires — see the
+	// type doc. It is not verified against Account here.
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account         *types.PublicKey
+	destination     *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *WithdrawExcessLamportsRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.destination, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Destination)); err != nil {
+		return errors.New("destination: " + err.Error())
+	}
+	if r.account.Equal(r.destination) {
+		return errors.New("account and destination are the same account")
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *WithdrawExcessLamportsRequest) AccountKey() *types.PublicKey     { return r.account }
+func (r *WithdrawExcessLamportsRequest) DestinationKey() *types.PublicKey { return r.destination }
+func (r *WithdrawExcessLamportsRequest) AuthorityKey() *types.PublicKey   { return r.authority }
+func (r *WithdrawExcessLamportsRequest) FeePayerKey() *types.PublicKey    { return r.feePayer }
+func (r *WithdrawExcessLamportsRequest) Blockhash() *types.Hash           { return r.rbh }
+func (r *WithdrawExcessLamportsRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *WithdrawExcessLamportsRequest) TokenProgramID() *types.PublicKey { return r.tokenProgramID }
+func (r *WithdrawExcessLamportsRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// WithdrawExcessLamportsResponse reports EstimatedRecovered, computed
+// client-side as Account's balance minus the rent-exemption minimum for its
+// actual size at read time — an estimate, not the value the program itself
+// will use, since that is computed fresh on chain at landing time and this
+// account's balance or size could change first.
+type WithdrawExcessLamportsResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account     string `json:"account"`
+	Destination string `json:"destination"`
+	Authority   string `json:"authority"`
+	Program     string `json:"program"`
+
+	EstimatedRecovered SystemPayer `json:"estimated_recovered"`
+	Fee                SystemPayer `json:"fee"`
+}
+
+func NewWithdrawExcessLamportsResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, destination, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	estimatedRecovered, fee uint64,
+) *WithdrawExcessLamportsResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &WithdrawExcessLamportsResponse{
+		Transaction:        codec.Base64.Encode(raw),
+		Message:            codec.Base64.Encode(message),
+		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:        keys,
+		Signers:            signers,
+		NonceAuthority:     nonceAuth,
+		Account:            account.Base58(),
+		Destination:        destination.Base58(),
+		Authority:          authority.Base58(),
+		Program:            tokenProgram.Base58(),
+		EstimatedRecovered: newSystemPayer(destination, estimatedRecovered),
+		Fee:                newSystemPayer(feePayer, fee),
+	}
+}
+
 // CreateATARequest creates the canonical associated token account (ATA) for
 // a wallet and mint.
 //

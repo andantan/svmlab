@@ -189,6 +189,7 @@ func run() error {
 			r.Post("/burn-checked", tk.BurnChecked)
 			r.Post("/burn-checked/max", tk.BurnCheckedMax)
 			r.Post("/close-account", tk.CloseAccount)
+			r.Post("/withdraw-excess-lamports", tk.WithdrawExcessLamports)
 			r.Post("/create-ata", tk.CreateATA)
 			r.Post("/create-ata-idempotent", tk.CreateATAIdempotent)
 			r.Post("/transfer-from-ata", tk.TransferFromATA)

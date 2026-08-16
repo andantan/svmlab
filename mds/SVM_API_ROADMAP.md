@@ -145,6 +145,33 @@ unverified extension-type ordinal here would risk the worse failure mode of
 wrongly rejecting a legitimate request, so this stays deferred rather than
 half-built.
 
+Getting `initialize-immutable-owner` working against a real Token-2022
+account surfaced two more real bugs. First, all five
+`initialize-mint`/`initialize-mint2`/`initialize-account`/
+`initialize-account2`/`initialize-account3` endpoints required their target
+to be *exactly* 82 or 165 bytes, silently rejecting every Token-2022 account
+with extension space appended past the base layout (a 170-byte
+immutable-owner account, for instance) — the check is now "at least" that
+many bytes, and the `DeserializeMint`/`DeserializeTokenAccount` calls that
+used to receive the whole account buffer now receive only the base slice, so
+extension bytes past it are never mistaken for base-layout fields. Second,
+`/svm/account/state`'s `initialized` field defaulted to `true` whenever an
+account couldn't be decoded as a mint, token account, or multisig, which is
+exactly what a Token-2022 account not yet past `initialize-account*` looks
+like; it now checks whether the account is owned by a token program, large
+enough to carry a type tag, and that tag itself reads `Uninitialized`, and
+reports `initialized: false` in that case instead of falling through to the
+default.
+
+`system/nonce/create-account` is cut down to `CreateAccount` only, matching
+create-mint/create-kta/create-multisig: it used to bundle `CreateAccount`
+and `InitializeNonceAccount` in one transaction specifically to close the
+same initialize-before-someone-else race those did, but closing that race
+isn't this low-level API's job — `nonce/initialize` already existed as the
+separate call to pair with it, so the `authority` field was dropped from
+`nonce/create-account` entirely rather than newly built. `system/seed/create-account`
+needed no equivalent change: it was already creation-only.
+
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion, account/authority |
@@ -990,18 +1017,21 @@ account/history
 
 Rough idea, not v2, not scheduled: a seed-based durable nonce account
 convenience endpoint — `seed/create-account` + `seed/allocate` (80 bytes) +
-`nonce/initialize` bundled into one call, the seed-derived counterpart to
-`nonce/create-account`. Advancing a nonce only ever checks the authority's
-signature, never the nonce account's own, so a seed-derived (keyless) address
-works as a durable nonce account today via that three-call chain — this
-would just be the one-shot convenience wrapper. Belongs in a later, more
-composed API generation (v4/v5-ish) rather than this low-level v2 pass.
+`nonce/initialize` bundled into one call. `nonce/create-account` itself is
+no longer a one-shot bundle to be a counterpart to — it was cut down to
+`CreateAccount` only, matching every other `create-*`/`initialize-*` pairing
+in this API — so this would be the first genuinely composed convenience
+endpoint of its kind rather than mirroring an existing one. Advancing a
+nonce only ever checks the authority's signature, never the nonce account's
+own, so a seed-derived (keyless) address works as a durable nonce account
+today via that three-call chain — this would just be the one-shot
+convenience wrapper. Belongs in a later, more composed API generation
+(v4/v5-ish) rather than this low-level v2 pass.
 
 ## Recommended expanded sequence
 
 ~~~text
-Token compatibility opcodes
--> wrapped SOL
+Token native SOL, wrapped SOL, and read-return-data
 -> PDA HTTP utilities
 -> transaction composer and Compute Budget
 -> Vault program

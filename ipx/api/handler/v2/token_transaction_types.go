@@ -1762,79 +1762,105 @@ func NewCreateATAIdempotentResponse(
 	}
 }
 
-// TransferToWalletRequest moves a balance between the associated token
-// accounts of two wallets for a mint, deriving both addresses rather than
-// taking either directly.
+// TransferFromATARequest moves a balance from Owner's associated token
+// account to an arbitrary token account, deriving only the source address
+// rather than taking it directly.
 //
-// Account and Destination are wallet addresses, not token accounts: that is
-// the entire reason this endpoint exists rather than being transfer-checked
-// with a flag. transfer-checked moves between exact token account addresses
-// a caller already knows, which is also the endpoint for a source that is
-// not an associated account, such as one made by create-account. This one
-// is the "wallet to wallet" convenience: neither side computes an
-// associated address first.
-type TransferToWalletRequest struct {
-	// Account is the sender's wallet. Its associated token account is
-	// derived rather than accepted directly, and unlike Destination it is
-	// never created: an account nobody has funded has nothing to send, so a
-	// missing source fails rather than being created empty.
-	Account     string `json:"account" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Mint        string `json:"mint" example:""`
-	Destination string `json:"destination" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+// This is transfer-checked's own sibling for exactly one side: Owner is a
+// wallet address, and its associated token account is derived from it and
+// Mint rather than accepted directly, the same way create-ata's is. It is
+// never created here, unlike an ATA-based destination elsewhere in this
+// package — an account nobody has funded has nothing to send, so a missing
+// source fails rather than being created empty. DestinationTokenAccount, by
+// contrast, is an exact token account address the caller already knows,
+// keypair or associated, exactly as transfer-checked takes it: this
+// endpoint only ever saves the caller deriving one side.
+type TransferFromATARequest struct {
+	// Owner is the sender's wallet. Its associated token account is derived
+	// from Owner and Mint rather than accepted directly, and is never
+	// created if absent.
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// Authority signs for the source account. It is usually Account itself,
-	// but kept as its own field because it need not be: a delegate approved
-	// for no more than its delegated amount may sign in Account's place, the
-	// same rule transfer-checked applies to any source.
-	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Amount    string `json:"amount" example:"250000"`
-	Decimals  uint8  `json:"decimals" example:"6"`
+	// Mint is what the derived source and DestinationTokenAccount must both
+	// hold, and is the source of the decimals checked against.
+	Mint string `json:"mint" example:""`
 
-	// RentPayer covers the rent-exemption deposit if destination's
-	// associated account does not exist yet, distinct from FeePayer in the
-	// same way create-ata's is: a caller funding somebody else's account
-	// need not also be covering the transaction fee.
-	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	// DestinationTokenAccount is credited. It must already exist, hold Mint,
+	// and not be frozen — an exact address, not a wallet to derive from.
+	DestinationTokenAccount string `json:"destination_token_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+
+	// SourceTokenAccountAuthority is the derived source account's owner, or
+	// its delegate for no more than what was delegated. A transfer spends a
+	// balance, so it is the holder's to authorize, not the mint's.
+	SourceTokenAccountAuthority string `json:"source_token_account_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Amount is the raw base-unit count to move, not a UI decimal string.
+	Amount string `json:"amount" example:"250000"`
+
+	// Decimals is checked against Mint's own stored value rather than
+	// trusted, which is the whole point of the checked variant: catching a
+	// client that formatted Amount against the wrong decimals as a 400
+	// instead of an on-chain failure.
+	Decimals uint8 `json:"decimals" example:"6"`
+
+	// FeePayer signs and pays the transaction fee. A transfer moves no
+	// lamports of its own, so this is the only balance this endpoint ever
+	// checks.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program is a seed of the derived source address, not only the program
+	// both token accounts belong to, so one owner has a different
+	// associated account for classic Token than for Token-2022 over the
+	// same mint.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	account         *types.PublicKey
-	mint            *types.PublicKey
-	destination     *types.PublicKey
-	authority       *types.PublicKey
-	rentPayer       *types.PublicKey
-	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
-	tokenProgramID  *types.PublicKey
-	multisigSigners []*types.PublicKey
-	amount          uint64
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	owner                       *types.PublicKey
+	mint                        *types.PublicKey
+	destinationTokenAccount     *types.PublicKey
+	sourceTokenAccountAuthority *types.PublicKey
+	feePayer                    *types.PublicKey
+	rbh                         *types.Hash
+	dna                         *types.PublicKey
+	tokenProgramID              *types.PublicKey
+	multisigSigners             []*types.PublicKey
+	amount                      uint64
 }
 
-func (r *TransferToWalletRequest) ValidateRequest() error {
+func (r *TransferFromATARequest) ValidateRequest() error {
 	var err error
-	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
-		return errors.New("account: " + err.Error())
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
 	}
 	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
 		return errors.New("mint: " + err.Error())
 	}
-	if r.destination, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Destination)); err != nil {
-		return errors.New("destination: " + err.Error())
+	if r.destinationTokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.DestinationTokenAccount)); err != nil {
+		return errors.New("destination_token_account: " + err.Error())
 	}
-	if r.account.Equal(r.destination) {
-		return errors.New("account and destination are the same wallet")
-	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
-	}
-	if r.rentPayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RentPayer)); err != nil {
-		return errors.New("rent_payer: " + err.Error())
+	if r.sourceTokenAccountAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.SourceTokenAccountAuthority)); err != nil {
+		return errors.New("source_token_account_authority: " + err.Error())
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -1858,9 +1884,17 @@ func (r *TransferToWalletRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -1878,58 +1912,54 @@ func (r *TransferToWalletRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *TransferToWalletRequest) AccountKey() *types.PublicKey {
-	return r.account
+func (r *TransferFromATARequest) OwnerKey() *types.PublicKey {
+	return r.owner
 }
 
-func (r *TransferToWalletRequest) MintKey() *types.PublicKey {
+func (r *TransferFromATARequest) MintKey() *types.PublicKey {
 	return r.mint
 }
 
-func (r *TransferToWalletRequest) DestinationKey() *types.PublicKey {
-	return r.destination
+func (r *TransferFromATARequest) DestinationTokenAccountKey() *types.PublicKey {
+	return r.destinationTokenAccount
 }
 
-func (r *TransferToWalletRequest) AuthorityKey() *types.PublicKey {
-	return r.authority
+func (r *TransferFromATARequest) SourceTokenAccountAuthorityKey() *types.PublicKey {
+	return r.sourceTokenAccountAuthority
 }
 
-func (r *TransferToWalletRequest) RentPayerKey() *types.PublicKey {
-	return r.rentPayer
-}
-
-func (r *TransferToWalletRequest) FeePayerKey() *types.PublicKey {
+func (r *TransferFromATARequest) FeePayerKey() *types.PublicKey {
 	return r.feePayer
 }
 
-func (r *TransferToWalletRequest) NonceAccountKey() *types.PublicKey {
-	return r.nonceAccount
+func (r *TransferFromATARequest) Blockhash() *types.Hash {
+	return r.rbh
 }
 
-func (r *TransferToWalletRequest) TokenProgramID() *types.PublicKey {
+func (r *TransferFromATARequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *TransferFromATARequest) TokenProgramID() *types.PublicKey {
 	return r.tokenProgramID
 }
 
-func (r *TransferToWalletRequest) ToAmount() uint64 {
+func (r *TransferFromATARequest) ToAmount() uint64 {
 	return r.amount
 }
 
-func (r *TransferToWalletRequest) ToDecimals() uint8 {
+func (r *TransferFromATARequest) ToDecimals() uint8 {
 	return r.Decimals
 }
 
-func (r *TransferToWalletRequest) ToMultisigSigners() []*types.PublicKey {
+func (r *TransferFromATARequest) ToMultisigSigners() []*types.PublicKey {
 	return r.multisigSigners
 }
 
-// TransferToWalletResponse reports both derived associated accounts, neither
-// of which the caller supplied, alongside what transfer-checked reports.
-//
-// Account and Destination echo the two wallet addresses the request named.
-// SourceAssociatedAccount and DestinationAssociatedAccount are the different
-// thing derived from each: the actual token accounts the transfer moves
-// between.
-type TransferToWalletResponse struct {
+// TransferFromATAResponse reports the derived source account, which the
+// caller never supplied and would otherwise have to derive to know,
+// alongside what transfer-checked reports.
+type TransferFromATAResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -1938,39 +1968,25 @@ type TransferToWalletResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Account                      string `json:"account"`
-	SourceAssociatedAccount      string `json:"source_associated_account"`
-	Mint                         string `json:"mint"`
-	Destination                  string `json:"destination"`
-	DestinationAssociatedAccount string `json:"destination_associated_account"`
-	Authority                    string `json:"authority"`
-	Program                      string `json:"program"`
-	Amount                       string `json:"amount"`
-	Decimals                     uint8  `json:"decimals"`
-
-	// CreatedATA records whether an idempotent create was prepended for the
-	// destination, since the same request against an already-funded
-	// destination does not need one. The source associated account is never
-	// created by this endpoint, so there is nothing equivalent to record for
-	// it.
-	CreatedATA bool   `json:"created_ata"`
-	RentExempt string `json:"rent_exempt,omitempty"`
-	Fee        string `json:"fee"`
+	SourceTokenAccount          string      `json:"source_token_account"`
+	Owner                       string      `json:"owner"`
+	Mint                        string      `json:"mint"`
+	DestinationTokenAccount     string      `json:"destination_token_account"`
+	SourceTokenAccountAuthority string      `json:"source_token_account_authority"`
+	Program                     string      `json:"program"`
+	Amount                      string      `json:"amount"`
+	Decimals                    uint8       `json:"decimals"`
+	Fee                         SystemPayer `json:"fee"`
 }
 
-func NewTransferToWalletResponse(
+func NewTransferFromATAResponse(
 	tx *types.Transaction, raw, message []byte,
-	account, sourceAssociatedAccount, mint, destination, destinationAssociatedAccount, authority, tokenProgram, nonceAuthority *types.PublicKey,
-	amount uint64, decimals uint8, createdATA bool, rentExempt, fee uint64,
-) *TransferToWalletResponse {
+	feePayer, sourceTokenAccount, owner, mint, destinationTokenAccount, sourceTokenAccountAuthority, tokenProgram, nonceAuthority *types.PublicKey,
+	amount uint64, decimals uint8, fee uint64,
+) *TransferFromATAResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
-	}
-
-	rent := ""
-	if createdATA {
-		rent = strconv.FormatUint(rentExempt, 10)
 	}
 
 	keys := make([]string, len(tx.Message.AccountKeys))
@@ -1983,65 +1999,107 @@ func NewTransferToWalletResponse(
 		signers[i] = k.Base58()
 	}
 
-	return &TransferToWalletResponse{
-		Transaction:                  codec.Base64.Encode(raw),
-		Message:                      codec.Base64.Encode(message),
-		RecentBlockhash:              tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:                  keys,
-		Signers:                      signers,
-		NonceAuthority:               nonceAuth,
-		Account:                      account.Base58(),
-		SourceAssociatedAccount:      sourceAssociatedAccount.Base58(),
-		Mint:                         mint.Base58(),
-		Destination:                  destination.Base58(),
-		DestinationAssociatedAccount: destinationAssociatedAccount.Base58(),
-		Authority:                    authority.Base58(),
-		Program:                      tokenProgram.Base58(),
-		Amount:                       strconv.FormatUint(amount, 10),
-		Decimals:                     decimals,
-		CreatedATA:                   createdATA,
-		RentExempt:                   rent,
-		Fee:                          strconv.FormatUint(fee, 10),
+	return &TransferFromATAResponse{
+		Transaction:                 codec.Base64.Encode(raw),
+		Message:                     codec.Base64.Encode(message),
+		RecentBlockhash:             tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                 keys,
+		Signers:                     signers,
+		NonceAuthority:              nonceAuth,
+		SourceTokenAccount:          sourceTokenAccount.Base58(),
+		Owner:                       owner.Base58(),
+		Mint:                        mint.Base58(),
+		DestinationTokenAccount:     destinationTokenAccount.Base58(),
+		SourceTokenAccountAuthority: sourceTokenAccountAuthority.Base58(),
+		Program:                     tokenProgram.Base58(),
+		Amount:                      strconv.FormatUint(amount, 10),
+		Decimals:                    decimals,
+		Fee:                         newSystemPayer(feePayer, fee),
 	}
 }
 
-// ApproveCheckedRequest names a delegation to grant over an account.
+// ApproveCheckedRequest names a delegation to grant over a token account.
 //
-// Account is the one existing token account whose balance the delegate may
-// move, matching burn-checked and close-account's naming rather than
+// TokenAccount is the one existing token account whose balance the delegate
+// may move, matching burn-checked and close-account's naming rather than
 // transfer-checked's source/destination pair, since approve has only the one
 // token account: delegate is a bare key, never itself a token account.
 type ApproveCheckedRequest struct {
-	Account   string `json:"account" example:""`
-	Mint      string `json:"mint" example:""`
-	Delegate  string `json:"delegate" example:""`
-	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Amount    string `json:"amount" example:"500000"`
-	Decimals  uint8  `json:"decimals" example:"6"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	// TokenAccount is debited if the delegation is ever spent. It must
+	// already exist and hold Mint.
+	TokenAccount string `json:"token_account" example:""`
+
+	// Mint is what TokenAccount must hold, and is the source of the decimals
+	// checked against.
+	Mint string `json:"mint" example:""`
+
+	// Delegate is who may spend up to Amount from TokenAccount going
+	// forward, replacing any prior delegation entirely rather than adding to
+	// it.
+	Delegate string `json:"delegate" example:""`
+
+	// TokenAccountOwner must be TokenAccount's owner, never an existing
+	// delegate: re-delegating would let a delegate hand its own spending
+	// rights to a third party the owner never chose.
+	TokenAccountOwner string `json:"token_account_owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Amount is the raw base-unit count Delegate may spend, not a UI decimal
+	// string.
+	Amount string `json:"amount" example:"500000"`
+
+	// Decimals is checked against Mint's own stored value rather than
+	// trusted, which is the whole point of the checked variant: catching a
+	// client that formatted Amount against the wrong decimals as a 400
+	// instead of an on-chain failure.
+	Decimals uint8 `json:"decimals" example:"6"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a token
+	// account belongs to exactly one of the two forever, and it must agree
+	// with the mint's own owning program or the instruction fails on chain.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	account         *types.PublicKey
-	mint            *types.PublicKey
-	delegate        *types.PublicKey
-	authority       *types.PublicKey
-	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
-	tokenProgramID  *types.PublicKey
-	multisigSigners []*types.PublicKey
-	amount          uint64
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount      *types.PublicKey
+	mint              *types.PublicKey
+	delegate          *types.PublicKey
+	tokenAccountOwner *types.PublicKey
+	feePayer          *types.PublicKey
+	rbh               *types.Hash
+	dna               *types.PublicKey
+	tokenProgramID    *types.PublicKey
+	multisigSigners   []*types.PublicKey
+	amount            uint64
 }
 
 func (r *ApproveCheckedRequest) ValidateRequest() error {
 	var err error
-	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
-		return errors.New("account: " + err.Error())
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
 	}
 	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
 		return errors.New("mint: " + err.Error())
@@ -2049,11 +2107,11 @@ func (r *ApproveCheckedRequest) ValidateRequest() error {
 	if r.delegate, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Delegate)); err != nil {
 		return errors.New("delegate: " + err.Error())
 	}
-	if r.account.Equal(r.delegate) {
-		return errors.New("account and delegate are the same account")
+	if r.tokenAccount.Equal(r.delegate) {
+		return errors.New("token_account and delegate are the same account")
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.tokenAccountOwner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccountOwner)); err != nil {
+		return errors.New("token_account_owner: " + err.Error())
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -2077,9 +2135,17 @@ func (r *ApproveCheckedRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -2097,12 +2163,15 @@ func (r *ApproveCheckedRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *ApproveCheckedRequest) AccountKey() *types.PublicKey          { return r.account }
-func (r *ApproveCheckedRequest) MintKey() *types.PublicKey             { return r.mint }
-func (r *ApproveCheckedRequest) DelegateKey() *types.PublicKey         { return r.delegate }
-func (r *ApproveCheckedRequest) AuthorityKey() *types.PublicKey        { return r.authority }
-func (r *ApproveCheckedRequest) FeePayerKey() *types.PublicKey         { return r.feePayer }
-func (r *ApproveCheckedRequest) NonceAccountKey() *types.PublicKey     { return r.nonceAccount }
+func (r *ApproveCheckedRequest) TokenAccountKey() *types.PublicKey      { return r.tokenAccount }
+func (r *ApproveCheckedRequest) MintKey() *types.PublicKey              { return r.mint }
+func (r *ApproveCheckedRequest) DelegateKey() *types.PublicKey          { return r.delegate }
+func (r *ApproveCheckedRequest) TokenAccountOwnerKey() *types.PublicKey { return r.tokenAccountOwner }
+func (r *ApproveCheckedRequest) FeePayerKey() *types.PublicKey          { return r.feePayer }
+func (r *ApproveCheckedRequest) Blockhash() *types.Hash                 { return r.rbh }
+func (r *ApproveCheckedRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
 func (r *ApproveCheckedRequest) TokenProgramID() *types.PublicKey      { return r.tokenProgramID }
 func (r *ApproveCheckedRequest) ToMultisigSigners() []*types.PublicKey { return r.multisigSigners }
 func (r *ApproveCheckedRequest) ToAmount() uint64                      { return r.amount }
@@ -2118,19 +2187,19 @@ type ApproveCheckedResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Account   string `json:"account"`
-	Mint      string `json:"mint"`
-	Delegate  string `json:"delegate"`
-	Authority string `json:"authority"`
-	Program   string `json:"program"`
-	Amount    string `json:"amount"`
-	Decimals  uint8  `json:"decimals"`
-	Fee       string `json:"fee"`
+	TokenAccount      string      `json:"token_account"`
+	Mint              string      `json:"mint"`
+	Delegate          string      `json:"delegate"`
+	TokenAccountOwner string      `json:"token_account_owner"`
+	Program           string      `json:"program"`
+	Amount            string      `json:"amount"`
+	Decimals          uint8       `json:"decimals"`
+	Fee               SystemPayer `json:"fee"`
 }
 
 func NewApproveCheckedResponse(
 	tx *types.Transaction, raw, message []byte,
-	account, mint, delegate, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	feePayer, tokenAccount, mint, delegate, tokenAccountOwner, tokenProgram, nonceAuthority *types.PublicKey,
 	amount uint64, decimals uint8, fee uint64,
 ) *ApproveCheckedResponse {
 	nonceAuth := ""
@@ -2149,20 +2218,20 @@ func NewApproveCheckedResponse(
 	}
 
 	return &ApproveCheckedResponse{
-		Transaction:     codec.Base64.Encode(raw),
-		Message:         codec.Base64.Encode(message),
-		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:     keys,
-		Signers:         signers,
-		NonceAuthority:  nonceAuth,
-		Account:         account.Base58(),
-		Mint:            mint.Base58(),
-		Delegate:        delegate.Base58(),
-		Authority:       authority.Base58(),
-		Program:         tokenProgram.Base58(),
-		Amount:          strconv.FormatUint(amount, 10),
-		Decimals:        decimals,
-		Fee:             strconv.FormatUint(fee, 10),
+		Transaction:       codec.Base64.Encode(raw),
+		Message:           codec.Base64.Encode(message),
+		RecentBlockhash:   tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:       keys,
+		Signers:           signers,
+		NonceAuthority:    nonceAuth,
+		TokenAccount:      tokenAccount.Base58(),
+		Mint:              mint.Base58(),
+		Delegate:          delegate.Base58(),
+		TokenAccountOwner: tokenAccountOwner.Base58(),
+		Program:           tokenProgram.Base58(),
+		Amount:            strconv.FormatUint(amount, 10),
+		Decimals:          decimals,
+		Fee:               newSystemPayer(feePayer, fee),
 	}
 }
 
@@ -2173,32 +2242,63 @@ func NewApproveCheckedResponse(
 // wrong; there is also no mint, since revoking touches no balance and needs
 // nothing decoded from it.
 type RevokeRequest struct {
-	Account   string `json:"account" example:""`
-	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	// TokenAccount has its delegate and delegated amount cleared, whatever
+	// they currently are.
+	TokenAccount string `json:"token_account" example:""`
+
+	// TokenAccountOwner must be TokenAccount's owner, matching
+	// approve-checked's rule that only the owner may grant one: a delegate
+	// holds no authority over the delegation itself, only over what it was
+	// allowed to spend.
+	TokenAccountOwner string `json:"token_account_owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a token
+	// account belongs to exactly one of the two forever, and it must agree
+	// with the mint's own owning program or the instruction fails on chain.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	account         *types.PublicKey
-	authority       *types.PublicKey
-	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
-	tokenProgramID  *types.PublicKey
-	multisigSigners []*types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount      *types.PublicKey
+	tokenAccountOwner *types.PublicKey
+	feePayer          *types.PublicKey
+	rbh               *types.Hash
+	dna               *types.PublicKey
+	tokenProgramID    *types.PublicKey
+	multisigSigners   []*types.PublicKey
 }
 
 func (r *RevokeRequest) ValidateRequest() error {
 	var err error
-	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
-		return errors.New("account: " + err.Error())
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.tokenAccountOwner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccountOwner)); err != nil {
+		return errors.New("token_account_owner: " + err.Error())
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -2211,9 +2311,17 @@ func (r *RevokeRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -2231,10 +2339,13 @@ func (r *RevokeRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *RevokeRequest) AccountKey() *types.PublicKey          { return r.account }
-func (r *RevokeRequest) AuthorityKey() *types.PublicKey        { return r.authority }
-func (r *RevokeRequest) FeePayerKey() *types.PublicKey         { return r.feePayer }
-func (r *RevokeRequest) NonceAccountKey() *types.PublicKey     { return r.nonceAccount }
+func (r *RevokeRequest) TokenAccountKey() *types.PublicKey      { return r.tokenAccount }
+func (r *RevokeRequest) TokenAccountOwnerKey() *types.PublicKey { return r.tokenAccountOwner }
+func (r *RevokeRequest) FeePayerKey() *types.PublicKey          { return r.feePayer }
+func (r *RevokeRequest) Blockhash() *types.Hash                 { return r.rbh }
+func (r *RevokeRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
 func (r *RevokeRequest) TokenProgramID() *types.PublicKey      { return r.tokenProgramID }
 func (r *RevokeRequest) ToMultisigSigners() []*types.PublicKey { return r.multisigSigners }
 
@@ -2248,15 +2359,15 @@ type RevokeResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Account   string `json:"account"`
-	Authority string `json:"authority"`
-	Program   string `json:"program"`
-	Fee       string `json:"fee"`
+	TokenAccount      string      `json:"token_account"`
+	TokenAccountOwner string      `json:"token_account_owner"`
+	Program           string      `json:"program"`
+	Fee               SystemPayer `json:"fee"`
 }
 
 func NewRevokeResponse(
 	tx *types.Transaction, raw, message []byte,
-	account, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	feePayer, tokenAccount, tokenAccountOwner, tokenProgram, nonceAuthority *types.PublicKey,
 	fee uint64,
 ) *RevokeResponse {
 	nonceAuth := ""
@@ -2275,16 +2386,16 @@ func NewRevokeResponse(
 	}
 
 	return &RevokeResponse{
-		Transaction:     codec.Base64.Encode(raw),
-		Message:         codec.Base64.Encode(message),
-		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:     keys,
-		Signers:         signers,
-		NonceAuthority:  nonceAuth,
-		Account:         account.Base58(),
-		Authority:       authority.Base58(),
-		Program:         tokenProgram.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Transaction:       codec.Base64.Encode(raw),
+		Message:           codec.Base64.Encode(message),
+		RecentBlockhash:   tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:       keys,
+		Signers:           signers,
+		NonceAuthority:    nonceAuth,
+		TokenAccount:      tokenAccount.Base58(),
+		TokenAccountOwner: tokenAccountOwner.Base58(),
+		Program:           tokenProgram.Base58(),
+		Fee:               newSystemPayer(feePayer, fee),
 	}
 }
 

@@ -173,7 +173,7 @@ func run() error {
 			r.Post("/close-account", tk.CloseAccount)
 			r.Post("/create-ata", tk.CreateATA)
 			r.Post("/create-ata-idempotent", tk.CreateATAIdempotent)
-			r.Post("/transfer-to-wallet", tk.TransferToWallet)
+			r.Post("/transfer-from-ata", tk.TransferFromATA)
 			r.Post("/approve-checked", tk.ApproveChecked)
 			r.Post("/revoke", tk.Revoke)
 			r.Post("/set-authority/mint/replace", tk.SetMintAuthorityReplace)

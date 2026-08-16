@@ -3059,7 +3059,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/approve-checked": {
             "post": {
-                "description": "Authorizes delegate to move up to amount from account, on the account owner's behalf. A second approve replaces the delegation entirely rather than adding to it, since the program stores one delegate and one amount, not a list; the owner may still move the whole balance regardless of what a delegate holds. Only the account's owner may approve, never an existing delegate, so re-delegating is not possible through this endpoint. decimals is checked against the mint the same way every other checked endpoint checks it.",
+                "description": "Authorizes delegate to move up to amount from token_account, on token_account_owner's behalf. A second approve replaces the delegation entirely rather than adding to it, since the program stores one delegate and one amount, not a list; the owner may still move the whole balance regardless of what a delegate holds. Only token_account's owner may approve, never an existing delegate, so re-delegating is not possible through this endpoint. decimals is checked against the mint the same way every other checked endpoint checks it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3572,7 +3572,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/revoke": {
             "post": {
-                "description": "Revokes an account's delegate and delegated amount, whatever they are, without naming either: the program clears what is stored, so there is nothing to get wrong by naming it. An account with no delegate revokes cleanly too. Only the account's owner may revoke, matching approve-checked's rule that only the owner may grant one.",
+                "description": "Revokes token_account's delegate and delegated amount, whatever they are, without naming either: the program clears what is stored, so there is nothing to get wrong by naming it. A token_account with no delegate revokes cleanly too. Only token_account_owner may revoke, matching approve-checked's rule that only the owner may grant one. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4140,9 +4140,9 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/token/transfer-to-wallet": {
+        "/svm/v2/transaction/token/transfer-from-ata": {
             "post": {
-                "description": "Derives both sides' associated token accounts from account and destination and transfers between them, prepending an idempotent create for the destination when it does not exist yet. Both fields are wallet addresses, not token accounts, which is the whole reason this endpoint exists rather than being transfer-checked with a flag: neither side computes an associated address first. The source's associated account is never created, since an account nobody has funded has nothing to send. decimals is checked against the mint rather than filled in from it, catching a client that formatted amount against the wrong decimals as a 400 instead of an on-chain failure. authority must be account's associated account owner, or its delegate for no more than the delegated amount.",
+                "description": "Derives the source's associated token account from owner and mint; destination_token_account is an exact address, keypair or associated, exactly as transfer-checked takes it. The source is never created here: an account nobody has funded has nothing to send, so a missing one fails rather than being created empty. decimals is checked against the mint rather than filled in from it, catching a client that formatted amount against the wrong decimals as a 400 instead of an on-chain failure. source_token_account_authority must be the derived source's owner, or its delegate for no more than the delegated amount. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4152,7 +4152,7 @@ const docTemplate = `{
                 "tags": [
                     "v2-transaction-token-ata"
                 ],
-                "summary": "Move a balance between the associated token accounts of two wallets",
+                "summary": "Move a balance from an owner's associated token account to any token account",
                 "parameters": [
                     {
                         "type": "string",
@@ -4174,7 +4174,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.TransferToWalletRequest"
+                            "$ref": "#/definitions/v2.TransferFromATARequest"
                         }
                     }
                 ],
@@ -4182,7 +4182,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.TransferToWalletResponse"
+                            "$ref": "#/definitions/v2.TransferFromATAResponse"
                         }
                     },
                     "400": {
@@ -5199,31 +5199,33 @@ const docTemplate = `{
         "v2.ApproveCheckedRequest": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string",
-                    "example": ""
-                },
                 "amount": {
+                    "description": "Amount is the raw base-unit count Delegate may spend, not a UI decimal\nstring.",
                     "type": "string",
                     "example": "500000"
                 },
-                "authority": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "decimals": {
+                    "description": "Decimals is checked against Mint's own stored value rather than\ntrusted, which is the whole point of the checked variant: catching a\nclient that formatted Amount against the wrong decimals as a 400\ninstead of an on-chain failure.",
                     "type": "integer",
                     "example": 6
                 },
                 "delegate": {
+                    "description": "Delegate is who may spend up to Amount from TokenAccount going\nforward, replacing any prior delegation entirely rather than adding to\nit.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
+                    "description": "Mint is what TokenAccount must hold, and is the source of the decimals\nchecked against.",
                     "type": "string",
                     "example": ""
                 },
@@ -5234,22 +5236,31 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "nonce_account": {
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever, and it must agree\nwith the mint's own owning program or the instruction fails on chain.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
                     "example": ""
                 },
-                "program": {
+                "token_account": {
+                    "description": "TokenAccount is debited if the delegation is ever spent. It must\nalready exist and hold Mint.",
                     "type": "string",
-                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    "example": ""
+                },
+                "token_account_owner": {
+                    "description": "TokenAccountOwner must be TokenAccount's owner, never an existing\ndelegate: re-delegating would let a delegate hand its own spending\nrights to a third party the owner never chose.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
         "v2.ApproveCheckedResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
@@ -5259,9 +5270,6 @@ const docTemplate = `{
                 "amount": {
                     "type": "string"
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "decimals": {
                     "type": "integer"
                 },
@@ -5269,7 +5277,7 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -5291,6 +5299,12 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "token_account": {
+                    "type": "string"
+                },
+                "token_account_owner": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -6086,15 +6100,13 @@ const docTemplate = `{
         "v2.RevokeRequest": {
             "type": "object",
             "properties": {
-                "account": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
-                "authority": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -6105,33 +6117,39 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "nonce_account": {
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever, and it must agree\nwith the mint's own owning program or the instruction fails on chain.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
                     "example": ""
                 },
-                "program": {
+                "token_account": {
+                    "description": "TokenAccount has its delegate and delegated amount cleared, whatever\nthey currently are.",
                     "type": "string",
-                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    "example": ""
+                },
+                "token_account_owner": {
+                    "description": "TokenAccountOwner must be TokenAccount's owner, matching\napprove-checked's rule that only the owner may grant one: a delegate\nholds no authority over the delegation itself, only over what it was\nallowed to spend.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
         "v2.RevokeResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -6150,6 +6168,12 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "token_account": {
+                    "type": "string"
+                },
+                "token_account_owner": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -8428,36 +8452,36 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.TransferToWalletRequest": {
+        "v2.TransferFromATARequest": {
             "type": "object",
             "properties": {
-                "account": {
-                    "description": "Account is the sender's wallet. Its associated token account is\nderived rather than accepted directly, and unlike Destination it is\nnever created: an account nobody has funded has nothing to send, so a\nmissing source fails rather than being created empty.",
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "amount": {
+                    "description": "Amount is the raw base-unit count to move, not a UI decimal string.",
                     "type": "string",
                     "example": "250000"
                 },
-                "authority": {
-                    "description": "Authority signs for the source account. It is usually Account itself,\nbut kept as its own field because it need not be: a delegate approved\nfor no more than its delegated amount may sign in Account's place, the\nsame rule transfer-checked applies to any source.",
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "decimals": {
+                    "description": "Decimals is checked against Mint's own stored value rather than\ntrusted, which is the whole point of the checked variant: catching a\nclient that formatted Amount against the wrong decimals as a 400\ninstead of an on-chain failure.",
                     "type": "integer",
                     "example": 6
                 },
-                "destination": {
+                "destination_token_account": {
+                    "description": "DestinationTokenAccount is credited. It must already exist, hold Mint,\nand not be frozen — an exact address, not a wallet to derive from.",
                     "type": "string",
                     "example": "Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"
                 },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. A transfer moves no\nlamports of its own, so this is the only balance this endpoint ever\nchecks.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
+                    "description": "Mint is what the derived source and DestinationTokenAccount must both\nhold, and is the source of the decimals checked against.",
                     "type": "string",
                     "example": ""
                 },
@@ -8468,27 +8492,31 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "nonce_account": {
+                "owner": {
+                    "description": "Owner is the sender's wallet. Its associated token account is derived\nfrom Owner and Mint rather than accepted directly, and is never\ncreated if absent.",
                     "type": "string",
-                    "example": ""
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "program": {
+                    "description": "Program is a seed of the derived source address, not only the program\nboth token accounts belong to, so one owner has a different\nassociated account for classic Token than for Token-2022 over the\nsame mint.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
                 },
-                "rent_payer": {
-                    "description": "RentPayer covers the rent-exemption deposit if destination's\nassociated account does not exist yet, distinct from FeePayer in the\nsame way create-ata's is: a caller funding somebody else's account\nneed not also be covering the transaction fee.",
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_token_account_authority": {
+                    "description": "SourceTokenAccountAuthority is the derived source account's owner, or\nits delegate for no more than what was delegated. A transfer spends a\nbalance, so it is the holder's to authorize, not the mint's.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
-        "v2.TransferToWalletResponse": {
+        "v2.TransferFromATAResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
@@ -8498,24 +8526,14 @@ const docTemplate = `{
                 "amount": {
                     "type": "string"
                 },
-                "authority": {
-                    "type": "string"
-                },
-                "created_ata": {
-                    "description": "CreatedATA records whether an idempotent create was prepended for the\ndestination, since the same request against an already-funded\ndestination does not need one. The source associated account is never\ncreated by this endpoint, so there is nothing equivalent to record for\nit.",
-                    "type": "boolean"
-                },
                 "decimals": {
                     "type": "integer"
                 },
-                "destination": {
-                    "type": "string"
-                },
-                "destination_associated_account": {
+                "destination_token_account": {
                     "type": "string"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -8526,13 +8544,13 @@ const docTemplate = `{
                 "nonce_authority": {
                     "type": "string"
                 },
+                "owner": {
+                    "type": "string"
+                },
                 "program": {
                     "type": "string"
                 },
                 "recent_blockhash": {
-                    "type": "string"
-                },
-                "rent_exempt": {
                     "type": "string"
                 },
                 "signers": {
@@ -8541,7 +8559,10 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "source_associated_account": {
+                "source_token_account": {
+                    "type": "string"
+                },
+                "source_token_account_authority": {
                     "type": "string"
                 },
                 "transaction": {

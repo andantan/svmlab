@@ -3049,27 +3049,56 @@ func NewRevokeResponse(
 	}
 }
 
-// SetMintAuthorityReplaceRequest SetMintAuthorityReplace replaces a mint's mint authority with a new key.
+// SetMintAuthorityReplaceRequest replaces a mint's mint authority with a new key.
 type SetMintAuthorityReplaceRequest struct {
-	Mint         string `json:"mint" example:""`
-	Authority    string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	NewAuthority string `json:"new_authority" example:""`
-	FeePayer     string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program      string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	Mint string `json:"mint" example:""`
+
+	// MintAuthority must be Mint's current mint authority exactly.
+	MintAuthority string `json:"mint_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// NewMintAuthority replaces MintAuthority entirely; it is not required to
+	// sign, since InitializeMint2-style authority changes only record the
+	// new value rather than checking it against a signer.
+	NewMintAuthority string `json:"new_mint_authority" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a mint
+	// belongs to exactly one of the two forever.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	mint            *types.PublicKey
-	authority       *types.PublicKey
-	newAuthority    *types.PublicKey
-	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
-	tokenProgramID  *types.PublicKey
-	multisigSigners []*types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint             *types.PublicKey
+	mintAuthority    *types.PublicKey
+	newMintAuthority *types.PublicKey
+	feePayer         *types.PublicKey
+	rbh              *types.Hash
+	dna              *types.PublicKey
+	tokenProgramID   *types.PublicKey
+	multisigSigners  []*types.PublicKey
 }
 
 func (r *SetMintAuthorityReplaceRequest) ValidateRequest() error {
@@ -3077,18 +3106,18 @@ func (r *SetMintAuthorityReplaceRequest) ValidateRequest() error {
 	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
 		return errors.New("mint: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.mintAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.MintAuthority)); err != nil {
+		return errors.New("mint_authority: " + err.Error())
 	}
-	newAuthority := strings.TrimSpace(r.NewAuthority)
-	if newAuthority == "" {
-		return errors.New("new_authority is required")
+	newMintAuthority := strings.TrimSpace(r.NewMintAuthority)
+	if newMintAuthority == "" {
+		return errors.New("new_mint_authority is required")
 	}
-	if r.newAuthority, err = types.NewPublicKeyFromBase58(newAuthority); err != nil {
-		return errors.New("new_authority: " + err.Error())
+	if r.newMintAuthority, err = types.NewPublicKeyFromBase58(newMintAuthority); err != nil {
+		return errors.New("new_mint_authority: " + err.Error())
 	}
-	if r.authority.Equal(r.newAuthority) {
-		return errors.New("new_authority: is already the current authority")
+	if r.mintAuthority.Equal(r.newMintAuthority) {
+		return errors.New("new_mint_authority: is already the current mint authority")
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -3101,9 +3130,17 @@ func (r *SetMintAuthorityReplaceRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -3121,12 +3158,17 @@ func (r *SetMintAuthorityReplaceRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *SetMintAuthorityReplaceRequest) MintKey() *types.PublicKey         { return r.mint }
-func (r *SetMintAuthorityReplaceRequest) AuthorityKey() *types.PublicKey    { return r.authority }
-func (r *SetMintAuthorityReplaceRequest) NewAuthorityKey() *types.PublicKey { return r.newAuthority }
-func (r *SetMintAuthorityReplaceRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
-func (r *SetMintAuthorityReplaceRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
-func (r *SetMintAuthorityReplaceRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetMintAuthorityReplaceRequest) MintKey() *types.PublicKey          { return r.mint }
+func (r *SetMintAuthorityReplaceRequest) MintAuthorityKey() *types.PublicKey { return r.mintAuthority }
+func (r *SetMintAuthorityReplaceRequest) NewMintAuthorityKey() *types.PublicKey {
+	return r.newMintAuthority
+}
+func (r *SetMintAuthorityReplaceRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *SetMintAuthorityReplaceRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *SetMintAuthorityReplaceRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *SetMintAuthorityReplaceRequest) TokenProgramID() *types.PublicKey { return r.tokenProgramID }
 func (r *SetMintAuthorityReplaceRequest) ToMultisigSigners() []*types.PublicKey {
 	return r.multisigSigners
 }
@@ -3141,16 +3183,16 @@ type SetMintAuthorityReplaceResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Mint         string `json:"mint"`
-	Authority    string `json:"authority"`
-	NewAuthority string `json:"new_authority"`
-	Program      string `json:"program"`
-	Fee          string `json:"fee"`
+	Mint             string      `json:"mint"`
+	MintAuthority    string      `json:"mint_authority"`
+	NewMintAuthority string      `json:"new_mint_authority"`
+	Program          string      `json:"program"`
+	Fee              SystemPayer `json:"fee"`
 }
 
 func NewSetMintAuthorityReplaceResponse(
 	tx *types.Transaction, raw, message []byte,
-	mint, authority, tokenProgram, nonceAuthority *types.PublicKey, newAuthority *types.PublicKey,
+	feePayer, mint, mintAuthority, tokenProgram, nonceAuthority, newMintAuthority *types.PublicKey,
 	fee uint64,
 ) *SetMintAuthorityReplaceResponse {
 	nonceAuth := ""
@@ -3169,41 +3211,66 @@ func NewSetMintAuthorityReplaceResponse(
 	}
 
 	return &SetMintAuthorityReplaceResponse{
-		Transaction:     codec.Base64.Encode(raw),
-		Message:         codec.Base64.Encode(message),
-		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:     keys,
-		Signers:         signers,
-		NonceAuthority:  nonceAuth,
-		Mint:            mint.Base58(),
-		Authority:       authority.Base58(),
-		NewAuthority:    newAuthority.Base58(),
-		Program:         tokenProgram.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Transaction:      codec.Base64.Encode(raw),
+		Message:          codec.Base64.Encode(message),
+		RecentBlockhash:  tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:      keys,
+		Signers:          signers,
+		NonceAuthority:   nonceAuth,
+		Mint:             mint.Base58(),
+		MintAuthority:    mintAuthority.Base58(),
+		NewMintAuthority: newMintAuthority.Base58(),
+		Program:          tokenProgram.Base58(),
+		Fee:              newSystemPayer(feePayer, fee),
 	}
 }
 
-// SetMintAuthorityClearRequest SetMintAuthorityClear removes a mint's mint authority permanently.
+// SetMintAuthorityClearRequest removes a mint's mint authority permanently.
 //
 // Once cleared, no endpoint can set it again: the program stores this as a
 // COption and rejects nothing here, but nothing can ever sign as an authority
 // that is now None. This is how a supply is capped forever.
 type SetMintAuthorityClearRequest struct {
-	Mint      string `json:"mint" example:""`
-	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	Mint string `json:"mint" example:""`
+
+	// MintAuthority must be Mint's current mint authority exactly.
+	MintAuthority string `json:"mint_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a mint
+	// belongs to exactly one of the two forever.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
 	mint            *types.PublicKey
-	authority       *types.PublicKey
+	mintAuthority   *types.PublicKey
 	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
 	tokenProgramID  *types.PublicKey
 	multisigSigners []*types.PublicKey
 }
@@ -3213,8 +3280,8 @@ func (r *SetMintAuthorityClearRequest) ValidateRequest() error {
 	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
 		return errors.New("mint: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.mintAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.MintAuthority)); err != nil {
+		return errors.New("mint_authority: " + err.Error())
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -3227,9 +3294,17 @@ func (r *SetMintAuthorityClearRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -3247,11 +3322,14 @@ func (r *SetMintAuthorityClearRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *SetMintAuthorityClearRequest) MintKey() *types.PublicKey         { return r.mint }
-func (r *SetMintAuthorityClearRequest) AuthorityKey() *types.PublicKey    { return r.authority }
-func (r *SetMintAuthorityClearRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
-func (r *SetMintAuthorityClearRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
-func (r *SetMintAuthorityClearRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetMintAuthorityClearRequest) MintKey() *types.PublicKey          { return r.mint }
+func (r *SetMintAuthorityClearRequest) MintAuthorityKey() *types.PublicKey { return r.mintAuthority }
+func (r *SetMintAuthorityClearRequest) FeePayerKey() *types.PublicKey      { return r.feePayer }
+func (r *SetMintAuthorityClearRequest) Blockhash() *types.Hash             { return r.rbh }
+func (r *SetMintAuthorityClearRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *SetMintAuthorityClearRequest) TokenProgramID() *types.PublicKey { return r.tokenProgramID }
 func (r *SetMintAuthorityClearRequest) ToMultisigSigners() []*types.PublicKey {
 	return r.multisigSigners
 }
@@ -3266,16 +3344,16 @@ type SetMintAuthorityClearResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Mint      string `json:"mint"`
-	Authority string `json:"authority"`
-	Cleared   bool   `json:"cleared"`
-	Program   string `json:"program"`
-	Fee       string `json:"fee"`
+	Mint          string      `json:"mint"`
+	MintAuthority string      `json:"mint_authority"`
+	Cleared       bool        `json:"cleared"`
+	Program       string      `json:"program"`
+	Fee           SystemPayer `json:"fee"`
 }
 
 func NewSetMintAuthorityClearResponse(
 	tx *types.Transaction, raw, message []byte,
-	mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	feePayer, mint, mintAuthority, tokenProgram, nonceAuthority *types.PublicKey,
 	fee uint64,
 ) *SetMintAuthorityClearResponse {
 	nonceAuth := ""
@@ -3301,34 +3379,61 @@ func NewSetMintAuthorityClearResponse(
 		Signers:         signers,
 		NonceAuthority:  nonceAuth,
 		Mint:            mint.Base58(),
-		Authority:       authority.Base58(),
+		MintAuthority:   mintAuthority.Base58(),
 		Cleared:         true,
 		Program:         tokenProgram.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
-// SetFreezeAuthorityReplaceRequest SetFreezeAuthorityReplace replaces a mint's freeze authority with a new key.
+// SetFreezeAuthorityReplaceRequest replaces a mint's freeze authority with a new key.
 type SetFreezeAuthorityReplaceRequest struct {
-	Mint         string `json:"mint" example:""`
-	Authority    string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	NewAuthority string `json:"new_authority" example:""`
-	FeePayer     string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program      string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	Mint string `json:"mint" example:""`
+
+	// FreezeAuthority must be Mint's current freeze authority exactly.
+	FreezeAuthority string `json:"freeze_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// NewFreezeAuthority replaces FreezeAuthority entirely.
+	NewFreezeAuthority string `json:"new_freeze_authority" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a mint
+	// belongs to exactly one of the two forever.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	mint            *types.PublicKey
-	authority       *types.PublicKey
-	newAuthority    *types.PublicKey
-	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
-	tokenProgramID  *types.PublicKey
-	multisigSigners []*types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint               *types.PublicKey
+	freezeAuthority    *types.PublicKey
+	newFreezeAuthority *types.PublicKey
+	feePayer           *types.PublicKey
+	rbh                *types.Hash
+	dna                *types.PublicKey
+	tokenProgramID     *types.PublicKey
+	multisigSigners    []*types.PublicKey
 }
 
 func (r *SetFreezeAuthorityReplaceRequest) ValidateRequest() error {
@@ -3336,18 +3441,18 @@ func (r *SetFreezeAuthorityReplaceRequest) ValidateRequest() error {
 	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
 		return errors.New("mint: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.freezeAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FreezeAuthority)); err != nil {
+		return errors.New("freeze_authority: " + err.Error())
 	}
-	newAuthority := strings.TrimSpace(r.NewAuthority)
-	if newAuthority == "" {
-		return errors.New("new_authority is required")
+	newFreezeAuthority := strings.TrimSpace(r.NewFreezeAuthority)
+	if newFreezeAuthority == "" {
+		return errors.New("new_freeze_authority is required")
 	}
-	if r.newAuthority, err = types.NewPublicKeyFromBase58(newAuthority); err != nil {
-		return errors.New("new_authority: " + err.Error())
+	if r.newFreezeAuthority, err = types.NewPublicKeyFromBase58(newFreezeAuthority); err != nil {
+		return errors.New("new_freeze_authority: " + err.Error())
 	}
-	if r.authority.Equal(r.newAuthority) {
-		return errors.New("new_authority: is already the current authority")
+	if r.freezeAuthority.Equal(r.newFreezeAuthority) {
+		return errors.New("new_freeze_authority: is already the current freeze authority")
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -3360,9 +3465,17 @@ func (r *SetFreezeAuthorityReplaceRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -3380,12 +3493,19 @@ func (r *SetFreezeAuthorityReplaceRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *SetFreezeAuthorityReplaceRequest) MintKey() *types.PublicKey         { return r.mint }
-func (r *SetFreezeAuthorityReplaceRequest) AuthorityKey() *types.PublicKey    { return r.authority }
-func (r *SetFreezeAuthorityReplaceRequest) NewAuthorityKey() *types.PublicKey { return r.newAuthority }
-func (r *SetFreezeAuthorityReplaceRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
-func (r *SetFreezeAuthorityReplaceRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
-func (r *SetFreezeAuthorityReplaceRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetFreezeAuthorityReplaceRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *SetFreezeAuthorityReplaceRequest) FreezeAuthorityKey() *types.PublicKey {
+	return r.freezeAuthority
+}
+func (r *SetFreezeAuthorityReplaceRequest) NewFreezeAuthorityKey() *types.PublicKey {
+	return r.newFreezeAuthority
+}
+func (r *SetFreezeAuthorityReplaceRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *SetFreezeAuthorityReplaceRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *SetFreezeAuthorityReplaceRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *SetFreezeAuthorityReplaceRequest) TokenProgramID() *types.PublicKey { return r.tokenProgramID }
 func (r *SetFreezeAuthorityReplaceRequest) ToMultisigSigners() []*types.PublicKey {
 	return r.multisigSigners
 }
@@ -3400,16 +3520,16 @@ type SetFreezeAuthorityReplaceResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Mint         string `json:"mint"`
-	Authority    string `json:"authority"`
-	NewAuthority string `json:"new_authority"`
-	Program      string `json:"program"`
-	Fee          string `json:"fee"`
+	Mint               string      `json:"mint"`
+	FreezeAuthority    string      `json:"freeze_authority"`
+	NewFreezeAuthority string      `json:"new_freeze_authority"`
+	Program            string      `json:"program"`
+	Fee                SystemPayer `json:"fee"`
 }
 
 func NewSetFreezeAuthorityReplaceResponse(
 	tx *types.Transaction, raw, message []byte,
-	mint, authority, tokenProgram, nonceAuthority *types.PublicKey, newAuthority *types.PublicKey,
+	feePayer, mint, freezeAuthority, tokenProgram, nonceAuthority, newFreezeAuthority *types.PublicKey,
 	fee uint64,
 ) *SetFreezeAuthorityReplaceResponse {
 	nonceAuth := ""
@@ -3428,40 +3548,65 @@ func NewSetFreezeAuthorityReplaceResponse(
 	}
 
 	return &SetFreezeAuthorityReplaceResponse{
-		Transaction:     codec.Base64.Encode(raw),
-		Message:         codec.Base64.Encode(message),
-		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:     keys,
-		Signers:         signers,
-		NonceAuthority:  nonceAuth,
-		Mint:            mint.Base58(),
-		Authority:       authority.Base58(),
-		NewAuthority:    newAuthority.Base58(),
-		Program:         tokenProgram.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Transaction:        codec.Base64.Encode(raw),
+		Message:            codec.Base64.Encode(message),
+		RecentBlockhash:    tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:        keys,
+		Signers:            signers,
+		NonceAuthority:     nonceAuth,
+		Mint:               mint.Base58(),
+		FreezeAuthority:    freezeAuthority.Base58(),
+		NewFreezeAuthority: newFreezeAuthority.Base58(),
+		Program:            tokenProgram.Base58(),
+		Fee:                newSystemPayer(feePayer, fee),
 	}
 }
 
-// SetFreezeAuthorityClearRequest SetFreezeAuthorityClear removes a mint's freeze authority permanently.
+// SetFreezeAuthorityClearRequest removes a mint's freeze authority permanently.
 //
 // Once cleared, no holder of this mint can ever be frozen again, and nothing
 // can restore the capability: there is no authority left to sign the change.
 type SetFreezeAuthorityClearRequest struct {
-	Mint      string `json:"mint" example:""`
-	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	Mint string `json:"mint" example:""`
+
+	// FreezeAuthority must be Mint's current freeze authority exactly.
+	FreezeAuthority string `json:"freeze_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a mint
+	// belongs to exactly one of the two forever.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
 	mint            *types.PublicKey
-	authority       *types.PublicKey
+	freezeAuthority *types.PublicKey
 	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
 	tokenProgramID  *types.PublicKey
 	multisigSigners []*types.PublicKey
 }
@@ -3471,8 +3616,8 @@ func (r *SetFreezeAuthorityClearRequest) ValidateRequest() error {
 	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
 		return errors.New("mint: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.freezeAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FreezeAuthority)); err != nil {
+		return errors.New("freeze_authority: " + err.Error())
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -3485,9 +3630,17 @@ func (r *SetFreezeAuthorityClearRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -3505,11 +3658,16 @@ func (r *SetFreezeAuthorityClearRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *SetFreezeAuthorityClearRequest) MintKey() *types.PublicKey         { return r.mint }
-func (r *SetFreezeAuthorityClearRequest) AuthorityKey() *types.PublicKey    { return r.authority }
-func (r *SetFreezeAuthorityClearRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
-func (r *SetFreezeAuthorityClearRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
-func (r *SetFreezeAuthorityClearRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetFreezeAuthorityClearRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *SetFreezeAuthorityClearRequest) FreezeAuthorityKey() *types.PublicKey {
+	return r.freezeAuthority
+}
+func (r *SetFreezeAuthorityClearRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *SetFreezeAuthorityClearRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *SetFreezeAuthorityClearRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *SetFreezeAuthorityClearRequest) TokenProgramID() *types.PublicKey { return r.tokenProgramID }
 func (r *SetFreezeAuthorityClearRequest) ToMultisigSigners() []*types.PublicKey {
 	return r.multisigSigners
 }
@@ -3524,16 +3682,16 @@ type SetFreezeAuthorityClearResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Mint      string `json:"mint"`
-	Authority string `json:"authority"`
-	Cleared   bool   `json:"cleared"`
-	Program   string `json:"program"`
-	Fee       string `json:"fee"`
+	Mint            string      `json:"mint"`
+	FreezeAuthority string      `json:"freeze_authority"`
+	Cleared         bool        `json:"cleared"`
+	Program         string      `json:"program"`
+	Fee             SystemPayer `json:"fee"`
 }
 
 func NewSetFreezeAuthorityClearResponse(
 	tx *types.Transaction, raw, message []byte,
-	mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	feePayer, mint, freezeAuthority, tokenProgram, nonceAuthority *types.PublicKey,
 	fee uint64,
 ) *SetFreezeAuthorityClearResponse {
 	nonceAuth := ""
@@ -3559,10 +3717,10 @@ func NewSetFreezeAuthorityClearResponse(
 		Signers:         signers,
 		NonceAuthority:  nonceAuth,
 		Mint:            mint.Base58(),
-		Authority:       authority.Base58(),
+		FreezeAuthority: freezeAuthority.Base58(),
 		Cleared:         true,
 		Program:         tokenProgram.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
@@ -3573,44 +3731,74 @@ func NewSetFreezeAuthorityClearResponse(
 // it to; the program rejects a None authority here rather than accepting one
 // it could never store.
 type SetAccountOwnerReplaceRequest struct {
-	Account      string `json:"account" example:""`
-	Authority    string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	NewAuthority string `json:"new_authority" example:""`
-	FeePayer     string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program      string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	// TokenAccount is handed to NewTokenAccountOwner. It must already exist.
+	TokenAccount string `json:"token_account" example:""`
+
+	// TokenAccountOwner must be TokenAccount's current owner exactly, never
+	// a delegate: a delegate has no authority over the account itself, only
+	// over what it was allowed to spend.
+	TokenAccountOwner string `json:"token_account_owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// NewTokenAccountOwner replaces TokenAccountOwner entirely.
+	NewTokenAccountOwner string `json:"new_token_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a token
+	// account belongs to exactly one of the two forever.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	account         *types.PublicKey
-	authority       *types.PublicKey
-	newAuthority    *types.PublicKey
-	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
-	tokenProgramID  *types.PublicKey
-	multisigSigners []*types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount         *types.PublicKey
+	tokenAccountOwner    *types.PublicKey
+	newTokenAccountOwner *types.PublicKey
+	feePayer             *types.PublicKey
+	rbh                  *types.Hash
+	dna                  *types.PublicKey
+	tokenProgramID       *types.PublicKey
+	multisigSigners      []*types.PublicKey
 }
 
 func (r *SetAccountOwnerReplaceRequest) ValidateRequest() error {
 	var err error
-	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
-		return errors.New("account: " + err.Error())
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.tokenAccountOwner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccountOwner)); err != nil {
+		return errors.New("token_account_owner: " + err.Error())
 	}
-	newAuthority := strings.TrimSpace(r.NewAuthority)
-	if newAuthority == "" {
-		return errors.New("new_authority is required")
+	newTokenAccountOwner := strings.TrimSpace(r.NewTokenAccountOwner)
+	if newTokenAccountOwner == "" {
+		return errors.New("new_token_account_owner is required")
 	}
-	if r.newAuthority, err = types.NewPublicKeyFromBase58(newAuthority); err != nil {
-		return errors.New("new_authority: " + err.Error())
+	if r.newTokenAccountOwner, err = types.NewPublicKeyFromBase58(newTokenAccountOwner); err != nil {
+		return errors.New("new_token_account_owner: " + err.Error())
 	}
-	if r.authority.Equal(r.newAuthority) {
-		return errors.New("new_authority: is already the current authority")
+	if r.tokenAccountOwner.Equal(r.newTokenAccountOwner) {
+		return errors.New("new_token_account_owner: is already the current owner")
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -3623,9 +3811,17 @@ func (r *SetAccountOwnerReplaceRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -3643,12 +3839,19 @@ func (r *SetAccountOwnerReplaceRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *SetAccountOwnerReplaceRequest) AccountKey() *types.PublicKey      { return r.account }
-func (r *SetAccountOwnerReplaceRequest) AuthorityKey() *types.PublicKey    { return r.authority }
-func (r *SetAccountOwnerReplaceRequest) NewAuthorityKey() *types.PublicKey { return r.newAuthority }
-func (r *SetAccountOwnerReplaceRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
-func (r *SetAccountOwnerReplaceRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
-func (r *SetAccountOwnerReplaceRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetAccountOwnerReplaceRequest) TokenAccountKey() *types.PublicKey { return r.tokenAccount }
+func (r *SetAccountOwnerReplaceRequest) TokenAccountOwnerKey() *types.PublicKey {
+	return r.tokenAccountOwner
+}
+func (r *SetAccountOwnerReplaceRequest) NewTokenAccountOwnerKey() *types.PublicKey {
+	return r.newTokenAccountOwner
+}
+func (r *SetAccountOwnerReplaceRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *SetAccountOwnerReplaceRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *SetAccountOwnerReplaceRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *SetAccountOwnerReplaceRequest) TokenProgramID() *types.PublicKey { return r.tokenProgramID }
 func (r *SetAccountOwnerReplaceRequest) ToMultisigSigners() []*types.PublicKey {
 	return r.multisigSigners
 }
@@ -3663,16 +3866,16 @@ type SetAccountOwnerReplaceResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Account      string `json:"account"`
-	Authority    string `json:"authority"`
-	NewAuthority string `json:"new_authority"`
-	Program      string `json:"program"`
-	Fee          string `json:"fee"`
+	TokenAccount         string      `json:"token_account"`
+	TokenAccountOwner    string      `json:"token_account_owner"`
+	NewTokenAccountOwner string      `json:"new_token_account_owner"`
+	Program              string      `json:"program"`
+	Fee                  SystemPayer `json:"fee"`
 }
 
 func NewSetAccountOwnerReplaceResponse(
 	tx *types.Transaction, raw, message []byte,
-	account, authority, tokenProgram, nonceAuthority *types.PublicKey, newAuthority *types.PublicKey,
+	feePayer, tokenAccount, tokenAccountOwner, tokenProgram, nonceAuthority, newTokenAccountOwner *types.PublicKey,
 	fee uint64,
 ) *SetAccountOwnerReplaceResponse {
 	nonceAuth := ""
@@ -3691,65 +3894,96 @@ func NewSetAccountOwnerReplaceResponse(
 	}
 
 	return &SetAccountOwnerReplaceResponse{
-		Transaction:     codec.Base64.Encode(raw),
-		Message:         codec.Base64.Encode(message),
-		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:     keys,
-		Signers:         signers,
-		NonceAuthority:  nonceAuth,
-		Account:         account.Base58(),
-		Authority:       authority.Base58(),
-		NewAuthority:    newAuthority.Base58(),
-		Program:         tokenProgram.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Transaction:          codec.Base64.Encode(raw),
+		Message:              codec.Base64.Encode(message),
+		RecentBlockhash:      tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:          keys,
+		Signers:              signers,
+		NonceAuthority:       nonceAuth,
+		TokenAccount:         tokenAccount.Base58(),
+		TokenAccountOwner:    tokenAccountOwner.Base58(),
+		NewTokenAccountOwner: newTokenAccountOwner.Base58(),
+		Program:              tokenProgram.Base58(),
+		Fee:                  newSystemPayer(feePayer, fee),
 	}
 }
 
-// SetCloseAuthorityReplaceRequest SetCloseAuthorityReplace replaces a token account's close authority with a new
-// key.
+// SetCloseAuthorityReplaceRequest replaces a token account's close authority
+// with a new key.
 //
-// The current authority is whichever one is already recorded: the account's
-// close authority if one is set, otherwise its owner, the same rule
-// close-account itself checks.
+// TokenAccountCloseAuthority is whichever one is already recorded: the
+// account's close authority if one is set, otherwise its owner, the same
+// rule close-account itself checks.
 type SetCloseAuthorityReplaceRequest struct {
-	Account      string `json:"account" example:""`
-	Authority    string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	NewAuthority string `json:"new_authority" example:""`
-	FeePayer     string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program      string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	// TokenAccount has its close authority replaced. It must already exist.
+	TokenAccount string `json:"token_account" example:""`
+
+	// TokenAccountCloseAuthority must be TokenAccount's current close
+	// authority exactly: its owner, unless a close authority is already set,
+	// in which case it must be that instead.
+	TokenAccountCloseAuthority string `json:"token_account_close_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// NewTokenAccountCloseAuthority replaces TokenAccountCloseAuthority
+	// entirely.
+	NewTokenAccountCloseAuthority string `json:"new_token_account_close_authority" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a token
+	// account belongs to exactly one of the two forever.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	account         *types.PublicKey
-	authority       *types.PublicKey
-	newAuthority    *types.PublicKey
-	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
-	tokenProgramID  *types.PublicKey
-	multisigSigners []*types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount                  *types.PublicKey
+	tokenAccountCloseAuthority    *types.PublicKey
+	newTokenAccountCloseAuthority *types.PublicKey
+	feePayer                      *types.PublicKey
+	rbh                           *types.Hash
+	dna                           *types.PublicKey
+	tokenProgramID                *types.PublicKey
+	multisigSigners               []*types.PublicKey
 }
 
 func (r *SetCloseAuthorityReplaceRequest) ValidateRequest() error {
 	var err error
-	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
-		return errors.New("account: " + err.Error())
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.tokenAccountCloseAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccountCloseAuthority)); err != nil {
+		return errors.New("token_account_close_authority: " + err.Error())
 	}
-	newAuthority := strings.TrimSpace(r.NewAuthority)
-	if newAuthority == "" {
-		return errors.New("new_authority is required")
+	newTokenAccountCloseAuthority := strings.TrimSpace(r.NewTokenAccountCloseAuthority)
+	if newTokenAccountCloseAuthority == "" {
+		return errors.New("new_token_account_close_authority is required")
 	}
-	if r.newAuthority, err = types.NewPublicKeyFromBase58(newAuthority); err != nil {
-		return errors.New("new_authority: " + err.Error())
+	if r.newTokenAccountCloseAuthority, err = types.NewPublicKeyFromBase58(newTokenAccountCloseAuthority); err != nil {
+		return errors.New("new_token_account_close_authority: " + err.Error())
 	}
-	if r.authority.Equal(r.newAuthority) {
-		return errors.New("new_authority: is already the current authority")
+	if r.tokenAccountCloseAuthority.Equal(r.newTokenAccountCloseAuthority) {
+		return errors.New("new_token_account_close_authority: is already the current close authority")
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -3762,9 +3996,17 @@ func (r *SetCloseAuthorityReplaceRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -3782,12 +4024,19 @@ func (r *SetCloseAuthorityReplaceRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *SetCloseAuthorityReplaceRequest) AccountKey() *types.PublicKey      { return r.account }
-func (r *SetCloseAuthorityReplaceRequest) AuthorityKey() *types.PublicKey    { return r.authority }
-func (r *SetCloseAuthorityReplaceRequest) NewAuthorityKey() *types.PublicKey { return r.newAuthority }
-func (r *SetCloseAuthorityReplaceRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
-func (r *SetCloseAuthorityReplaceRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
-func (r *SetCloseAuthorityReplaceRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetCloseAuthorityReplaceRequest) TokenAccountKey() *types.PublicKey { return r.tokenAccount }
+func (r *SetCloseAuthorityReplaceRequest) TokenAccountCloseAuthorityKey() *types.PublicKey {
+	return r.tokenAccountCloseAuthority
+}
+func (r *SetCloseAuthorityReplaceRequest) NewTokenAccountCloseAuthorityKey() *types.PublicKey {
+	return r.newTokenAccountCloseAuthority
+}
+func (r *SetCloseAuthorityReplaceRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *SetCloseAuthorityReplaceRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *SetCloseAuthorityReplaceRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *SetCloseAuthorityReplaceRequest) TokenProgramID() *types.PublicKey { return r.tokenProgramID }
 func (r *SetCloseAuthorityReplaceRequest) ToMultisigSigners() []*types.PublicKey {
 	return r.multisigSigners
 }
@@ -3802,16 +4051,16 @@ type SetCloseAuthorityReplaceResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Account      string `json:"account"`
-	Authority    string `json:"authority"`
-	NewAuthority string `json:"new_authority"`
-	Program      string `json:"program"`
-	Fee          string `json:"fee"`
+	TokenAccount                  string      `json:"token_account"`
+	TokenAccountCloseAuthority    string      `json:"token_account_close_authority"`
+	NewTokenAccountCloseAuthority string      `json:"new_token_account_close_authority"`
+	Program                       string      `json:"program"`
+	Fee                           SystemPayer `json:"fee"`
 }
 
 func NewSetCloseAuthorityReplaceResponse(
 	tx *types.Transaction, raw, message []byte,
-	account, authority, tokenProgram, nonceAuthority *types.PublicKey, newAuthority *types.PublicKey,
+	feePayer, tokenAccount, tokenAccountCloseAuthority, tokenProgram, nonceAuthority, newTokenAccountCloseAuthority *types.PublicKey,
 	fee uint64,
 ) *SetCloseAuthorityReplaceResponse {
 	nonceAuth := ""
@@ -3830,52 +4079,80 @@ func NewSetCloseAuthorityReplaceResponse(
 	}
 
 	return &SetCloseAuthorityReplaceResponse{
-		Transaction:     codec.Base64.Encode(raw),
-		Message:         codec.Base64.Encode(message),
-		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:     keys,
-		Signers:         signers,
-		NonceAuthority:  nonceAuth,
-		Account:         account.Base58(),
-		Authority:       authority.Base58(),
-		NewAuthority:    newAuthority.Base58(),
-		Program:         tokenProgram.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Transaction:                   codec.Base64.Encode(raw),
+		Message:                       codec.Base64.Encode(message),
+		RecentBlockhash:               tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                   keys,
+		Signers:                       signers,
+		NonceAuthority:                nonceAuth,
+		TokenAccount:                  tokenAccount.Base58(),
+		TokenAccountCloseAuthority:    tokenAccountCloseAuthority.Base58(),
+		NewTokenAccountCloseAuthority: newTokenAccountCloseAuthority.Base58(),
+		Program:                       tokenProgram.Base58(),
+		Fee:                           newSystemPayer(feePayer, fee),
 	}
 }
 
-// SetCloseAuthorityClearRequest SetCloseAuthorityClear removes a token account's close authority.
+// SetCloseAuthorityClearRequest removes a token account's close authority.
 //
 // Unlike the mint authorities, this one is recoverable: the account's owner
 // never goes away, and close-account already falls back to the owner when no
 // close authority is set, so clearing this only reverts to that default.
 type SetCloseAuthorityClearRequest struct {
-	Account   string `json:"account" example:""`
-	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	// TokenAccount has its close authority cleared. It must already exist.
+	TokenAccount string `json:"token_account" example:""`
+
+	// TokenAccountCloseAuthority must be TokenAccount's current close
+	// authority exactly: its owner, unless a close authority is already set,
+	// in which case it must be that instead.
+	TokenAccountCloseAuthority string `json:"token_account_close_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a token
+	// account belongs to exactly one of the two forever.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	account         *types.PublicKey
-	authority       *types.PublicKey
-	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
-	tokenProgramID  *types.PublicKey
-	multisigSigners []*types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount               *types.PublicKey
+	tokenAccountCloseAuthority *types.PublicKey
+	feePayer                   *types.PublicKey
+	rbh                        *types.Hash
+	dna                        *types.PublicKey
+	tokenProgramID             *types.PublicKey
+	multisigSigners            []*types.PublicKey
 }
 
 func (r *SetCloseAuthorityClearRequest) ValidateRequest() error {
 	var err error
-	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
-		return errors.New("account: " + err.Error())
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.tokenAccountCloseAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccountCloseAuthority)); err != nil {
+		return errors.New("token_account_close_authority: " + err.Error())
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -3888,9 +4165,17 @@ func (r *SetCloseAuthorityClearRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -3908,11 +4193,16 @@ func (r *SetCloseAuthorityClearRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *SetCloseAuthorityClearRequest) AccountKey() *types.PublicKey      { return r.account }
-func (r *SetCloseAuthorityClearRequest) AuthorityKey() *types.PublicKey    { return r.authority }
-func (r *SetCloseAuthorityClearRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
-func (r *SetCloseAuthorityClearRequest) NonceAccountKey() *types.PublicKey { return r.nonceAccount }
-func (r *SetCloseAuthorityClearRequest) TokenProgramID() *types.PublicKey  { return r.tokenProgramID }
+func (r *SetCloseAuthorityClearRequest) TokenAccountKey() *types.PublicKey { return r.tokenAccount }
+func (r *SetCloseAuthorityClearRequest) TokenAccountCloseAuthorityKey() *types.PublicKey {
+	return r.tokenAccountCloseAuthority
+}
+func (r *SetCloseAuthorityClearRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *SetCloseAuthorityClearRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *SetCloseAuthorityClearRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *SetCloseAuthorityClearRequest) TokenProgramID() *types.PublicKey { return r.tokenProgramID }
 func (r *SetCloseAuthorityClearRequest) ToMultisigSigners() []*types.PublicKey {
 	return r.multisigSigners
 }
@@ -3927,16 +4217,16 @@ type SetCloseAuthorityClearResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Account   string `json:"account"`
-	Authority string `json:"authority"`
-	Cleared   bool   `json:"cleared"`
-	Program   string `json:"program"`
-	Fee       string `json:"fee"`
+	TokenAccount               string      `json:"token_account"`
+	TokenAccountCloseAuthority string      `json:"token_account_close_authority"`
+	Cleared                    bool        `json:"cleared"`
+	Program                    string      `json:"program"`
+	Fee                        SystemPayer `json:"fee"`
 }
 
 func NewSetCloseAuthorityClearResponse(
 	tx *types.Transaction, raw, message []byte,
-	account, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	feePayer, tokenAccount, tokenAccountCloseAuthority, tokenProgram, nonceAuthority *types.PublicKey,
 	fee uint64,
 ) *SetCloseAuthorityClearResponse {
 	nonceAuth := ""
@@ -3955,58 +4245,88 @@ func NewSetCloseAuthorityClearResponse(
 	}
 
 	return &SetCloseAuthorityClearResponse{
-		Transaction:     codec.Base64.Encode(raw),
-		Message:         codec.Base64.Encode(message),
-		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:     keys,
-		Signers:         signers,
-		NonceAuthority:  nonceAuth,
-		Account:         account.Base58(),
-		Authority:       authority.Base58(),
-		Cleared:         true,
-		Program:         tokenProgram.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Transaction:                codec.Base64.Encode(raw),
+		Message:                    codec.Base64.Encode(message),
+		RecentBlockhash:            tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                keys,
+		Signers:                    signers,
+		NonceAuthority:             nonceAuth,
+		TokenAccount:               tokenAccount.Base58(),
+		TokenAccountCloseAuthority: tokenAccountCloseAuthority.Base58(),
+		Cleared:                    true,
+		Program:                    tokenProgram.Base58(),
+		Fee:                        newSystemPayer(feePayer, fee),
 	}
 }
 
 // FreezeAccountRequest names the token account to suspend.
 //
-// authority must be the mint's freeze authority, not the account's owner or
-// any delegate. Freezing is a mint-level power: it exists so whoever controls
-// a mint can suspend any account holding it, which is a different axis from
-// who may spend an account's own balance.
+// FreezeAuthority must be the mint's freeze authority, not the account's
+// owner or any delegate. Freezing is a mint-level power: it exists so
+// whoever controls a mint can suspend any account holding it, which is a
+// different axis from who may spend an account's own balance.
 type FreezeAccountRequest struct {
-	Account   string `json:"account" example:""`
-	Mint      string `json:"mint" example:""`
-	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	// TokenAccount is suspended. It must already exist, hold Mint, and not
+	// already be frozen.
+	TokenAccount string `json:"token_account" example:""`
+
+	// Mint is what TokenAccount must hold, and is the source of the freeze
+	// authority checked against.
+	Mint string `json:"mint" example:""`
+
+	// FreezeAuthority must be Mint's freeze authority exactly.
+	FreezeAuthority string `json:"freeze_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a token
+	// account belongs to exactly one of the two forever.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	account         *types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount    *types.PublicKey
 	mint            *types.PublicKey
-	authority       *types.PublicKey
+	freezeAuthority *types.PublicKey
 	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
 	tokenProgramID  *types.PublicKey
 	multisigSigners []*types.PublicKey
 }
 
 func (r *FreezeAccountRequest) ValidateRequest() error {
 	var err error
-	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
-		return errors.New("account: " + err.Error())
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
 	}
 	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
 		return errors.New("mint: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.freezeAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FreezeAuthority)); err != nil {
+		return errors.New("freeze_authority: " + err.Error())
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -4019,9 +4339,17 @@ func (r *FreezeAccountRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -4039,11 +4367,14 @@ func (r *FreezeAccountRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *FreezeAccountRequest) AccountKey() *types.PublicKey          { return r.account }
-func (r *FreezeAccountRequest) MintKey() *types.PublicKey             { return r.mint }
-func (r *FreezeAccountRequest) AuthorityKey() *types.PublicKey        { return r.authority }
-func (r *FreezeAccountRequest) FeePayerKey() *types.PublicKey         { return r.feePayer }
-func (r *FreezeAccountRequest) NonceAccountKey() *types.PublicKey     { return r.nonceAccount }
+func (r *FreezeAccountRequest) TokenAccountKey() *types.PublicKey    { return r.tokenAccount }
+func (r *FreezeAccountRequest) MintKey() *types.PublicKey            { return r.mint }
+func (r *FreezeAccountRequest) FreezeAuthorityKey() *types.PublicKey { return r.freezeAuthority }
+func (r *FreezeAccountRequest) FeePayerKey() *types.PublicKey        { return r.feePayer }
+func (r *FreezeAccountRequest) Blockhash() *types.Hash               { return r.rbh }
+func (r *FreezeAccountRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
 func (r *FreezeAccountRequest) TokenProgramID() *types.PublicKey      { return r.tokenProgramID }
 func (r *FreezeAccountRequest) ToMultisigSigners() []*types.PublicKey { return r.multisigSigners }
 
@@ -4057,16 +4388,16 @@ type FreezeAccountResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Account   string `json:"account"`
-	Mint      string `json:"mint"`
-	Authority string `json:"authority"`
-	Program   string `json:"program"`
-	Fee       string `json:"fee"`
+	TokenAccount    string      `json:"token_account"`
+	Mint            string      `json:"mint"`
+	FreezeAuthority string      `json:"freeze_authority"`
+	Program         string      `json:"program"`
+	Fee             SystemPayer `json:"fee"`
 }
 
 func NewFreezeAccountResponse(
 	tx *types.Transaction, raw, message []byte,
-	account, mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	feePayer, tokenAccount, mint, freezeAuthority, tokenProgram, nonceAuthority *types.PublicKey,
 	fee uint64,
 ) *FreezeAccountResponse {
 	nonceAuth := ""
@@ -4091,51 +4422,81 @@ func NewFreezeAccountResponse(
 		AccountKeys:     keys,
 		Signers:         signers,
 		NonceAuthority:  nonceAuth,
-		Account:         account.Base58(),
+		TokenAccount:    tokenAccount.Base58(),
 		Mint:            mint.Base58(),
-		Authority:       authority.Base58(),
+		FreezeAuthority: freezeAuthority.Base58(),
 		Program:         tokenProgram.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 
 // ThawAccountRequest names the token account to resume.
 //
-// The same rule as FreezeAccountRequest applies: authority is the mint's
-// freeze authority, since thawing is undoing a mint-level suspension rather
-// than anything the account's own owner controls.
+// The same rule as FreezeAccountRequest applies: FreezeAuthority is the
+// mint's freeze authority, since thawing is undoing a mint-level suspension
+// rather than anything the account's own owner controls.
 type ThawAccountRequest struct {
-	Account   string `json:"account" example:""`
-	Mint      string `json:"mint" example:""`
-	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	FeePayer  string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
-	Program   string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+	// TokenAccount is resumed. It must already exist, hold Mint, and
+	// currently be frozen.
+	TokenAccount string `json:"token_account" example:""`
+
+	// Mint is what TokenAccount must hold, and is the source of the freeze
+	// authority checked against.
+	Mint string `json:"mint" example:""`
+
+	// FreezeAuthority must be Mint's freeze authority exactly.
+	FreezeAuthority string `json:"freeze_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022. It is required rather than defaulted, since a token
+	// account belongs to exactly one of the two forever.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
 
 	// MultisigSigners is empty for a single-signer authority. Non-empty, the
 	// authority itself does not sign; the named members do, in its place.
 	MultisigSigners []string `json:"multisig_signers"`
 
-	NonceAccount string `json:"nonce_account" example:""`
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
 
-	account         *types.PublicKey
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount    *types.PublicKey
 	mint            *types.PublicKey
-	authority       *types.PublicKey
+	freezeAuthority *types.PublicKey
 	feePayer        *types.PublicKey
-	nonceAccount    *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
 	tokenProgramID  *types.PublicKey
 	multisigSigners []*types.PublicKey
 }
 
 func (r *ThawAccountRequest) ValidateRequest() error {
 	var err error
-	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
-		return errors.New("account: " + err.Error())
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
 	}
 	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
 		return errors.New("mint: " + err.Error())
 	}
-	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
-		return errors.New("authority: " + err.Error())
+	if r.freezeAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FreezeAuthority)); err != nil {
+		return errors.New("freeze_authority: " + err.Error())
 	}
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
 		return errors.New("fee_payer: " + err.Error())
@@ -4148,9 +4509,17 @@ func (r *ThawAccountRequest) ValidateRequest() error {
 		}
 	}
 
-	if na := strings.TrimSpace(r.NonceAccount); na != "" {
-		if r.nonceAccount, err = types.NewPublicKeyFromBase58(na); err != nil {
-			return errors.New("nonce_account: " + err.Error())
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
 		}
 	}
 
@@ -4168,11 +4537,14 @@ func (r *ThawAccountRequest) ValidateRequest() error {
 	return nil
 }
 
-func (r *ThawAccountRequest) AccountKey() *types.PublicKey          { return r.account }
-func (r *ThawAccountRequest) MintKey() *types.PublicKey             { return r.mint }
-func (r *ThawAccountRequest) AuthorityKey() *types.PublicKey        { return r.authority }
-func (r *ThawAccountRequest) FeePayerKey() *types.PublicKey         { return r.feePayer }
-func (r *ThawAccountRequest) NonceAccountKey() *types.PublicKey     { return r.nonceAccount }
+func (r *ThawAccountRequest) TokenAccountKey() *types.PublicKey    { return r.tokenAccount }
+func (r *ThawAccountRequest) MintKey() *types.PublicKey            { return r.mint }
+func (r *ThawAccountRequest) FreezeAuthorityKey() *types.PublicKey { return r.freezeAuthority }
+func (r *ThawAccountRequest) FeePayerKey() *types.PublicKey        { return r.feePayer }
+func (r *ThawAccountRequest) Blockhash() *types.Hash               { return r.rbh }
+func (r *ThawAccountRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
 func (r *ThawAccountRequest) TokenProgramID() *types.PublicKey      { return r.tokenProgramID }
 func (r *ThawAccountRequest) ToMultisigSigners() []*types.PublicKey { return r.multisigSigners }
 
@@ -4186,16 +4558,16 @@ type ThawAccountResponse struct {
 
 	NonceAuthority string `json:"nonce_authority,omitempty"`
 
-	Account   string `json:"account"`
-	Mint      string `json:"mint"`
-	Authority string `json:"authority"`
-	Program   string `json:"program"`
-	Fee       string `json:"fee"`
+	TokenAccount    string      `json:"token_account"`
+	Mint            string      `json:"mint"`
+	FreezeAuthority string      `json:"freeze_authority"`
+	Program         string      `json:"program"`
+	Fee             SystemPayer `json:"fee"`
 }
 
 func NewThawAccountResponse(
 	tx *types.Transaction, raw, message []byte,
-	account, mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	feePayer, tokenAccount, mint, freezeAuthority, tokenProgram, nonceAuthority *types.PublicKey,
 	fee uint64,
 ) *ThawAccountResponse {
 	nonceAuth := ""
@@ -4220,10 +4592,10 @@ func NewThawAccountResponse(
 		AccountKeys:     keys,
 		Signers:         signers,
 		NonceAuthority:  nonceAuth,
-		Account:         account.Base58(),
+		TokenAccount:    tokenAccount.Base58(),
 		Mint:            mint.Base58(),
-		Authority:       authority.Base58(),
+		FreezeAuthority: freezeAuthority.Base58(),
 		Program:         tokenProgram.Base58(),
-		Fee:             strconv.FormatUint(fee, 10),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }

@@ -1529,16 +1529,29 @@ definitions:
     type: object
   v2.FreezeAccountRequest:
     properties:
-      account:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
         example: ""
         type: string
-      authority:
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
-      fee_payer:
+      freeze_authority:
+        description: FreezeAuthority must be Mint's freeze authority exactly.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       mint:
+        description: |-
+          Mint is what TokenAccount must hold, and is the source of the freeze
+          authority checked against.
         example: ""
         type: string
       multisig_signers:
@@ -1548,24 +1561,40 @@ definitions:
         items:
           type: string
         type: array
-      nonce_account:
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a token
+          account belongs to exactly one of the two forever.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
         example: ""
         type: string
-      program:
-        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+      token_account:
+        description: |-
+          TokenAccount is suspended. It must already exist, hold Mint, and not
+          already be frozen.
+        example: ""
         type: string
     type: object
   v2.FreezeAccountResponse:
     properties:
-      account:
-        type: string
       account_keys:
         items:
           type: string
         type: array
-      authority:
-        type: string
       fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      freeze_authority:
         type: string
       message:
         type: string
@@ -1581,6 +1610,8 @@ definitions:
         items:
           type: string
         type: array
+      token_account:
+        type: string
       transaction:
         type: string
     type: object
@@ -1781,13 +1812,19 @@ definitions:
     type: object
   v2.SetAccountOwnerReplaceRequest:
     properties:
-      account:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
         example: ""
         type: string
-      authority:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
       fee_payer:
+        description: FeePayer signs and pays the transaction fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       multisig_signers:
@@ -1797,31 +1834,52 @@ definitions:
         items:
           type: string
         type: array
-      new_authority:
-        example: ""
-        type: string
-      nonce_account:
+      new_token_account_owner:
+        description: NewTokenAccountOwner replaces TokenAccountOwner entirely.
         example: ""
         type: string
       program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a token
+          account belongs to exactly one of the two forever.
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      token_account:
+        description: TokenAccount is handed to NewTokenAccountOwner. It must already
+          exist.
+        example: ""
+        type: string
+      token_account_owner:
+        description: |-
+          TokenAccountOwner must be TokenAccount's current owner exactly, never
+          a delegate: a delegate has no authority over the account itself, only
+          over what it was allowed to spend.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
   v2.SetAccountOwnerReplaceResponse:
     properties:
-      account:
-        type: string
       account_keys:
         items:
           type: string
         type: array
-      authority:
-        type: string
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
-      new_authority:
+      new_token_account_owner:
         type: string
       nonce_authority:
         type: string
@@ -1833,18 +1891,28 @@ definitions:
         items:
           type: string
         type: array
+      token_account:
+        type: string
+      token_account_owner:
+        type: string
       transaction:
         type: string
     type: object
   v2.SetCloseAuthorityClearRequest:
     properties:
-      account:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
         example: ""
         type: string
-      authority:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
       fee_payer:
+        description: FeePayer signs and pays the transaction fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       multisig_signers:
@@ -1854,27 +1922,47 @@ definitions:
         items:
           type: string
         type: array
-      nonce_account:
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a token
+          account belongs to exactly one of the two forever.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
         example: ""
         type: string
-      program:
-        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+      token_account:
+        description: TokenAccount has its close authority cleared. It must already
+          exist.
+        example: ""
+        type: string
+      token_account_close_authority:
+        description: |-
+          TokenAccountCloseAuthority must be TokenAccount's current close
+          authority exactly: its owner, unless a close authority is already set,
+          in which case it must be that instead.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
   v2.SetCloseAuthorityClearResponse:
     properties:
-      account:
-        type: string
       account_keys:
         items:
           type: string
         type: array
-      authority:
-        type: string
       cleared:
         type: boolean
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       nonce_authority:
@@ -1887,18 +1975,28 @@ definitions:
         items:
           type: string
         type: array
+      token_account:
+        type: string
+      token_account_close_authority:
+        type: string
       transaction:
         type: string
     type: object
   v2.SetCloseAuthorityReplaceRequest:
     properties:
-      account:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
         example: ""
         type: string
-      authority:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
-        type: string
       fee_payer:
+        description: FeePayer signs and pays the transaction fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       multisig_signers:
@@ -1908,31 +2006,54 @@ definitions:
         items:
           type: string
         type: array
-      new_authority:
-        example: ""
-        type: string
-      nonce_account:
+      new_token_account_close_authority:
+        description: |-
+          NewTokenAccountCloseAuthority replaces TokenAccountCloseAuthority
+          entirely.
         example: ""
         type: string
       program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a token
+          account belongs to exactly one of the two forever.
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      token_account:
+        description: TokenAccount has its close authority replaced. It must already
+          exist.
+        example: ""
+        type: string
+      token_account_close_authority:
+        description: |-
+          TokenAccountCloseAuthority must be TokenAccount's current close
+          authority exactly: its owner, unless a close authority is already set,
+          in which case it must be that instead.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
     type: object
   v2.SetCloseAuthorityReplaceResponse:
     properties:
-      account:
-        type: string
       account_keys:
         items:
           type: string
         type: array
-      authority:
-        type: string
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
-      new_authority:
+      new_token_account_close_authority:
         type: string
       nonce_authority:
         type: string
@@ -1944,15 +2065,32 @@ definitions:
         items:
           type: string
         type: array
+      token_account:
+        type: string
+      token_account_close_authority:
+        type: string
       transaction:
         type: string
     type: object
   v2.SetFreezeAuthorityClearRequest:
     properties:
-      authority:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
         type: string
       fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      freeze_authority:
+        description: FreezeAuthority must be Mint's current freeze authority exactly.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       mint:
@@ -1965,11 +2103,23 @@ definitions:
         items:
           type: string
         type: array
-      nonce_account:
-        example: ""
-        type: string
       program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a mint
+          belongs to exactly one of the two forever.
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
         type: string
     type: object
   v2.SetFreezeAuthorityClearResponse:
@@ -1978,11 +2128,11 @@ definitions:
         items:
           type: string
         type: array
-      authority:
-        type: string
       cleared:
         type: boolean
       fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      freeze_authority:
         type: string
       message:
         type: string
@@ -2003,10 +2153,23 @@ definitions:
     type: object
   v2.SetFreezeAuthorityReplaceRequest:
     properties:
-      authority:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
         type: string
       fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      freeze_authority:
+        description: FreezeAuthority must be Mint's current freeze authority exactly.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       mint:
@@ -2019,14 +2182,27 @@ definitions:
         items:
           type: string
         type: array
-      new_authority:
-        example: ""
-        type: string
-      nonce_account:
+      new_freeze_authority:
+        description: NewFreezeAuthority replaces FreezeAuthority entirely.
         example: ""
         type: string
       program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a mint
+          belongs to exactly one of the two forever.
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
         type: string
     type: object
   v2.SetFreezeAuthorityReplaceResponse:
@@ -2035,15 +2211,15 @@ definitions:
         items:
           type: string
         type: array
-      authority:
-        type: string
       fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      freeze_authority:
         type: string
       message:
         type: string
       mint:
         type: string
-      new_authority:
+      new_freeze_authority:
         type: string
       nonce_authority:
         type: string
@@ -2060,14 +2236,27 @@ definitions:
     type: object
   v2.SetMintAuthorityClearRequest:
     properties:
-      authority:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
         type: string
       fee_payer:
+        description: FeePayer signs and pays the transaction fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       mint:
         example: ""
+        type: string
+      mint_authority:
+        description: MintAuthority must be Mint's current mint authority exactly.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       multisig_signers:
         description: |-
@@ -2076,11 +2265,23 @@ definitions:
         items:
           type: string
         type: array
-      nonce_account:
-        example: ""
-        type: string
       program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a mint
+          belongs to exactly one of the two forever.
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
         type: string
     type: object
   v2.SetMintAuthorityClearResponse:
@@ -2089,15 +2290,15 @@ definitions:
         items:
           type: string
         type: array
-      authority:
-        type: string
       cleared:
         type: boolean
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       mint:
+        type: string
+      mint_authority:
         type: string
       nonce_authority:
         type: string
@@ -2114,14 +2315,27 @@ definitions:
     type: object
   v2.SetMintAuthorityReplaceRequest:
     properties:
-      authority:
-        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
         type: string
       fee_payer:
+        description: FeePayer signs and pays the transaction fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       mint:
         example: ""
+        type: string
+      mint_authority:
+        description: MintAuthority must be Mint's current mint authority exactly.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       multisig_signers:
         description: |-
@@ -2130,14 +2344,30 @@ definitions:
         items:
           type: string
         type: array
-      new_authority:
-        example: ""
-        type: string
-      nonce_account:
+      new_mint_authority:
+        description: |-
+          NewMintAuthority replaces MintAuthority entirely; it is not required to
+          sign, since InitializeMint2-style authority changes only record the
+          new value rather than checking it against a signer.
         example: ""
         type: string
       program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a mint
+          belongs to exactly one of the two forever.
         example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
         type: string
     type: object
   v2.SetMintAuthorityReplaceResponse:
@@ -2146,15 +2376,15 @@ definitions:
         items:
           type: string
         type: array
-      authority:
-        type: string
       fee:
-        type: string
+        $ref: '#/definitions/v2.SystemPayer'
       message:
         type: string
       mint:
         type: string
-      new_authority:
+      mint_authority:
+        type: string
+      new_mint_authority:
         type: string
       nonce_authority:
         type: string
@@ -3803,16 +4033,29 @@ definitions:
     type: object
   v2.ThawAccountRequest:
     properties:
-      account:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
         example: ""
         type: string
-      authority:
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
-      fee_payer:
+      freeze_authority:
+        description: FreezeAuthority must be Mint's freeze authority exactly.
         example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
         type: string
       mint:
+        description: |-
+          Mint is what TokenAccount must hold, and is the source of the freeze
+          authority checked against.
         example: ""
         type: string
       multisig_signers:
@@ -3822,24 +4065,40 @@ definitions:
         items:
           type: string
         type: array
-      nonce_account:
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022. It is required rather than defaulted, since a token
+          account belongs to exactly one of the two forever.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
         example: ""
         type: string
-      program:
-        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+      token_account:
+        description: |-
+          TokenAccount is resumed. It must already exist, hold Mint, and
+          currently be frozen.
+        example: ""
         type: string
     type: object
   v2.ThawAccountResponse:
     properties:
-      account:
-        type: string
       account_keys:
         items:
           type: string
         type: array
-      authority:
-        type: string
       fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      freeze_authority:
         type: string
       message:
         type: string
@@ -3855,6 +4114,8 @@ definitions:
         items:
           type: string
         type: array
+      token_account:
+        type: string
       transaction:
         type: string
     type: object
@@ -7118,11 +7379,17 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Freezes a token account, so it rejects transfer, burn, and approve
-        until thawed. The authority is the mint''s freeze authority, not the account''s
+      description: 'Freezes token_account, so it rejects transfer, burn, and approve
+        until thawed. freeze_authority is the mint''s freeze authority, not the account''s
         owner or any delegate: freezing is a mint-level power to suspend any account
         holding it, on a different axis from who may spend a balance. Only works on
-        a mint that was initialized with a freeze authority.'
+        a mint that was initialized with a freeze authority. recent_blockhash is always
+        required and is never fetched server-side. Left alone, it also builds the
+        message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
       parameters:
       - description: Cluster name
         in: header
@@ -7257,7 +7524,13 @@ paths:
       - application/json
       description: 'Clears close_authority to None. This is recoverable: the owner
         never goes away, and close-account already falls back to the owner when no
-        close authority is set, so clearing this only reverts to that default.'
+        close authority is set, so clearing this only reverts to that default. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
       parameters:
       - description: Cluster name
         in: header
@@ -7295,9 +7568,15 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Hands close_authority to new_authority. The current authority
-        is whichever one is already recorded: the account''s close authority if one
-        is set, otherwise its owner, the same rule close-account itself checks.'
+      description: 'Hands token_account_close_authority to new_token_account_close_authority.
+        token_account_close_authority is whichever one is already recorded: the account''s
+        close authority if one is set, otherwise its owner, the same rule close-account
+        itself checks. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.'
       parameters:
       - description: Cluster name
         in: header
@@ -7336,7 +7615,13 @@ paths:
       consumes:
       - application/json
       description: Clears freeze_authority to None. No holder of this mint can ever
-        be frozen afterward, and nothing can restore the capability.
+        be frozen afterward, and nothing can restore the capability. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
       parameters:
       - description: Cluster name
         in: header
@@ -7374,8 +7659,14 @@ paths:
     post:
       consumes:
       - application/json
-      description: Hands freeze_authority to new_authority. The current authority
-        must be the mint's existing freeze_authority exactly.
+      description: Hands freeze_authority to new_freeze_authority. freeze_authority
+        must be the mint's existing freeze_authority exactly. recent_blockhash is
+        always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
       parameters:
       - description: Cluster name
         in: header
@@ -7415,7 +7706,13 @@ paths:
       - application/json
       description: 'Clears mint_authority to None. This caps the supply forever: the
         program accepts a None mint_authority, and once it is None nothing can ever
-        sign as that authority again to restore it.'
+        sign as that authority again to restore it. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
       parameters:
       - description: Cluster name
         in: header
@@ -7453,9 +7750,14 @@ paths:
     post:
       consumes:
       - application/json
-      description: Hands mint_authority to new_authority. The current authority must
+      description: Hands mint_authority to new_mint_authority. mint_authority must
         be the mint's existing mint_authority exactly; there is no delegate concept
-        for this role.
+        for this role. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
       parameters:
       - description: Cluster name
         in: header
@@ -7493,10 +7795,16 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Hands the account to new_authority. The current authority must
-        be the account''s existing owner exactly, never a delegate. There is no clear
-        variant: the owner field has no None representation on chain, and the program
-        rejects one.'
+      description: 'Hands token_account to new_token_account_owner. token_account_owner
+        must be token_account''s existing owner exactly, never a delegate. There is
+        no clear variant: the owner field has no None representation on chain, and
+        the program rejects one. recent_blockhash is always required and is never
+        fetched server-side. Left alone, it also builds the message and expires whenever
+        the runtime says it does. Naming durable_nonce_account builds the message
+        against the value that account stores instead, so the transaction never expires,
+        and prepends the advance that consumes it; recent_blockhash then only prices
+        the transaction. The response reports nonce_authority in that case, which
+        has to sign as well.'
       parameters:
       - description: Cluster name
         in: header
@@ -7535,8 +7843,14 @@ paths:
       consumes:
       - application/json
       description: Reverses FreezeAccount, letting transfer, burn, and approve resume
-        against the account. The authority is the mint's freeze authority, the same
-        rule FreezeAccount applies.
+        against token_account. freeze_authority is the mint's freeze authority, the
+        same rule FreezeAccount applies. recent_blockhash is always required and is
+        never fetched server-side. Left alone, it also builds the message and expires
+        whenever the runtime says it does. Naming durable_nonce_account builds the
+        message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
       parameters:
       - description: Cluster name
         in: header

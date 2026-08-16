@@ -3515,7 +3515,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/freeze-account": {
             "post": {
-                "description": "Freezes a token account, so it rejects transfer, burn, and approve until thawed. The authority is the mint's freeze authority, not the account's owner or any delegate: freezing is a mint-level power to suspend any account holding it, on a different axis from who may spend a balance. Only works on a mint that was initialized with a freeze authority.",
+                "description": "Freezes token_account, so it rejects transfer, burn, and approve until thawed. freeze_authority is the mint's freeze authority, not the account's owner or any delegate: freezing is a mint-level power to suspend any account holding it, on a different axis from who may spend a balance. Only works on a mint that was initialized with a freeze authority. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3686,7 +3686,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/set-authority/close/clear": {
             "post": {
-                "description": "Clears close_authority to None. This is recoverable: the owner never goes away, and close-account already falls back to the owner when no close authority is set, so clearing this only reverts to that default.",
+                "description": "Clears close_authority to None. This is recoverable: the owner never goes away, and close-account already falls back to the owner when no close authority is set, so clearing this only reverts to that default. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3743,7 +3743,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/set-authority/close/replace": {
             "post": {
-                "description": "Hands close_authority to new_authority. The current authority is whichever one is already recorded: the account's close authority if one is set, otherwise its owner, the same rule close-account itself checks.",
+                "description": "Hands token_account_close_authority to new_token_account_close_authority. token_account_close_authority is whichever one is already recorded: the account's close authority if one is set, otherwise its owner, the same rule close-account itself checks. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3800,7 +3800,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/set-authority/freeze/clear": {
             "post": {
-                "description": "Clears freeze_authority to None. No holder of this mint can ever be frozen afterward, and nothing can restore the capability.",
+                "description": "Clears freeze_authority to None. No holder of this mint can ever be frozen afterward, and nothing can restore the capability. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3857,7 +3857,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/set-authority/freeze/replace": {
             "post": {
-                "description": "Hands freeze_authority to new_authority. The current authority must be the mint's existing freeze_authority exactly.",
+                "description": "Hands freeze_authority to new_freeze_authority. freeze_authority must be the mint's existing freeze_authority exactly. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3914,7 +3914,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/set-authority/mint/clear": {
             "post": {
-                "description": "Clears mint_authority to None. This caps the supply forever: the program accepts a None mint_authority, and once it is None nothing can ever sign as that authority again to restore it.",
+                "description": "Clears mint_authority to None. This caps the supply forever: the program accepts a None mint_authority, and once it is None nothing can ever sign as that authority again to restore it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -3971,7 +3971,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/set-authority/mint/replace": {
             "post": {
-                "description": "Hands mint_authority to new_authority. The current authority must be the mint's existing mint_authority exactly; there is no delegate concept for this role.",
+                "description": "Hands mint_authority to new_mint_authority. mint_authority must be the mint's existing mint_authority exactly; there is no delegate concept for this role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4028,7 +4028,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/set-authority/owner/replace": {
             "post": {
-                "description": "Hands the account to new_authority. The current authority must be the account's existing owner exactly, never a delegate. There is no clear variant: the owner field has no None representation on chain, and the program rejects one.",
+                "description": "Hands token_account to new_token_account_owner. token_account_owner must be token_account's existing owner exactly, never a delegate. There is no clear variant: the owner field has no None representation on chain, and the program rejects one. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -4085,7 +4085,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/thaw-account": {
             "post": {
-                "description": "Reverses FreezeAccount, letting transfer, burn, and approve resume against the account. The authority is the mint's freeze authority, the same rule FreezeAccount applies.",
+                "description": "Reverses FreezeAccount, letting transfer, burn, and approve resume against token_account. freeze_authority is the mint's freeze authority, the same rule FreezeAccount applies. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -6189,19 +6189,23 @@ const docTemplate = `{
         "v2.FreezeAccountRequest": {
             "type": "object",
             "properties": {
-                "account": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
-                "authority": {
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "fee_payer": {
+                "freeze_authority": {
+                    "description": "FreezeAuthority must be Mint's freeze authority exactly.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
+                    "description": "Mint is what TokenAccount must hold, and is the source of the freeze\nauthority checked against.",
                     "type": "string",
                     "example": ""
                 },
@@ -6212,32 +6216,36 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "nonce_account": {
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
                     "example": ""
                 },
-                "program": {
+                "token_account": {
+                    "description": "TokenAccount is suspended. It must already exist, hold Mint, and not\nalready be frozen.",
                     "type": "string",
-                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    "example": ""
                 }
             }
         },
         "v2.FreezeAccountResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "freeze_authority": {
                     "type": "string"
                 },
                 "message": {
@@ -6260,6 +6268,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "token_account": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -6459,15 +6470,13 @@ const docTemplate = `{
         "v2.SetAccountOwnerReplaceRequest": {
             "type": "object",
             "properties": {
-                "account": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
-                "authority": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -6478,42 +6487,49 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "new_authority": {
-                    "type": "string",
-                    "example": ""
-                },
-                "nonce_account": {
+                "new_token_account_owner": {
+                    "description": "NewTokenAccountOwner replaces TokenAccountOwner entirely.",
                     "type": "string",
                     "example": ""
                 },
                 "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "token_account": {
+                    "description": "TokenAccount is handed to NewTokenAccountOwner. It must already exist.",
+                    "type": "string",
+                    "example": ""
+                },
+                "token_account_owner": {
+                    "description": "TokenAccountOwner must be TokenAccount's current owner exactly, never\na delegate: a delegate has no authority over the account itself, only\nover what it was allowed to spend.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
         "v2.SetAccountOwnerReplaceResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
                 },
-                "new_authority": {
+                "new_token_account_owner": {
                     "type": "string"
                 },
                 "nonce_authority": {
@@ -6530,6 +6546,12 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "token_account": {
+                    "type": "string"
+                },
+                "token_account_owner": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -6539,15 +6561,13 @@ const docTemplate = `{
         "v2.SetCloseAuthorityClearRequest": {
             "type": "object",
             "properties": {
-                "account": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
-                "authority": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -6558,36 +6578,42 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "nonce_account": {
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
                     "example": ""
                 },
-                "program": {
+                "token_account": {
+                    "description": "TokenAccount has its close authority cleared. It must already exist.",
                     "type": "string",
-                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    "example": ""
+                },
+                "token_account_close_authority": {
+                    "description": "TokenAccountCloseAuthority must be TokenAccount's current close\nauthority exactly: its owner, unless a close authority is already set,\nin which case it must be that instead.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
         "v2.SetCloseAuthorityClearResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "cleared": {
                     "type": "boolean"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -6606,6 +6632,12 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "token_account": {
+                    "type": "string"
+                },
+                "token_account_close_authority": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"
@@ -6615,15 +6647,13 @@ const docTemplate = `{
         "v2.SetCloseAuthorityReplaceRequest": {
             "type": "object",
             "properties": {
-                "account": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
-                "authority": {
-                    "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
-                },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -6634,42 +6664,49 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "new_authority": {
-                    "type": "string",
-                    "example": ""
-                },
-                "nonce_account": {
+                "new_token_account_close_authority": {
+                    "description": "NewTokenAccountCloseAuthority replaces TokenAccountCloseAuthority\nentirely.",
                     "type": "string",
                     "example": ""
                 },
                 "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "token_account": {
+                    "description": "TokenAccount has its close authority replaced. It must already exist.",
+                    "type": "string",
+                    "example": ""
+                },
+                "token_account_close_authority": {
+                    "description": "TokenAccountCloseAuthority must be TokenAccount's current close\nauthority exactly: its owner, unless a close authority is already set,\nin which case it must be that instead.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 }
             }
         },
         "v2.SetCloseAuthorityReplaceResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
                 },
-                "new_authority": {
+                "new_token_account_close_authority": {
                     "type": "string"
                 },
                 "nonce_authority": {
@@ -6687,6 +6724,12 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "token_account": {
+                    "type": "string"
+                },
+                "token_account_close_authority": {
+                    "type": "string"
+                },
                 "transaction": {
                     "type": "string"
                 }
@@ -6695,11 +6738,18 @@ const docTemplate = `{
         "v2.SetFreezeAuthorityClearRequest": {
             "type": "object",
             "properties": {
-                "authority": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "fee_payer": {
+                "freeze_authority": {
+                    "description": "FreezeAuthority must be Mint's current freeze authority exactly.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -6714,13 +6764,15 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "nonce_account": {
-                    "type": "string",
-                    "example": ""
-                },
                 "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a mint\nbelongs to exactly one of the two forever.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
                 }
             }
         },
@@ -6733,13 +6785,13 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "cleared": {
                     "type": "boolean"
                 },
                 "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "freeze_authority": {
                     "type": "string"
                 },
                 "message": {
@@ -6771,11 +6823,18 @@ const docTemplate = `{
         "v2.SetFreezeAuthorityReplaceRequest": {
             "type": "object",
             "properties": {
-                "authority": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "fee_payer": {
+                "freeze_authority": {
+                    "description": "FreezeAuthority must be Mint's current freeze authority exactly.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
@@ -6790,17 +6849,20 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "new_authority": {
-                    "type": "string",
-                    "example": ""
-                },
-                "nonce_account": {
+                "new_freeze_authority": {
+                    "description": "NewFreezeAuthority replaces FreezeAuthority entirely.",
                     "type": "string",
                     "example": ""
                 },
                 "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a mint\nbelongs to exactly one of the two forever.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
                 }
             }
         },
@@ -6813,10 +6875,10 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "freeze_authority": {
                     "type": "string"
                 },
                 "message": {
@@ -6825,7 +6887,7 @@ const docTemplate = `{
                 "mint": {
                     "type": "string"
                 },
-                "new_authority": {
+                "new_freeze_authority": {
                     "type": "string"
                 },
                 "nonce_authority": {
@@ -6851,17 +6913,24 @@ const docTemplate = `{
         "v2.SetMintAuthorityClearRequest": {
             "type": "object",
             "properties": {
-                "authority": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                    "example": ""
                 },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
                     "type": "string",
                     "example": ""
+                },
+                "mint_authority": {
+                    "description": "MintAuthority must be Mint's current mint authority exactly.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "multisig_signers": {
                     "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
@@ -6870,13 +6939,15 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "nonce_account": {
-                    "type": "string",
-                    "example": ""
-                },
                 "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a mint\nbelongs to exactly one of the two forever.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
                 }
             }
         },
@@ -6889,19 +6960,19 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "cleared": {
                     "type": "boolean"
                 },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
                 },
                 "mint": {
+                    "type": "string"
+                },
+                "mint_authority": {
                     "type": "string"
                 },
                 "nonce_authority": {
@@ -6927,17 +6998,24 @@ const docTemplate = `{
         "v2.SetMintAuthorityReplaceRequest": {
             "type": "object",
             "properties": {
-                "authority": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
-                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                    "example": ""
                 },
                 "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
                     "type": "string",
                     "example": ""
+                },
+                "mint_authority": {
+                    "description": "MintAuthority must be Mint's current mint authority exactly.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "multisig_signers": {
                     "description": "MultisigSigners is empty for a single-signer authority. Non-empty, the\nauthority itself does not sign; the named members do, in its place.",
@@ -6946,17 +7024,20 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "new_authority": {
-                    "type": "string",
-                    "example": ""
-                },
-                "nonce_account": {
+                "new_mint_authority": {
+                    "description": "NewMintAuthority replaces MintAuthority entirely; it is not required to\nsign, since InitializeMint2-style authority changes only record the\nnew value rather than checking it against a signer.",
                     "type": "string",
                     "example": ""
                 },
                 "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a mint\nbelongs to exactly one of the two forever.",
                     "type": "string",
                     "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
                 }
             }
         },
@@ -6969,11 +7050,8 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "fee": {
-                    "type": "string"
+                    "$ref": "#/definitions/v2.SystemPayer"
                 },
                 "message": {
                     "type": "string"
@@ -6981,7 +7059,10 @@ const docTemplate = `{
                 "mint": {
                     "type": "string"
                 },
-                "new_authority": {
+                "mint_authority": {
+                    "type": "string"
+                },
+                "new_mint_authority": {
                     "type": "string"
                 },
                 "nonce_authority": {
@@ -8536,19 +8617,23 @@ const docTemplate = `{
         "v2.ThawAccountRequest": {
             "type": "object",
             "properties": {
-                "account": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
-                "authority": {
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
-                "fee_payer": {
+                "freeze_authority": {
+                    "description": "FreezeAuthority must be Mint's freeze authority exactly.",
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "mint": {
+                    "description": "Mint is what TokenAccount must hold, and is the source of the freeze\nauthority checked against.",
                     "type": "string",
                     "example": ""
                 },
@@ -8559,32 +8644,36 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "nonce_account": {
+                "program": {
+                    "description": "Program names the account to send the instruction to: classic Token or\nToken-2022. It is required rather than defaulted, since a token\naccount belongs to exactly one of the two forever.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
                     "example": ""
                 },
-                "program": {
+                "token_account": {
+                    "description": "TokenAccount is resumed. It must already exist, hold Mint, and\ncurrently be frozen.",
                     "type": "string",
-                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                    "example": ""
                 }
             }
         },
         "v2.ThawAccountResponse": {
             "type": "object",
             "properties": {
-                "account": {
-                    "type": "string"
-                },
                 "account_keys": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
                 },
-                "authority": {
-                    "type": "string"
-                },
                 "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "freeze_authority": {
                     "type": "string"
                 },
                 "message": {
@@ -8607,6 +8696,9 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "token_account": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"

@@ -1114,6 +1114,735 @@ func NewInitializeAccount3Response(
 	}
 }
 
+// InitializeWrappedSolRequest is InitializeAccount3Request with mint fixed
+// to whichever mint Program's own native mint is, rather than taken from the
+// request.
+//
+// There is no separate create-wrapped-sol or wrap-sol composite: this pairs
+// with create-kta/create-ata the same way initialize-account3 does, and
+// funding it is a plain system/transfer followed by sync-native — nothing
+// about wrapping SOL needs an instruction bundle of its own. Classic Token's
+// native mint is the fixed NativeMintID; Token-2022's is a separate address
+// derived as its own PDA (see core.token.NativeMint), never the same as
+// classic's, since a wrapped-SOL account under one program can never hold
+// the other's native mint.
+type InitializeWrappedSolRequest struct {
+	// TokenAccount is the account initialized. It must already exist, must
+	// be owned by Program, and must be at least 165 bytes and uninitialized.
+	TokenAccount string `json:"token_account" example:"Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo"`
+
+	// Owner is who can transfer, unwrap, or otherwise authorize spending
+	// from TokenAccount. It is not required to sign this transaction:
+	// InitializeAccount3 only records it, it does not check it against a
+	// signer.
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token
+	// or Token-2022. It also selects which native mint TokenAccount is
+	// initialized against — the two programs never share one.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount   *types.PublicKey
+	owner          *types.PublicKey
+	feePayer       *types.PublicKey
+	rbh            *types.Hash
+	dna            *types.PublicKey
+	tokenProgramID *types.PublicKey
+}
+
+func (r *InitializeWrappedSolRequest) ValidateRequest() error {
+	var err error
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *InitializeWrappedSolRequest) TokenAccountKey() *types.PublicKey {
+	return r.tokenAccount
+}
+
+func (r *InitializeWrappedSolRequest) OwnerKey() *types.PublicKey {
+	return r.owner
+}
+
+func (r *InitializeWrappedSolRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *InitializeWrappedSolRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+
+func (r *InitializeWrappedSolRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *InitializeWrappedSolRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// InitializeWrappedSolResponse mirrors InitializeAccount3Response, reporting
+// the resolved Mint since the request never names one.
+type InitializeWrappedSolResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	TokenAccount string `json:"token_account"`
+	Mint         string `json:"mint"`
+	Owner        string `json:"owner"`
+	Program      string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewInitializeWrappedSolResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, tokenAccount, mint, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *InitializeWrappedSolResponse {
+	authority := ""
+	if !nonceAuthority.IsNil() {
+		authority = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &InitializeWrappedSolResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  authority,
+		TokenAccount:    tokenAccount.Base58(),
+		Mint:            mint.Base58(),
+		Owner:           owner.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// SyncNativeRequest recomputes a wrapped-SOL account's token balance from
+// its lamports.
+//
+// A wrapped-SOL account's amount is not the same field as its lamports:
+// lamports can change independently, by a plain System transfer landing on
+// the account directly (funding it further, the way any account can be
+// funded), and nothing updates amount when that happens. This is the only
+// instruction that reconciles the two. There is no authority: recomputing a
+// derived value from what the account already holds needs nobody's
+// permission, the same way reading a balance needs none.
+type SyncNativeRequest struct {
+	// TokenAccount must already exist, be owned by Program, and actually be
+	// a wrapped-SOL account — the program rejects one that is not.
+	TokenAccount string `json:"token_account" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token or
+	// Token-2022.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount   *types.PublicKey
+	feePayer       *types.PublicKey
+	rbh            *types.Hash
+	dna            *types.PublicKey
+	tokenProgramID *types.PublicKey
+}
+
+func (r *SyncNativeRequest) ValidateRequest() error {
+	var err error
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SyncNativeRequest) TokenAccountKey() *types.PublicKey {
+	return r.tokenAccount
+}
+
+func (r *SyncNativeRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *SyncNativeRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+
+func (r *SyncNativeRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *SyncNativeRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// SyncNativeResponse reports EstimatedAmount, computed client-side as
+// TokenAccount's lamports minus its stored rent-exempt reserve at read time
+// — an estimate, not the value the program itself will use, since lamports
+// could change again before this lands.
+type SyncNativeResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	TokenAccount string `json:"token_account"`
+	Mint         string `json:"mint"`
+	Program      string `json:"program"`
+
+	EstimatedAmount SystemPayer `json:"estimated_amount"`
+	Fee             SystemPayer `json:"fee"`
+}
+
+func NewSyncNativeResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, tokenAccount, mint, tokenProgram, nonceAuthority *types.PublicKey,
+	estimatedAmount, fee uint64,
+) *SyncNativeResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SyncNativeResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		TokenAccount:    tokenAccount.Base58(),
+		Mint:            mint.Base58(),
+		Program:         tokenProgram.Base58(),
+		EstimatedAmount: newSystemPayer(tokenAccount, estimatedAmount),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// UnwrapLamportsRequest pulls exactly Amount lamports directly out of a
+// wrapped-SOL account without closing it.
+//
+// Unlike close-account, source_token_account is never consumed: it stays
+// exactly as it was, still rent-exempt and still wrapping whatever is left.
+// The instruction's amount is an optional u64 on the wire (a one-byte tag,
+// not the 4-byte COption tag older instructions use); this endpoint always
+// sends it present, and unwrap-lamports/max always sends it absent, rather
+// than one endpoint whose meaning changes with an empty field.
+// source_token_account_authority is source_token_account's owner, or its
+// delegate for no more than what was delegated — spending wrapped SOL out as
+// raw lamports is a spend, so it follows the same rule as transfer-checked
+// and burn-checked rather than close-account's
+// close_authority.unwrap_or(owner).
+type UnwrapLamportsRequest struct {
+	// SourceTokenAccount is debited and never closed. It must already
+	// exist, be owned by Program, and actually be a wrapped-SOL account.
+	SourceTokenAccount string `json:"source_token_account" example:""`
+
+	// DestinationTokenAccount receives the unwrapped lamports directly, as
+	// plain SOL rather than tokens — it need not be a token account at all.
+	DestinationTokenAccount string `json:"destination_token_account" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// SourceTokenAccountAuthority is SourceTokenAccount's owner, or its
+	// delegate for no more than what was delegated.
+	SourceTokenAccountAuthority string `json:"source_token_account_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Amount is the raw base-unit (lamport) count to unwrap, not a UI
+	// decimal string.
+	Amount string `json:"amount" example:"250000"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token
+	// or Token-2022.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	sourceTokenAccount          *types.PublicKey
+	destinationTokenAccount     *types.PublicKey
+	sourceTokenAccountAuthority *types.PublicKey
+	feePayer                    *types.PublicKey
+	rbh                         *types.Hash
+	dna                         *types.PublicKey
+	tokenProgramID              *types.PublicKey
+	multisigSigners             []*types.PublicKey
+	amount                      uint64
+}
+
+func (r *UnwrapLamportsRequest) ValidateRequest() error {
+	var err error
+	if r.sourceTokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.SourceTokenAccount)); err != nil {
+		return errors.New("source_token_account: " + err.Error())
+	}
+	if r.destinationTokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.DestinationTokenAccount)); err != nil {
+		return errors.New("destination_token_account: " + err.Error())
+	}
+	if r.sourceTokenAccount.Equal(r.destinationTokenAccount) {
+		return errors.New("source_token_account and destination_token_account are the same account")
+	}
+	if r.sourceTokenAccountAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.SourceTokenAccountAuthority)); err != nil {
+		return errors.New("source_token_account_authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: must be a decimal base-unit count")
+	}
+	if r.amount == 0 {
+		return errors.New("amount: must be greater than zero")
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *UnwrapLamportsRequest) SourceTokenAccountKey() *types.PublicKey {
+	return r.sourceTokenAccount
+}
+func (r *UnwrapLamportsRequest) DestinationTokenAccountKey() *types.PublicKey {
+	return r.destinationTokenAccount
+}
+func (r *UnwrapLamportsRequest) SourceTokenAccountAuthorityKey() *types.PublicKey {
+	return r.sourceTokenAccountAuthority
+}
+func (r *UnwrapLamportsRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *UnwrapLamportsRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *UnwrapLamportsRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *UnwrapLamportsRequest) TokenProgramID() *types.PublicKey      { return r.tokenProgramID }
+func (r *UnwrapLamportsRequest) ToMultisigSigners() []*types.PublicKey { return r.multisigSigners }
+func (r *UnwrapLamportsRequest) ToAmount() uint64                      { return r.amount }
+
+// UnwrapLamportsResponse reports the caller-given Amount, since that is
+// exactly what the instruction was built to move.
+type UnwrapLamportsResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	SourceTokenAccount          string      `json:"source_token_account"`
+	DestinationTokenAccount     string      `json:"destination_token_account"`
+	SourceTokenAccountAuthority string      `json:"source_token_account_authority"`
+	Program                     string      `json:"program"`
+	Amount                      SystemPayer `json:"amount"`
+	Fee                         SystemPayer `json:"fee"`
+}
+
+func NewUnwrapLamportsResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, sourceTokenAccount, destinationTokenAccount, sourceTokenAccountAuthority, tokenProgram, nonceAuthority *types.PublicKey,
+	amount, fee uint64,
+) *UnwrapLamportsResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &UnwrapLamportsResponse{
+		Transaction:                 codec.Base64.Encode(raw),
+		Message:                     codec.Base64.Encode(message),
+		RecentBlockhash:             tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                 keys,
+		Signers:                     signers,
+		NonceAuthority:              nonceAuth,
+		SourceTokenAccount:          sourceTokenAccount.Base58(),
+		DestinationTokenAccount:     destinationTokenAccount.Base58(),
+		SourceTokenAccountAuthority: sourceTokenAccountAuthority.Base58(),
+		Program:                     tokenProgram.Base58(),
+		Amount:                      newSystemPayer(destinationTokenAccount, amount),
+		Fee:                         newSystemPayer(feePayer, fee),
+	}
+}
+
+// UnwrapLamportsMaxRequest pulls a wrapped-SOL account's entire balance out
+// as lamports without closing it.
+//
+// Same as UnwrapLamportsRequest, except the instruction's amount goes out
+// absent, which the program reads as the whole wrapped balance. The account
+// is left holding exactly its rent-exempt reserve, still initialized and
+// still wrapped SOL, ready to be funded again — which is what separates this
+// from close-account.
+type UnwrapLamportsMaxRequest struct {
+	// SourceTokenAccount is debited and never closed. It must already
+	// exist, be owned by Program, and actually be a wrapped-SOL account.
+	SourceTokenAccount string `json:"source_token_account" example:""`
+
+	// DestinationTokenAccount receives the unwrapped lamports directly, as
+	// plain SOL rather than tokens — it need not be a token account at all.
+	DestinationTokenAccount string `json:"destination_token_account" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// SourceTokenAccountAuthority is SourceTokenAccount's owner, or its
+	// delegate for no more than what was delegated.
+	SourceTokenAccountAuthority string `json:"source_token_account_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token
+	// or Token-2022.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	sourceTokenAccount          *types.PublicKey
+	destinationTokenAccount     *types.PublicKey
+	sourceTokenAccountAuthority *types.PublicKey
+	feePayer                    *types.PublicKey
+	rbh                         *types.Hash
+	dna                         *types.PublicKey
+	tokenProgramID              *types.PublicKey
+	multisigSigners             []*types.PublicKey
+}
+
+func (r *UnwrapLamportsMaxRequest) ValidateRequest() error {
+	var err error
+	if r.sourceTokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.SourceTokenAccount)); err != nil {
+		return errors.New("source_token_account: " + err.Error())
+	}
+	if r.destinationTokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.DestinationTokenAccount)); err != nil {
+		return errors.New("destination_token_account: " + err.Error())
+	}
+	if r.sourceTokenAccount.Equal(r.destinationTokenAccount) {
+		return errors.New("source_token_account and destination_token_account are the same account")
+	}
+	if r.sourceTokenAccountAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.SourceTokenAccountAuthority)); err != nil {
+		return errors.New("source_token_account_authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *UnwrapLamportsMaxRequest) SourceTokenAccountKey() *types.PublicKey {
+	return r.sourceTokenAccount
+}
+func (r *UnwrapLamportsMaxRequest) DestinationTokenAccountKey() *types.PublicKey {
+	return r.destinationTokenAccount
+}
+func (r *UnwrapLamportsMaxRequest) SourceTokenAccountAuthorityKey() *types.PublicKey {
+	return r.sourceTokenAccountAuthority
+}
+func (r *UnwrapLamportsMaxRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *UnwrapLamportsMaxRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *UnwrapLamportsMaxRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *UnwrapLamportsMaxRequest) TokenProgramID() *types.PublicKey      { return r.tokenProgramID }
+func (r *UnwrapLamportsMaxRequest) ToMultisigSigners() []*types.PublicKey { return r.multisigSigners }
+
+// UnwrapLamportsMaxResponse reports EstimatedAmount, source_token_account's
+// wrapped balance at read time: the program decides the real figure when
+// this lands, and the balance could change before then.
+type UnwrapLamportsMaxResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	SourceTokenAccount          string      `json:"source_token_account"`
+	DestinationTokenAccount     string      `json:"destination_token_account"`
+	SourceTokenAccountAuthority string      `json:"source_token_account_authority"`
+	Program                     string      `json:"program"`
+	EstimatedAmount             SystemPayer `json:"estimated_amount"`
+	Fee                         SystemPayer `json:"fee"`
+}
+
+func NewUnwrapLamportsMaxResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, sourceTokenAccount, destinationTokenAccount, sourceTokenAccountAuthority, tokenProgram, nonceAuthority *types.PublicKey,
+	amount, fee uint64,
+) *UnwrapLamportsMaxResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &UnwrapLamportsMaxResponse{
+		Transaction:                 codec.Base64.Encode(raw),
+		Message:                     codec.Base64.Encode(message),
+		RecentBlockhash:             tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                 keys,
+		Signers:                     signers,
+		NonceAuthority:              nonceAuth,
+		SourceTokenAccount:          sourceTokenAccount.Base58(),
+		DestinationTokenAccount:     destinationTokenAccount.Base58(),
+		SourceTokenAccountAuthority: sourceTokenAccountAuthority.Base58(),
+		Program:                     tokenProgram.Base58(),
+		EstimatedAmount:             newSystemPayer(destinationTokenAccount, amount),
+		Fee:                         newSystemPayer(feePayer, fee),
+	}
+}
+
 // InitializeMultisigRequest turns an already-existing, correctly sized,
 // Token-owned account into a multisig, using the original opcode that
 // carries the rent sysvar as a read-only account alongside the multisig.

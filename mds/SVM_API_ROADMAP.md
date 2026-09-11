@@ -12,9 +12,6 @@ account model -> deterministic addresses -> assets -> application state
 
 ## Current Status
 
-Core and endpoints had come apart around Token's freeze and thaw builders, the
-same shape the first lifecycle was in before it shipped; that gap is closed.
-
 System Program's field-fidelity pass is done. Every endpoint plays one role per
 role name: a low-level API plays one role per endpoint, so
 `transfer`/`transfer/max`/`transfer/spread`/`transfer/collect` all require both
@@ -110,24 +107,15 @@ The unchecked classic opcodes are live too: `transfer`, `approve`, `mint-to`,
 field at all — resolving mint server-side from the account instead — since
 neither is named or verified against the accounts on chain, which is exactly
 the failure mode the checked variants exist to catch.
-`initialize-immutable-owner` is Token-2022-only: the classic Token Program's
-deployed instruction processor has no arm for this opcode, so `program` is
-restricted to Token-2022 here rather than accepting either, unlike every
-other endpoint. It also has to run before `initialize-account*`, never after
-— the program requires the base layout to still be `Uninitialized` when an
-extension attaches — and this is checked client-side as a 400 by decoding
-just the base 165 bytes, the same "is this already initialized" question
-`initialize-mint*`/`initialize-account*` already answer for themselves.
-
-Getting there also fixed a real bug shared by all five `initialize-mint*`/
-`initialize-account*` endpoints: each required its target account to be
-*exactly* 82 or 165 bytes, which silently rejected every Token-2022 account
-with extension space appended past the base layout (a 170-byte
-immutable-owner account, for instance). The check is now "at least" that
-many bytes, and the two `DeserializeMint`/`DeserializeTokenAccount` calls
-that used to receive the whole account buffer now receive only the base
-slice (`raw[:core.MintSpace]`/`raw[:core.TokenAccountSpace]`), so extension
-bytes past it are never mistaken for base-layout fields.
+`initialize-immutable-owner` attaches the extension on Token-2022 and is a
+documented no-op on classic Token, which keeps it only so the ATA program can
+call it on either. The endpoint currently accepts only Token-2022 for
+`program`; that restriction was built on a mistaken belief that classic Token
+has no handler for the opcode, and should be lifted. On both programs it has to
+run before `initialize-account*`, never after, and this is checked client-side
+as a 400 by decoding just the base 165 bytes, the same "is this already
+initialized" question `initialize-mint*`/`initialize-account*` already answer
+for themselves.
 
 What is not caught client-side: `set-authority/owner/replace` (and any other
 endpoint touching a property an extension can override) has no way to tell
@@ -172,12 +160,43 @@ separate call to pair with it, so the `authority` field was dropped from
 `nonce/create-account` entirely rather than newly built. `system/seed/create-account`
 needed no equivalent change: it was already creation-only.
 
+Token's native SOL group is live: `initialize-wrapped-sol`, `sync-native`,
+`unwrap-lamports`, and `unwrap-lamports/max`, all confirmed on devnet against
+Token-2022. `create-wrapped-sol` and `wrap-sol` were dropped rather than built,
+since every step they would have bundled already exists — create the account
+with `create-kta`/`create-ata`, initialize it with `initialize-wrapped-sol`,
+fund it with `system/transfer`, and reconcile with `sync-native`.
+`initialize-wrapped-sol` is `InitializeAccount3` with the mint fixed to the
+program's own native mint: classic Token's is the well-known constant, and
+Token-2022's is a separate PDA of the Token-2022 program from the seed
+`native-mint`, `9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP`, which devnet
+confirmed by parsing an account initialized against it as `isNative: true`.
+`unwrap-lamports` takes lamports out of a wrapped-SOL account without closing
+it; its instruction has an optional amount, which this surface splits into a
+required-amount path and `/max` rather than one endpoint whose meaning turns on
+an empty field.
+
+`unwrap-lamports` also repeated a mistake `TOKEN_API_PROPOSAL.md` had already
+documented once. An optional value in *instruction* data takes a one-byte tag;
+the 4-byte `COption` tag belongs to *account* layouts only. The amount was
+first written with the account-layout writer, which passed a full unwrap (the
+first tag byte is zero, so it read as `None`) and failed a partial one as
+`InsufficientFunds`, because the three remaining tag bytes shifted into the
+amount and turned 10,000 into 167,772,160,000. The rule is now stated for any
+optional value, not just public keys, and the upstream doc comment for each
+instruction states its tag width.
+
+Rent-exemption minimums are cluster parameters and differ between clusters: on
+the same day a zero-byte account's minimum was 810,624 lamports on mainnet and
+650,240 on devnet, and neither is the 890,880 that older material quotes. Every
+endpoint asks the cluster for the figure it needs rather than carrying one.
+
 | Group                     | Core    | Endpoints | Notes                                                                       |
 |---------------------------|---------|-----------|-----------------------------------------------------------------------------|
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion, account/authority |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi/batch/collect transfer, field-fidelity pass done |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts; first used by ATA   |
-| SPL Token classic         | done    | done      | lifecycle (create-only + initialize-* pairing), delegation, 7 set-authority, freeze/thaw, max variants, multisig lifecycle, unchecked opcodes (+max), initialize-immutable-owner, and withdraw-excess-lamports all live; native SOL and read-return-data next |
+| SPL Token classic         | done    | done      | lifecycle (create-only + initialize-* pairing), delegation, 7 set-authority, freeze/thaw, max variants, multisig lifecycle, unchecked opcodes (+max), initialize-immutable-owner, withdraw-excess-lamports, and native SOL all live; read-return-data and batch open |
 | Associated Token Account  | done    | done      | create, create-idempotent, transfer-from-ata (+max); recover-nested deferred |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
@@ -195,7 +214,8 @@ System (done)
 -> SPL Token classic delegation and administration (done)
 -> SPL Token classic multisig lifecycle (done)
 -> SPL Token classic compatibility opcodes (done)
--> SPL Token classic native SOL and read-return-data  <- here
+-> SPL Token classic native SOL (done)
+-> SPL Token classic read-return-data and batch  <- here
 -> Vault custom program
 -> Compute Budget
 -> Address Lookup Table
@@ -316,15 +336,16 @@ It covers minting, holder accounts, transfer, delegation, burning, authority
 changes, freezing, multisig, wrapped SOL, and return-data utilities.
 
 Core, the first lifecycle, delegation, and the multisig lifecycle are done:
-the four layouts (mint, token account, nonce, multisig) parse, all 25 classic
-opcodes are declared, and create-mint, create-kta, mint-to-checked,
+the four layouts (mint, token account, nonce, multisig) parse, every opcode
+from 0 to 46 plus 255 is declared (the Token-2022-only ones for reference), and create-mint, create-kta, mint-to-checked,
 transfer-checked (+max), burn-checked (+max), close-account,
 approve-checked (+max), revoke, seven set-authority endpoints,
 freeze-account, thaw-account, create-multisig, initialize-mint,
 initialize-mint2, initialize-account, initialize-account2,
 initialize-account3, initialize-multisig, initialize-multisig2, transfer
-(+max), approve (+max), mint-to, burn (+max), and initialize-immutable-owner
-are all live under `/svm/v2/transaction/token/`, alongside the reads at
+(+max), approve (+max), mint-to, burn (+max), initialize-immutable-owner,
+withdraw-excess-lamports, initialize-wrapped-sol, sync-native, and
+unwrap-lamports (+max) are all live under `/svm/v2/transaction/token/`, alongside the reads at
 `/svm/token/mint`, `/svm/token/account`, and `/svm/account/tokens`. Every one
 of them checks what a live cluster would reject before building the
 instruction — decimals against the mint, an account's mint against the
@@ -348,13 +369,13 @@ blind about what actually moved. transfer, approve, and burn round out with
 `/max` sweep variants matching their checked counterparts; mint-to has no
 `/max`, since supply has no balance to sweep.
 
-initialize-immutable-owner is Token-2022-only: the classic Token Program's
-deployed instruction processor has no arm for this opcode at all, so
-`program` is restricted to Token-2022 specifically here, unlike every other
-endpoint's either-program rule. It has to run before initialize-account*, not
-after — the program requires the base layout to still be Uninitialized when
-an extension attaches — which is checked client-side as a 400 the same way
-initialize-mint*/initialize-account* check their own "already initialized"
+initialize-immutable-owner attaches the extension on Token-2022 and is a
+documented no-op on classic Token, kept there so the ATA program can call it on
+either. The endpoint currently accepts only Token-2022, a restriction built on a
+mistaken belief that classic Token had no handler for it; it should be lifted.
+It has to run before initialize-account*, not after — both programs reject it on
+an account already initialized — which is checked client-side as a 400 the same
+way initialize-mint*/initialize-account* check their own "already initialized"
 question, by decoding just the base 165 bytes. What is not caught anywhere
 client-side is the reverse direction: set-authority/owner/replace (and
 anything else touching a property an extension can override) has no way to
@@ -386,21 +407,22 @@ Token-owned account holds beyond its own rent-exemption minimum without
 consuming the account the way close-account does — a plain System transfer
 landing on a mint, token account, or multisig by mistake is the ordinary way
 one ends up overfunded, since System's own Transfer takes any account
-regardless of who owns it. It works generically across all three account
-kinds, so its `account`/`authority` fields stay deliberately unqualified
-rather than named `token_account`/`token_account_authority`: which role
-authority actually has to satisfy depends on which of the three account is
-(a mint's close authority extension, a token account's
-close_authority.unwrap_or(owner), or a multisig's own enrolled signers), and
-this endpoint has no Token-2022 extension parser to resolve that ahead of
-time, so a wrong authority still fails on chain rather than as a 400. The
-opcode itself remains unverified pending a live-cluster check — it was
-implemented on the strength of `TOKEN_API_PROPOSAL.md`'s existing opcode
-number (38) rather than confirmed sent successfully yet.
+regardless of who owns it. It works across all three account kinds, so its
+`account`/`authority` fields stay deliberately unqualified rather than named
+`token_account`/`token_account_authority`. Upstream documents the authority
+only as "owner/delegate"; which key that resolves to for each kind is not
+settled client-side, so a wrong one fails on chain rather than as a 400. It has
+not been sent against a live cluster yet.
 
-Still open here: the return-data/native-SOL utilities (`account-data-size`,
-`amount-to-ui`, `ui-to-amount`, wrapped SOL) and the one remaining unverified
-opcode, `batch`. Detailed coverage:
+The native SOL group — initialize-wrapped-sol, sync-native, and
+unwrap-lamports (+max) — is covered in Current Status above; its step-by-step
+account flow, and why create-wrapped-sol and wrap-sol were dropped, is in
+`TOKEN_API_PROPOSAL.md`.
+
+Still open here: the return-data utilities (`account-data-size`,
+`amount-to-ui`, `ui-to-amount`), a live send of `withdraw-excess-lamports`,
+lifting `initialize-immutable-owner`'s Token-2022-only restriction, and
+`batch`, last. Detailed coverage:
 
 ~~~
 TOKEN_API_PROPOSAL.md
@@ -506,7 +528,7 @@ carrying a different id. Every classic builder already reaches it, because the
 opcodes, account orders, and base layouts are byte for byte identical. Live
 Token-2022 accounts parse from their first 165 bytes, which was confirmed. So
 these do not need their own endpoints at all — they are the classic ones with a
-`token_program` field:
+`program` field:
 
 ~~~
 token-2022/create-mint
@@ -526,7 +548,13 @@ token-2022/extensions/get
 Sizes stop being constants here, which is the real break. A classic mint is 82
 bytes and a classic token account is 165; a Token-2022 account is that plus a
 type byte and a list of extension records, so rent, parsing, and `create` all
-have to measure rather than assume.
+have to measure rather than assume. Part of that is already in place: size
+checks are "at least" the base, only the base slice is decoded, and an extended
+account whose type byte reads `Uninitialized` is recognized as such. What is
+missing is walking the extension records themselves, which is why an
+extension-imposed precondition such as `ImmutableOwner` still only fails on
+chain. Token-2022's native mint is also its own PDA rather than classic's
+constant, which `initialize-wrapped-sol` already resolves.
 
 Then choose extensions deliberately:
 
@@ -555,10 +583,10 @@ actually shows. The case for leaving it where it is won: Metaplex Token
 Metadata is a different program with its own account layout and its own
 serialization, Borsh rather than this project's short-vec bincode, so it is a
 second thing to learn rather than another instruction on a program already
-understood. Groups 5 and 6 — delegation, freeze, and the compatibility
-opcodes — are still the classic Token surface; finishing that before starting
-a new program's serialization is the more valuable ordering, even though it
-delays the part a screenshot would show off first.
+understood. Finishing the classic Token surface — delegation, freeze, the
+compatibility opcodes, and native SOL, all now done — before starting a new
+program's serialization was the more valuable ordering, even though it delayed
+the part a screenshot would show off first.
 
 Candidate APIs:
 
@@ -753,9 +781,10 @@ without either side deriving an address by hand, close what is left empty,
 and hand authority to an m-of-n multisig instead of a single wallet. The
 unchecked opcodes (transfer/approve/mint-to/burn, +max) and
 initialize-immutable-owner are live too, alongside the checked variants they
-exist to guard against. What is not in this milestone — the
-return-data/native-SOL utilities — is TOKEN_API_PROPOSAL.md's next step, not
-a gap in this one.
+exist to guard against, and so is native SOL: wrap SOL into a token account,
+sync it, and unwrap part or all of it without closing the account. What is not
+in this milestone — the return-data utilities and batch — is
+TOKEN_API_PROPOSAL.md's next step, not a gap in this one.
 
 ### Milestone B: Program-Controlled Assets
 
@@ -797,21 +826,21 @@ The following is the broad candidate catalogue beyond the APIs implemented so
 far. It intentionally includes both the recommended application path and
 lower-priority compatibility, inspection, and protocol-completeness APIs.
 
-### Token wrapped SOL
-
-`token/freeze-account` and `token/thaw-account` are done — see group 3 above.
-Still open:
+### Token wrapped SOL — done
 
 ~~~text
-token/create-wrapped-sol
-token/wrap-sol
-token/sync-native
-token/unwrap-lamports
+token/initialize-wrapped-sol      done
+token/sync-native                 done
+token/unwrap-lamports             done
+token/unwrap-lamports/max         done
+token/create-wrapped-sol          dropped: create-kta/create-ata + initialize-wrapped-sol
+token/wrap-sol                    dropped: system/transfer + sync-native
 ~~~
 
-`token/close-account` already unwraps a normal wrapped-SOL account by closing
-it. `unwrap-lamports` should only be exposed after confirming the deployed
-program accepts it on Devnet.
+`token/close-account` still unwraps a wrapped-SOL account by closing it;
+`unwrap-lamports` is the counterpart that leaves the account in place. Both
+unwrap paths were sent on devnet against Token-2022; neither has been sent to
+classic Token.
 
 ### Classic Token compatibility and low-level instructions
 
@@ -820,7 +849,7 @@ program accepts it on Devnet.
 `token/initialize-multisig`, `token/initialize-multisig2`, `token/transfer`
 (+max), `token/approve` (+max), `token/mint-to`, `token/burn` (+max),
 `token/initialize-immutable-owner`, and `token/withdraw-excess-lamports` are
-done — see group 3 above. Still open:
+built — see group 3 above. Still open:
 
 ~~~text
 token/account-data-size
@@ -830,11 +859,10 @@ token/batch
 ~~~
 
 Checked variants remain the normal public path. This group is mainly for
-learning, backwards compatibility, and custom composition. Confirm unverified
-opcodes (`unwrap-lamports`, `withdraw-excess-lamports`, and `batch`) against a
-live cluster before treating them as reliable — `withdraw-excess-lamports` is
-implemented on the strength of its documented opcode number (38) alone, not
-a confirmed successful send yet.
+learning, backwards compatibility, and custom composition. Of the three
+opcodes the interface crate lists past 24, `unwrap-lamports` (45) is now
+confirmed on devnet; `withdraw-excess-lamports` (38) is built but not yet
+sent; `batch` (255) is not built.
 
 ### ATA helpers
 
@@ -1050,7 +1078,7 @@ convenience wrapper. Belongs in a later, more composed API generation
 ## Recommended expanded sequence
 
 ~~~text
-Token native SOL, wrapped SOL, and read-return-data
+Token read-return-data and batch
 -> PDA HTTP utilities
 -> transaction composer and Compute Budget
 -> Vault program
@@ -1061,7 +1089,7 @@ Token native SOL, wrapped SOL, and read-return-data
 -> Loader / deployment
 ~~~
 
-Vault may move ahead of the remaining legacy compatibility instructions when
-the goal is to exercise PDA signing in a real application. At the Token/Vault
-boundary, add Devnet E2E tests for complete flows; the current `go test` run
-compiles packages but does not yet execute repository test cases.
+Vault may move ahead of the remaining return-data instructions and batch when
+the goal is to exercise PDA signing in a real application. Verification stays
+what it has been throughout: each endpoint is signed, sent against devnet, and
+the affected accounts read back, rather than covered by a test suite.

@@ -2678,6 +2678,85 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.InitializeWrappedSolRequest:
+    properties:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      owner:
+        description: |-
+          Owner is who can transfer, unwrap, or otherwise authorize spending
+          from TokenAccount. It is not required to sign this transaction:
+          InitializeAccount3 only records it, it does not check it against a
+          signer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token
+          or Token-2022. It also selects which native mint TokenAccount is
+          initialized against — the two programs never share one.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      token_account:
+        description: |-
+          TokenAccount is the account initialized. It must already exist, must
+          be owned by Program, and must be at least 165 bytes and uninitialized.
+        example: Cc81es6UdN5EwjE27Pv4ZFaQhd6yh4XG5n11SNd8pmxo
+        type: string
+    type: object
+  v2.InitializeWrappedSolResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
+      transaction:
+        type: string
+    type: object
   v2.MintToCheckedRequest:
     properties:
       amount:
@@ -3554,6 +3633,76 @@ definitions:
         items:
           type: string
         type: array
+      transaction:
+        type: string
+    type: object
+  v2.SyncNativeRequest:
+    properties:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token or
+          Token-2022.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      token_account:
+        description: |-
+          TokenAccount must already exist, be owned by Program, and actually be
+          a wrapped-SOL account — the program rejects one that is not.
+        example: ""
+        type: string
+    type: object
+  v2.SyncNativeResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      estimated_amount:
+        $ref: '#/definitions/v2.SystemPayer'
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      token_account:
+        type: string
       transaction:
         type: string
     type: object
@@ -5881,6 +6030,194 @@ definitions:
       message:
         type: string
       mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      source_token_account:
+        type: string
+      source_token_account_authority:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.UnwrapLamportsMaxRequest:
+    properties:
+      destination_token_account:
+        description: |-
+          DestinationTokenAccount receives the unwrapped lamports directly, as
+          plain SOL rather than tokens — it need not be a token account at all.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token
+          or Token-2022.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      source_token_account:
+        description: |-
+          SourceTokenAccount is debited and never closed. It must already
+          exist, be owned by Program, and actually be a wrapped-SOL account.
+        example: ""
+        type: string
+      source_token_account_authority:
+        description: |-
+          SourceTokenAccountAuthority is SourceTokenAccount's owner, or its
+          delegate for no more than what was delegated.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.UnwrapLamportsMaxResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      destination_token_account:
+        type: string
+      estimated_amount:
+        $ref: '#/definitions/v2.SystemPayer'
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      source_token_account:
+        type: string
+      source_token_account_authority:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.UnwrapLamportsRequest:
+    properties:
+      amount:
+        description: |-
+          Amount is the raw base-unit (lamport) count to unwrap, not a UI
+          decimal string.
+        example: "250000"
+        type: string
+      destination_token_account:
+        description: |-
+          DestinationTokenAccount receives the unwrapped lamports directly, as
+          plain SOL rather than tokens — it need not be a token account at all.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program names the account to send the instruction to: classic Token
+          or Token-2022.
+        example: TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      source_token_account:
+        description: |-
+          SourceTokenAccount is debited and never closed. It must already
+          exist, be owned by Program, and actually be a wrapped-SOL account.
+        example: ""
+        type: string
+      source_token_account_authority:
+        description: |-
+          SourceTokenAccountAuthority is SourceTokenAccount's owner, or its
+          delegate for no more than what was delegated.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.UnwrapLamportsResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      amount:
+        $ref: '#/definitions/v2.SystemPayer'
+      destination_token_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
         type: string
       nonce_authority:
         type: string
@@ -9536,6 +9873,57 @@ paths:
       summary: Initialize an already-existing account as a Token multisig
       tags:
       - v2-transaction-token-multisig
+  /svm/v2/transaction/token/initialize-wrapped-sol:
+    post:
+      consumes:
+      - application/json
+      description: 'Raw InitializeAccount3 with mint fixed to program''s own native
+        mint, rather than taken from the request. Classic Token''s native mint is
+        the fixed well-known address; Token-2022''s is a separate PDA, resolved here
+        rather than hardcoded. There is no create-wrapped-sol or wrap-sol composite:
+        this pairs with create-kta/create-ata the same way initialize-account3 does,
+        and funding it is a plain system/transfer followed by sync-native. token_account
+        must already exist, be owned by program, be at least 165 bytes (Token-2022
+        extensions may make it larger), and be uninitialized. recent_blockhash is
+        always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Initialize-wrapped-sol parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializeWrappedSolRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializeWrappedSolResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Initialize an already-existing account as a wrapped-SOL holder account
+      tags:
+      - v2-transaction-token-token-account
   /svm/v2/transaction/token/mint-to:
     post:
       consumes:
@@ -9998,6 +10386,60 @@ paths:
       summary: Replace a token account's owner
       tags:
       - v2-transaction-token-authority
+  /svm/v2/transaction/token/sync-native:
+    post:
+      consumes:
+      - application/json
+      description: 'A wrapped-SOL account''s amount is not the same field as its lamports:
+        lamports can change independently, by a plain System transfer landing on the
+        account directly, and nothing updates amount when that happens. This is the
+        only instruction that reconciles the two, setting amount to lamports minus
+        the rent-exempt reserve. token_account must already exist, be owned by program,
+        and actually be a wrapped-SOL account — the program rejects one that is not,
+        and this endpoint checks the same thing client-side. There is no authority:
+        recomputing a derived value from what the account already holds needs nobody''s
+        permission. estimated_amount in the response is exactly that — an estimate
+        computed from the account''s lamports at read time, not the value the program
+        itself will use, which is computed fresh at landing time. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Sync-native parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SyncNativeRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SyncNativeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Recompute a wrapped-SOL account's token balance from its lamports
+      tags:
+      - v2-transaction-token-token-account
   /svm/v2/transaction/token/thaw-account:
     post:
       consumes:
@@ -10347,6 +10789,117 @@ paths:
         opcode)
       tags:
       - v2-transaction-token-transfer
+  /svm/v2/transaction/token/unwrap-lamports:
+    post:
+      consumes:
+      - application/json
+      description: 'Unlike close-account, source_token_account is never consumed:
+        it stays exactly as it was, still rent-exempt and still wrapping whatever
+        is left — the partial counterpart to closing a wrapped-SOL account entirely.
+        The instruction''s amount is an optional u64 with a one-byte tag, not the
+        4-byte COption tag older instructions use; this endpoint always sends it present,
+        and unwrap-lamports/max always sends it absent. amount must not exceed the
+        wrapped balance. source_token_account_authority must be its owner, or its
+        delegate for no more than the delegated amount — spending wrapped SOL out
+        as raw lamports is a spend, not a close, the same axis transfer-checked and
+        burn-checked use rather than close-account''s close_authority.unwrap_or(owner).
+        source_token_account must already exist, be owned by program, and actually
+        be a wrapped-SOL account. destination_token_account receives the unwrapped
+        lamports directly as SOL, not tokens; it need not be a token account at all.
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        account stores instead, so the transaction never expires, and prepends the
+        advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Unwrap-lamports parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.UnwrapLamportsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.UnwrapLamportsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Pull exactly amount lamports out of a wrapped-SOL account without closing
+        it
+      tags:
+      - v2-transaction-token-token-account
+  /svm/v2/transaction/token/unwrap-lamports/max:
+    post:
+      consumes:
+      - application/json
+      description: Same as unwrap-lamports, except the instruction's amount goes out
+        absent, which the program reads as the whole wrapped balance. source_token_account
+        is left holding exactly its rent-exempt reserve, still initialized and still
+        wrapped SOL, ready to be funded again — which is what separates this from
+        close-account. source_token_account_authority must be its owner, or its delegate
+        approved for at least the whole balance. estimated_amount in the response
+        is the wrapped balance at read time; the program computes the real figure
+        when this lands. source_token_account must already exist, be owned by program,
+        and actually be a wrapped-SOL account. destination_token_account receives
+        the unwrapped lamports directly as SOL, not tokens; it need not be a token
+        account at all. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Unwrap-lamports parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.UnwrapLamportsMaxRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.UnwrapLamportsMaxResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Pull a wrapped-SOL account's entire balance out as lamports without
+        closing it
+      tags:
+      - v2-transaction-token-token-account
   /svm/v2/transaction/token/withdraw-excess-lamports:
     post:
       consumes:

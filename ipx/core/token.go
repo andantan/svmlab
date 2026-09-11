@@ -682,6 +682,35 @@ func (t *token) ID() *types.PublicKey {
 	return t.id
 }
 
+// Token2022NativeMintSeed is the seed CreateNativeMint derives Token-2022's
+// wrapped-SOL mint from, as a PDA of the Token-2022 program itself. A PDA is
+// the only address a program can create without a private key, which is why
+// Token-2022 needs one at all rather than reusing classic Token's fixed
+// NativeMintID: each program can only ever create its own. Unverified
+// against a live cluster; confirm the derived address before relying on it.
+var Token2022NativeMintSeed = []byte("native-mint")
+
+// NativeMint returns the mint that stands in for wrapped SOL under this
+// program.
+//
+// Classic Token has exactly one, the fixed NativeMintID. Token-2022 has its
+// own, separate address, derived here rather than hardcoded since it comes
+// from a PDA rather than a well-known constant. The two are never
+// interchangeable: a wrapped-SOL account under one program can never hold
+// the other's native mint.
+func (t *token) NativeMint() (*types.PublicKey, error) {
+	if t.id.Equal(TokenProgramID) {
+		return NativeMintID, nil
+	}
+
+	mint, _, err := PDA.Find([][]byte{Token2022NativeMintSeed}, t.id)
+	if err != nil {
+		return nil, fmt.Errorf("token native mint: %w", err)
+	}
+
+	return mint, nil
+}
+
 // appendAuthority adds the accounts that authorize an instruction.
 //
 // A single authority signs for itself. A multisig authority does not sign at
@@ -924,6 +953,89 @@ func (t *token) InitializeImmutableOwner(account *types.PublicKey) (*types.Instr
 	return types.NewInstruction(t.id, types.NewAccounts(
 		types.NewWritableAccount(account),
 	), data), nil
+}
+
+// SyncNative recomputes a wrapped-SOL account's token balance from its
+// lamports.
+//
+// A wrapped-SOL account's Amount is not the same field as its lamports:
+// lamports can change independently, by a plain System transfer landing on
+// the account directly, and nothing updates Amount when that happens.
+// SyncNative is the only instruction that reconciles the two, setting Amount
+// to lamports minus the rent-exempt reserve.
+//
+// There is no authority. Recomputing a derived value from what the account
+// already holds needs nobody's permission — anyone may call this on any
+// wrapped-SOL account, the same way reading a balance needs no permission.
+// The program itself rejects an account that is not IsNative, so nothing
+// about that is checked here either.
+func (t *token) SyncNative(account *types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token sync native: account is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionSyncNative)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(account),
+	), data), nil
+}
+
+// UnwrapLamports pulls lamports directly out of a wrapped-SOL account
+// without closing it.
+//
+// Unlike CloseAccount, source is never consumed: it stays exactly as it was,
+// still rent-exempt and still holding whatever wrapped balance remains after
+// amount is removed. This is the partial counterpart to closing a
+// wrapped-SOL account entirely, the same way withdraw-excess-lamports is the
+// partial counterpart to closing an overfunded one.
+//
+// authority is source's owner, or its delegate for no more than what was
+// delegated — spending wrapped SOL out as raw lamports is a spend, so it
+// follows the same authorization rule as Transfer and Burn rather than
+// close-account's close_authority.unwrap_or(owner).
+//
+// Unverified against a live cluster.
+// amount is an optional u64: nil unwraps source's entire wrapped balance, a
+// non-nil value unwraps exactly that many lamports.
+//
+// The option tag is one byte, not the 4-byte COption tag the older
+// instructions and the account layouts use. A 4-byte tag was tried first
+// and only looked right when absent: its leading zero byte read as None,
+// but a present one pushed three zero tag bytes into the front of the u64,
+// so Some(10000) arrived as 0x2710000000 and failed as InsufficientFunds.
+// The payload is written even when absent, zero-filled — the program was
+// seen to accept trailing bytes after a None tag, so this is the one shape
+// that is valid whether it reads a fixed width or stops at the tag.
+func (t *token) UnwrapLamports(source, destination, authority *types.PublicKey, signers []*types.PublicKey, amount *uint64) (*types.Instruction, error) {
+	if source.IsNil() {
+		return nil, fmt.Errorf("token unwrap lamports: source is required")
+	}
+	if destination.IsNil() {
+		return nil, fmt.Errorf("token unwrap lamports: destination is required")
+	}
+	if source.Equal(destination) {
+		return nil, fmt.Errorf("token unwrap lamports: source and destination are the same account")
+	}
+	if err := validateAuthority("token unwrap lamports", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionUnwrapLamports)
+	if amount == nil {
+		data = codec.Binary.AppendU8(data, 0)
+		data = codec.Binary.AppendU64(data, 0)
+	} else {
+		data = codec.Binary.AppendU8(data, 1)
+		data = codec.Binary.AppendU64(data, *amount)
+	}
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(source),
+		types.NewWritableAccount(destination),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
 }
 
 // InitializeMultisig turns an existing Token-owned account of the right size

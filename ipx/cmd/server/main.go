@@ -66,6 +66,10 @@ func run() error {
 		tokenHandler := token.NewTokenHandler()
 		r.Post("/mint", tokenHandler.Mint)
 		r.Post("/account", tokenHandler.Account)
+		r.Post("/ata/derive", tokenHandler.ATADerive)
+		r.Post("/ata/validate", tokenHandler.ATAValidate)
+		r.Post("/amount-to-ui", tokenHandler.AmountToUi)
+		r.Post("/ui-to-amount", tokenHandler.UiToAmount)
 	})
 
 	r.Route("/svm/cluster", func(r chi.Router) {
@@ -196,6 +200,7 @@ func run() error {
 			r.Post("/withdraw-excess-lamports", tk.WithdrawExcessLamports)
 			r.Post("/create-ata", tk.CreateATA)
 			r.Post("/create-ata-idempotent", tk.CreateATAIdempotent)
+			r.Post("/ata/recover-nested", tk.ATARecoverNested)
 			r.Post("/transfer-from-ata", tk.TransferFromATA)
 			r.Post("/transfer-from-ata/max", tk.TransferFromATAMax)
 			r.Post("/approve-checked", tk.ApproveChecked)

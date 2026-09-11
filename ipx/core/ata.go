@@ -104,6 +104,70 @@ func (_ *ata) CreateIdempotent(payer, wallet, mint, tokenProgramID *types.Public
 	return types.NewInstruction(AssociatedTokenProgramID, accounts, data), nil
 }
 
+// RecoverNested moves tokens out of a nested associated token account and
+// closes it, both in the same instruction.
+//
+// A nested account exists when an associated account was mistakenly treated
+// as if it were a wallet: deriving from it as the "wallet" seed produces a
+// real address, the same way any wallet's does, and something funded and
+// initialized it there instead of at the actual owner's associated account
+// for that mint. This is the recovery for that mistake alone; it is not a
+// close instruction for an ordinary associated account, which close-account
+// already covers.
+//
+// Three addresses are derived, none of them a request field, the same
+// discipline every other ATA instruction follows: ownerAccount is wallet's
+// associated account for ownerMint (the one mistaken for a wallet), nested
+// is ownerAccount's own associated account for nestedMint (the mistake
+// itself), and destination is wallet's real associated account for
+// nestedMint, which is where nested's balance ends up. wallet signs, since
+// closing nested pays its reclaimed lamports there and only the real owner
+// may authorize that.
+func (_ *ata) RecoverNested(wallet, ownerMint, nestedMint, tokenProgramID *types.PublicKey) (*types.Instruction, error) {
+	if wallet.IsNil() {
+		return nil, fmt.Errorf("ata recover nested: wallet is required")
+	}
+	if ownerMint.IsNil() {
+		return nil, fmt.Errorf("ata recover nested: owner mint is required")
+	}
+	if nestedMint.IsNil() {
+		return nil, fmt.Errorf("ata recover nested: nested mint is required")
+	}
+	if ownerMint.Equal(nestedMint) {
+		return nil, fmt.Errorf("ata recover nested: owner mint and nested mint are the same account")
+	}
+	if tokenProgramID.IsNil() {
+		return nil, fmt.Errorf("ata recover nested: token program is required")
+	}
+
+	ownerAccount, _, err := ATA.Derive(wallet, ownerMint, tokenProgramID)
+	if err != nil {
+		return nil, fmt.Errorf("ata recover nested: owner account: %w", err)
+	}
+	nested, _, err := ATA.Derive(ownerAccount, nestedMint, tokenProgramID)
+	if err != nil {
+		return nil, fmt.Errorf("ata recover nested: nested account: %w", err)
+	}
+	destination, _, err := ATA.Derive(wallet, nestedMint, tokenProgramID)
+	if err != nil {
+		return nil, fmt.Errorf("ata recover nested: destination account: %w", err)
+	}
+
+	data := codec.Binary.AppendU8(nil, ATAInstructionRecoverNested)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(nested),
+		types.NewReadonlyAccount(nestedMint),
+		types.NewWritableAccount(destination),
+		types.NewReadonlyAccount(ownerAccount),
+		types.NewReadonlyAccount(ownerMint),
+		types.NewWritableSignerAccount(wallet),
+		types.NewReadonlyAccount(tokenProgramID),
+	)
+
+	return types.NewInstruction(AssociatedTokenProgramID, accounts, data), nil
+}
+
 // ataAccounts lays out the account list both creates share.
 //
 // The order is the instruction's entire interface, since neither create sends

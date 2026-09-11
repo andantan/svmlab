@@ -164,6 +164,25 @@ func SOLSimulateTransaction(tx string, sigVerify bool, c Commitment, result *Res
 	}
 }
 
+// SOLSimulateTransactionReplaceBlockhash simulates a transaction that was
+// never signed and never meant to be sent — one built only to read whatever
+// return data it produces. sigVerify and replaceRecentBlockhash are mutually
+// exclusive on the RPC side, so this is always sigVerify: false; the node
+// substitutes its own current blockhash before execution, so the message
+// passed in may carry any 32 bytes in that field, real or not.
+func SOLSimulateTransactionReplaceBlockhash(tx string, c Commitment, result *Result[SimulateValue]) Elem {
+	return Elem{
+		Method: "simulateTransaction",
+		Params: []any{tx, map[string]any{
+			"encoding":               "base64",
+			"commitment":             c,
+			"sigVerify":              false,
+			"replaceRecentBlockhash": true,
+		}},
+		Result: result,
+	}
+}
+
 func SOLGetSignatureStatuses(signatures []string, searchHistory bool, result *Result[[]*SignatureStatus]) Elem {
 	return Elem{
 		Method: "getSignatureStatuses",

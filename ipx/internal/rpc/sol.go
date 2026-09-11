@@ -163,11 +163,37 @@ type SimulateValue struct {
 	Err           json.RawMessage `json:"err"`
 	Logs          []string        `json:"logs"`
 	UnitsConsumed *uint64         `json:"unitsConsumed"`
+	ReturnData    *ReturnData     `json:"returnData"`
 }
 
 // Failed reports whether the simulated execution failed.
 func (v *SimulateValue) Failed() bool {
 	return len(v.Err) > 0 && string(v.Err) != "null"
+}
+
+// DecodedReturnData decodes ReturnData's payload, or reports nil, nil when
+// the simulated instruction never called sol_set_return_data at all — a
+// program that returns nothing is not an error, so a caller distinguishes
+// "no return data" from "empty return data" by nil-ness rather than length.
+func (v *SimulateValue) DecodedReturnData() ([]byte, error) {
+	if v.ReturnData == nil {
+		return nil, nil
+	}
+	if v.ReturnData.Data[1] != "base64" {
+		return nil, fmt.Errorf("simulate: return data encoding %q is not base64", v.ReturnData.Data[1])
+	}
+
+	return codec.Base64.Decode(v.ReturnData.Data[0])
+}
+
+// ReturnData is what a program last passed to sol_set_return_data during
+// simulation, still in its wire shape: Data is a two-element
+// [payload, encoding] pair rather than a plain string, mirroring how
+// accountInfo encodes account data, so Encoding is checked instead of
+// assumed.
+type ReturnData struct {
+	ProgramId string    `json:"programId"`
+	Data      [2]string `json:"data"`
 }
 
 func (c *Client) GenesisHash(ctx context.Context) (string, error) {
@@ -432,6 +458,22 @@ func (c *Client) SimulateTransaction(ctx context.Context, tx *types.Transaction,
 func (c *Client) SimulateRawTransaction(ctx context.Context, raw []byte, sigVerify bool, commitment Commitment) (*SimulateValue, error) {
 	var result Result[SimulateValue]
 	if err := c.Call(ctx, SOLSimulateTransaction(codec.Base64.Encode(raw), sigVerify, commitment, &result)); err != nil {
+		return nil, err
+	}
+
+	return &result.Value, nil
+}
+
+// SimulateUnsignedTransaction simulates a transaction that carries no real
+// signatures and no real recent blockhash — built purely to read whatever
+// return data it produces, never to be sent. The node replaces the
+// blockhash with its own current one and skips signature verification
+// entirely, so raw needs only to be well-formed: the right number of empty
+// signature slots for its account keys, and any 32 bytes where a blockhash
+// goes.
+func (c *Client) SimulateUnsignedTransaction(ctx context.Context, raw []byte, commitment Commitment) (*SimulateValue, error) {
+	var result Result[SimulateValue]
+	if err := c.Call(ctx, SOLSimulateTransactionReplaceBlockhash(codec.Base64.Encode(raw), commitment, &result)); err != nil {
 		return nil, err
 	}
 

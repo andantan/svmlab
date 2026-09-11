@@ -2296,7 +2296,7 @@ func (h *TokenTransactionHandler) InitializeMultisig2(w http.ResponseWriter, r *
 
 // InitializeImmutableOwner godoc
 // @Summary      Permanently lock a token account's owner field
-// @Description  Locks token_account's owner field against SetAuthority forever. This is a Token-2022 extension instruction: it needs extension space appended after the classic 165-byte layout, and the classic Token Program has no instruction-processor arm for this opcode at all, so program must be Token-2022. token_account must already exist, be owned by program, be at least 165 bytes, and — critically — still be Uninitialized at the base layout: the program itself requires extensions to attach before initialize-account*/initialize-mint* commits the account, not after, so this has to run first or it fails on chain. Whether the extension space itself is actually reserved is not verified here (Token-2022 extension TLV parsing is its own separate undertaking), so that specific mismatch still fails on chain rather than as a 400. There is no authority: nothing about locking the owner field needs proving. The Associated Token Account program calls this automatically on every Token-2022 ATA it creates, before its own initialize-account3 equivalent. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Locks token_account's owner field against SetAuthority forever. This is a Token-2022 extension: it needs extension space appended after the classic 165-byte layout, which classic Token accounts never have. On Token-2022 this attaches the real extension; on classic Token, upstream documents this opcode as a no-op, kept only so the Associated Token Account program can call it on either program without branching, so program accepts either. token_account must already exist, be owned by program, be at least 165 bytes, and — critically — still be Uninitialized at the base layout: the program itself requires extensions to attach before initialize-account*/initialize-mint* commits the account, not after, so this has to run first or it fails on chain. Whether the extension space itself is actually reserved is not verified here (Token-2022 extension TLV parsing is its own separate undertaking), so that specific mismatch still fails on chain rather than as a 400. There is no authority: nothing about locking the owner field needs proving. The Associated Token Account program calls this automatically on every account it creates, regardless of program, before its own initialize-account3 equivalent. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-token-account
 // @Accept       json
 // @Produce      json
@@ -6664,6 +6664,168 @@ func (h *TokenTransactionHandler) CreateATAIdempotent(w http.ResponseWriter, r *
 		tx, raw, messageBytes,
 		req.RentPayerKey(), req.FeePayerKey(), associatedTokenAccount, req.OwnerKey(), req.MintKey(), req.TokenProgramID(), nonceAuthority,
 		bump, rentExempt, fee,
+	))
+}
+
+// ATARecoverNested godoc
+// @Summary      Recover a nested associated token account
+// @Description  Moves the balance out of a nested associated token account — one created by mistakenly deriving from another associated account as if it were a wallet — into wallet's real associated account for the same mint, and closes the nested one. Three addresses are derived internally, none are request fields: owner_account is wallet's associated account for owner_mint (the one mistaken for a wallet), nested_account is owner_account's own associated account for nested_mint (the mistake itself, being closed), and destination is wallet's real associated account for nested_mint (where the balance and reclaimed rent both end up). wallet signs, since only the real owner may authorize closing an account that pays its lamports back there. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-ata
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                      true  "Cluster name"
+// @Param        X-Chain-Network  header    string                      true  "Cluster network"
+// @Param        body             body      ATARecoverNestedRequest     true  "Recovery parameters"
+// @Success      200              {object}  ATARecoverNestedResponse
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/ata/recover-nested [post]
+func (h *TokenTransactionHandler) ATARecoverNested(w http.ResponseWriter, r *http.Request) {
+	req := new(ATARecoverNestedRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	ownerAccount, _, err := core.ATA.Derive(req.WalletKey(), req.OwnerMintKey(), req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	nestedAccount, _, err := core.ATA.Derive(ownerAccount, req.NestedMintKey(), req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	destination, _, err := core.ATA.Derive(req.WalletKey(), req.NestedMintKey(), req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{req.FeePayerKey()}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	ix, err := core.ATA.RecoverNested(req.WalletKey(), req.OwnerMintKey(), req.NestedMintKey(), req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := types.NewInstructions(ix)
+
+	// Without a nonce the message is built against the blockhash resolved
+	// above and expires with it. With one it is built against the value that
+	// account stores and never expires, so which constructor runs is the
+	// whole difference between the two.
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		// A nonce is not among the cluster's recent blockhashes, so pricing the
+		// real message comes back as expired. The fee follows from the
+		// signature count and any compute budget instructions, never from the
+		// blockhash, so the same shape against a live one prices it exactly.
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: balance %d does not cover %d", feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: would leave %d lamports, below the %d lamport rent-exemption minimum", feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewATARecoverNestedResponse(
+		tx, raw, messageBytes,
+		req.FeePayerKey(), req.WalletKey(), req.OwnerMintKey(), req.NestedMintKey(), req.TokenProgramID(), nonceAuthority,
+		ownerAccount, nestedAccount, destination,
+		fee,
 	))
 }
 

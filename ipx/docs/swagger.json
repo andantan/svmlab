@@ -1695,6 +1695,177 @@
                 }
             }
         },
+        "/svm/token/amount-to-ui": {
+            "post": {
+                "description": "Builds AmountToUiAmount and simulates it — never sends it, since it writes nothing. In this version of the program a mint can only specify decimals, so against a plain mint this is exactly amount / 10^decimals and could be computed without the network at all; it earns its keep only against a Token-2022 mint carrying the interest-bearing extension, where the true UI string includes interest accrued since the mint's last update and only the program can compute that. fee_payer is required even though nothing is ever sent: the node still checks the simulated payer can afford the fee before running the instruction.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "token"
+                ],
+                "summary": "Format a raw token amount as a UI string, using the mint's own program",
+                "parameters": [
+                    {
+                        "description": "Mint, raw amount, fee payer, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/token.AmountToUiRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/token.AmountToUiResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/token/ata/derive": {
+            "post": {
+                "description": "Returns the address create-ata and create-ata-idempotent will create and everything else in this API that takes owner + mint derives internally, plus the canonical bump: PDA.Find always searches from 255 downward and stops at the first off-curve point, which is not a choice — the Associated Token Account program recomputes and validates that same bump internally and accepts no other. This is a pure computation, not a chain read: it never checks whether the derived address actually exists.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "token"
+                ],
+                "summary": "Derive the canonical associated token account for a wallet and mint",
+                "parameters": [
+                    {
+                        "description": "Owner, mint, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/token.ATADeriveRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/token.ATADeriveResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/token/ata/validate": {
+            "post": {
+                "description": "Recomputes the associated token account for owner, mint, and program the same way ata/derive does, and compares it against associated_token_account. valid is true only when the two match exactly; derived is always returned so a caller who gets false back knows the right address without a second call. Like ata/derive, this never checks whether either address actually exists on chain — it is purely a derivation check.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "token"
+                ],
+                "summary": "Check a supplied address against the canonical associated token account",
+                "parameters": [
+                    {
+                        "description": "Owner, mint, program, and the address to check",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/token.ATAValidateRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/token.ATAValidateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/token/mint": {
             "post": {
                 "description": "Parses the 82 bytes a mint account holds. A mint is the closest thing Solana has to an ERC-20 contract, and what it lacks is the point: no balances and no allowances, since those live in separate token accounts owned by each holder. mint_authority and freeze_authority are omitted when absent, which is different from being the zero address; a mint whose mint authority was removed has a permanently fixed supply, and one initialized without a freeze authority can never gain one. Works for both classic Token and Token-2022, whose extensions sit past the base layout.",
@@ -1738,6 +1909,63 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/token.MintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/token/ui-to-amount": {
+            "post": {
+                "description": "Builds UiAmountToAmount and simulates it — never sends it, since it writes nothing. AmountToUi's inverse, for the same reason: against a plain mint this is a decimals multiply a client could do itself, and it earns its keep only against a Token-2022 mint carrying the interest-bearing extension. fee_payer is required even though nothing is ever sent: the node still checks the simulated payer can afford the fee before running the instruction.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "token"
+                ],
+                "summary": "Parse a UI amount string back into a raw token amount, using the mint's own program",
+                "parameters": [
+                    {
+                        "description": "Mint, UI amount string, fee payer, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/token.UiToAmountRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/token.UiToAmountResponse"
                         }
                     },
                     "400": {
@@ -3279,6 +3507,63 @@
                 }
             }
         },
+        "/svm/v2/transaction/token/ata/recover-nested": {
+            "post": {
+                "description": "Moves the balance out of a nested associated token account — one created by mistakenly deriving from another associated account as if it were a wallet — into wallet's real associated account for the same mint, and closes the nested one. Three addresses are derived internally, none are request fields: owner_account is wallet's associated account for owner_mint (the one mistaken for a wallet), nested_account is owner_account's own associated account for nested_mint (the mistake itself, being closed), and destination is wallet's real associated account for nested_mint (where the balance and reclaimed rent both end up). wallet signs, since only the real owner may authorize closing an account that pays its lamports back there. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-ata"
+                ],
+                "summary": "Recover a nested associated token account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Recovery parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ATARecoverNestedRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ATARecoverNestedResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/burn": {
             "post": {
                 "description": "Raw Burn, the original opcode: decimals is neither named nor verified against the mint. token_account_authority must be token_account's owner, or its delegate for no more than the delegated amount. This is for compatibility with the original opcode; burn-checked remains the normal public path. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -4079,7 +4364,7 @@
         },
         "/svm/v2/transaction/token/initialize-immutable-owner": {
             "post": {
-                "description": "Locks token_account's owner field against SetAuthority forever. This is a Token-2022 extension instruction: it needs extension space appended after the classic 165-byte layout, and the classic Token Program has no instruction-processor arm for this opcode at all, so program must be Token-2022. token_account must already exist, be owned by program, be at least 165 bytes, and — critically — still be Uninitialized at the base layout: the program itself requires extensions to attach before initialize-account*/initialize-mint* commits the account, not after, so this has to run first or it fails on chain. Whether the extension space itself is actually reserved is not verified here (Token-2022 extension TLV parsing is its own separate undertaking), so that specific mismatch still fails on chain rather than as a 400. There is no authority: nothing about locking the owner field needs proving. The Associated Token Account program calls this automatically on every Token-2022 ATA it creates, before its own initialize-account3 equivalent. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Locks token_account's owner field against SetAuthority forever. This is a Token-2022 extension: it needs extension space appended after the classic 165-byte layout, which classic Token accounts never have. On Token-2022 this attaches the real extension; on classic Token, upstream documents this opcode as a no-op, kept only so the Associated Token Account program can call it on either program without branching, so program accepts either. token_account must already exist, be owned by program, be at least 165 bytes, and — critically — still be Uninitialized at the base layout: the program itself requires extensions to attach before initialize-account*/initialize-mint* commits the account, not after, so this has to run first or it fails on chain. Whether the extension space itself is actually reserved is not verified here (Token-2022 extension TLV parsing is its own separate undertaking), so that specific mismatch still fails on chain rather than as a 400. There is no authority: nothing about locking the owner field needs proving. The Associated Token Account program calls this automatically on every account it creates, regardless of program, before its own initialize-account3 equivalent. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -6411,6 +6696,90 @@
                 }
             }
         },
+        "token.ATADeriveRequest": {
+            "type": "object",
+            "properties": {
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "token.ATADeriveResponse": {
+            "type": "object",
+            "properties": {
+                "associated_token_account": {
+                    "type": "string"
+                },
+                "bump": {
+                    "type": "integer"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                }
+            }
+        },
+        "token.ATAValidateRequest": {
+            "type": "object",
+            "properties": {
+                "associated_token_account": {
+                    "type": "string",
+                    "example": ""
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "owner": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "token.ATAValidateResponse": {
+            "type": "object",
+            "properties": {
+                "associated_token_account": {
+                    "type": "string"
+                },
+                "bump": {
+                    "type": "integer"
+                },
+                "derived": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "valid": {
+                    "type": "boolean"
+                }
+            }
+        },
         "token.AccountRequest": {
             "type": "object",
             "properties": {
@@ -6470,6 +6839,44 @@
                 }
             }
         },
+        "token.AmountToUiRequest": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "1000000"
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                }
+            }
+        },
+        "token.AmountToUiResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "ui_amount": {
+                    "type": "string"
+                }
+            }
+        },
         "token.MintRequest": {
             "type": "object",
             "properties": {
@@ -6513,6 +6920,44 @@
                     "type": "string"
                 },
                 "supply_ui": {
+                    "type": "string"
+                }
+            }
+        },
+        "token.UiToAmountRequest": {
+            "type": "object",
+            "properties": {
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "ui_amount": {
+                    "type": "string",
+                    "example": "1.5"
+                }
+            }
+        },
+        "token.UiToAmountResponse": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "ui_amount": {
                     "type": "string"
                 }
             }
@@ -6616,6 +7061,99 @@
                 "program_id": {
                     "type": "string",
                     "example": "11111111111111111111111111111111"
+                }
+            }
+        },
+        "v2.ATARecoverNestedRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. It may be the same\naccount as Wallet.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "nested_mint": {
+                    "description": "NestedMint is the mint of the nested account itself, the one being\nrecovered and closed. It must differ from OwnerMint.",
+                    "type": "string",
+                    "example": ""
+                },
+                "owner_mint": {
+                    "description": "OwnerMint is the mint of the associated account that was mistakenly\nused as a wallet — deriving Wallet's associated account for OwnerMint\nis what produced the address the nested account was wrongly created\nunder.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program is a seed of every derived address, so one wallet has\ndifferent owner, nested, and destination accounts for classic Token\nthan for Token-2022 over the same mints.",
+                    "type": "string",
+                    "example": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "wallet": {
+                    "description": "Wallet is the real owner, and the only one who signs: closing the\nnested account pays its reclaimed lamports back to Wallet's own\nassociated account for OwnerMint, so only the real owner may authorize\nthat.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.ATARecoverNestedResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nested_account": {
+                    "type": "string"
+                },
+                "nested_mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "owner_account": {
+                    "type": "string"
+                },
+                "owner_mint": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "wallet": {
+                    "type": "string"
                 }
             }
         },
@@ -8295,7 +8833,7 @@
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
                 "program": {
-                    "description": "Program must be the Token-2022 program address: this opcode does not\nexist on the classic Token Program.",
+                    "description": "Program names the account to send the instruction to: classic Token\nor Token-2022. On Token-2022 this attaches the real extension; on\nclassic Token it is a documented no-op, kept for compatibility with\nthe Associated Token Account program's own create flow.",
                     "type": "string",
                     "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
                 },
@@ -8305,7 +8843,7 @@
                     "example": ""
                 },
                 "token_account": {
-                    "description": "TokenAccount is the account whose owner field is locked. It must\nalready exist, be owned by Program, and carry the extension space this\ninstruction writes to — which this endpoint does not verify itself,\nsince parsing Token-2022 extension layouts is its own separate\nundertaking; a mismatch fails on chain instead.",
+                    "description": "TokenAccount is the account whose owner field is locked. It must\nalready exist, be owned by Program, and — on Token-2022 — carry the\nextension space this instruction writes to. This endpoint does not\nverify that itself, since parsing Token-2022 extension layouts is its\nown separate undertaking; a mismatch fails on chain instead.",
                     "type": "string",
                     "example": ""
                 }

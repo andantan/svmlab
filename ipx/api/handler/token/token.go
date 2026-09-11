@@ -7,6 +7,7 @@ import (
 
 	"github.com/andantan/svmlab/api/handler"
 	"github.com/andantan/svmlab/core"
+	"github.com/andantan/svmlab/core/codec"
 	"github.com/andantan/svmlab/core/types"
 	"github.com/andantan/svmlab/internal/rpc"
 )
@@ -141,4 +142,242 @@ func (h *TokenHandler) Account(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handler.WriteOK(w, NewAccountResponse(req.TokenAccountKey(), info.Owner, account, decimals))
+}
+
+// ATADerive godoc
+// @Summary      Derive the canonical associated token account for a wallet and mint
+// @Description  Returns the address create-ata and create-ata-idempotent will create and everything else in this API that takes owner + mint derives internally, plus the canonical bump: PDA.Find always searches from 255 downward and stops at the first off-curve point, which is not a choice — the Associated Token Account program recomputes and validates that same bump internally and accepts no other. This is a pure computation, not a chain read: it never checks whether the derived address actually exists.
+// @Tags         token
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ATADeriveRequest  true  "Owner, mint, and program"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ATADeriveResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/token/ata/derive [post]
+func (h *TokenHandler) ATADerive(w http.ResponseWriter, r *http.Request) {
+	req := new(ATADeriveRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	account, bump, err := core.ATA.Derive(req.OwnerKey(), req.MintKey(), req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewATADeriveResponse(req.OwnerKey(), req.MintKey(), req.TokenProgramID(), account, bump))
+}
+
+// ATAValidate godoc
+// @Summary      Check a supplied address against the canonical associated token account
+// @Description  Recomputes the associated token account for owner, mint, and program the same way ata/derive does, and compares it against associated_token_account. valid is true only when the two match exactly; derived is always returned so a caller who gets false back knows the right address without a second call. Like ata/derive, this never checks whether either address actually exists on chain — it is purely a derivation check.
+// @Tags         token
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ATAValidateRequest  true  "Owner, mint, program, and the address to check"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ATAValidateResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/token/ata/validate [post]
+func (h *TokenHandler) ATAValidate(w http.ResponseWriter, r *http.Request) {
+	req := new(ATAValidateRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	derived, bump, err := core.ATA.Derive(req.OwnerKey(), req.MintKey(), req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewATAValidateResponse(req.OwnerKey(), req.MintKey(), req.TokenProgramID(), req.AssociatedTokenAccountKey(), derived, bump))
+}
+
+// AmountToUi godoc
+// @Summary      Format a raw token amount as a UI string, using the mint's own program
+// @Description  Builds AmountToUiAmount and simulates it — never sends it, since it writes nothing. In this version of the program a mint can only specify decimals, so against a plain mint this is exactly amount / 10^decimals and could be computed without the network at all; it earns its keep only against a Token-2022 mint carrying the interest-bearing extension, where the true UI string includes interest accrued since the mint's last update and only the program can compute that. fee_payer is required even though nothing is ever sent: the node still checks the simulated payer can afford the fee before running the instruction.
+// @Tags         token
+// @Accept       json
+// @Produce      json
+// @Param        body  body      AmountToUiRequest  true  "Mint, raw amount, fee payer, and program"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  AmountToUiResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/token/amount-to-ui [post]
+func (h *TokenHandler) AmountToUi(w http.ResponseWriter, r *http.Request) {
+	req := new(AmountToUiRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ix, err := tokenProgram.AmountToUiAmount(req.MintKey(), req.ToAmount())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// This transaction is never signed and never sent, only simulated: the
+	// blockhash field is 32 zero bytes, which the node replaces with its own
+	// current one before execution, and the fee payer's single signature
+	// slot is left empty since sigVerify is off for the same call.
+	message, err := types.NewMessage(req.FeePayerKey(), types.NewHash([types.HashLength]byte{}), types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	value, err := chain.Cli.SimulateUnsignedTransaction(r.Context(), raw, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if value.Failed() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("simulation failed: %s", value.Err))
+		return
+	}
+
+	decoded, err := value.DecodedReturnData()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if decoded == nil {
+		handler.WriteError(w, http.StatusBadGateway, "mint: program returned no data")
+		return
+	}
+
+	handler.WriteOK(w, NewAmountToUiResponse(req.MintKey(), req.TokenProgramID(), req.ToAmount(), string(decoded)))
+}
+
+// UiToAmount godoc
+// @Summary      Parse a UI amount string back into a raw token amount, using the mint's own program
+// @Description  Builds UiAmountToAmount and simulates it — never sends it, since it writes nothing. AmountToUi's inverse, for the same reason: against a plain mint this is a decimals multiply a client could do itself, and it earns its keep only against a Token-2022 mint carrying the interest-bearing extension. fee_payer is required even though nothing is ever sent: the node still checks the simulated payer can afford the fee before running the instruction.
+// @Tags         token
+// @Accept       json
+// @Produce      json
+// @Param        body  body      UiToAmountRequest  true  "Mint, UI amount string, fee payer, and program"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  UiToAmountResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/token/ui-to-amount [post]
+func (h *TokenHandler) UiToAmount(w http.ResponseWriter, r *http.Request) {
+	req := new(UiToAmountRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ix, err := tokenProgram.UiAmountToAmount(req.MintKey(), req.ToUIAmount())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// This transaction is never signed and never sent, only simulated: the
+	// blockhash field is 32 zero bytes, which the node replaces with its own
+	// current one before execution, and the fee payer's single signature
+	// slot is left empty since sigVerify is off for the same call.
+	message, err := types.NewMessage(req.FeePayerKey(), types.NewHash([types.HashLength]byte{}), types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	value, err := chain.Cli.SimulateUnsignedTransaction(r.Context(), raw, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if value.Failed() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("simulation failed: %s", value.Err))
+		return
+	}
+
+	decoded, err := value.DecodedReturnData()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if decoded == nil || len(decoded) != 8 {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("mint: program returned %d bytes, expected 8", len(decoded)))
+		return
+	}
+
+	amount, _, err := codec.Binary.ReadU64(decoded)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("mint: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewUiToAmountResponse(req.MintKey(), req.TokenProgramID(), req.ToUIAmount(), amount))
 }

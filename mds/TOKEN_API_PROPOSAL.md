@@ -165,11 +165,11 @@ those too, for reference, but nothing here builds them.
 |     18 | InitializeAccount3       | `initialize-account3`, `initialize-wrapped-sol` | live, mainnet bytes           |
 |     19 | InitializeMultisig2      | `initialize-multisig2`                        | live, devnet                    |
 |     20 | InitializeMint2          | `initialize-mint2`                            | live, devnet                    |
-|     21 | GetAccountDataSize       | `account-data-size`                           | open                            |
+|     21 | GetAccountDataSize       | —                                              | dropped: no endpoint value      |
 |     22 | InitializeImmutableOwner | `initialize-immutable-owner`                  | live, devnet (Token-2022)       |
-|     23 | AmountToUiAmount         | `amount-to-ui`                                | open                            |
-|     24 | UiAmountToAmount         | `ui-to-amount`                                | open                            |
-|     38 | WithdrawExcessLamports   | `withdraw-excess-lamports`                    | live, not yet sent              |
+|     23 | AmountToUiAmount         | `amount-to-ui`                                | live, devnet                    |
+|     24 | UiAmountToAmount         | `ui-to-amount`                                | live, devnet                    |
+|     38 | WithdrawExcessLamports   | `withdraw-excess-lamports`                    | live, devnet (classic Token)     |
 |     45 | UnwrapLamports           | `unwrap-lamports`, `unwrap-lamports/max`      | live, devnet (Token-2022)       |
 |    255 | Batch                    | `batch`                                       | open, last                      |
 
@@ -186,27 +186,36 @@ served, not yet seen land.
 `InitializeImmutableOwner` is a no-op in the classic Token Program, kept for
 compatibility with the Associated Token Account flow, which calls it on every
 account it creates regardless of program; in Token-2022 it attaches the real
-extension. The endpoint currently accepts only Token-2022 for `program`. That
-restriction rests on an earlier belief that classic Token has no handler for
-the opcode, which the upstream doc comment contradicts, and should be lifted.
-Either way it has to run before `InitializeAccount*`, since both programs fail
-it on an account already initialized.
+extension. The endpoint accepts either program for `program`. It once accepted
+only Token-2022, on a mistaken belief that classic Token had no handler for
+the opcode; the upstream doc comment says otherwise, and the restriction is
+lifted. Either way it has to run before `InitializeAccount*`, since both
+programs fail it on an account already initialized.
 
 `Batch` serializes several Token instructions inside one instruction — a `u8`
 account count, a `u8` data length, then the nested discriminator and data, per
 entry — which is different from putting several ordinary instructions in one
 Solana transaction.
 
-The three at 38, 45, and 255 are in the interface crate, which is not the same
-thing as the deployed program: an opcode can exist in the source and still come
-back `InvalidInstruction` from the account an endpoint sends it to. Sampling
+These are all in the interface crate, which is not the same thing as the
+deployed program: an opcode can exist in the source and still come back
+`InvalidInstruction` from the account an endpoint sends it to. Sampling
 twelve mainnet transactions turned up 81 Token instructions across seven
-opcodes — 3, 4, 9, 12, 17, 18, 21, and 22 — which said nothing either way about
-the three. `UnwrapLamports` has since been sent: the devnet Token-2022 program
-logs it by name, and both a full and a partial unwrap landed once the encoding
-was right. It has not been sent to classic Token. `WithdrawExcessLamports` is
-built and served on the strength of its opcode number and upstream account list
-alone.
+opcodes — 3, 4, 9, 12, 17, 18, 21, and 22 — which said nothing either way
+about 23, 24, 38, 45, or 255. All but 255 have since been confirmed live.
+`AmountToUiAmount`/`UiAmountToAmount` were simulated on devnet against a
+6-decimal classic Token mint and returned exactly the expected value both
+directions; a malformed `ui_amount` came back as the program's own
+`InvalidArgument`, not a client-side rejection. `UnwrapLamports` has since
+been sent: the devnet Token-2022 program logs it by name, and both a full
+and a partial unwrap landed once the encoding was right. It has not been
+sent to classic Token. `WithdrawExcessLamports` has also since been sent,
+against a classic Token account: 1,111,111 lamports of excess above the
+165-byte rent-exempt reserve moved to the destination while the account's
+60-token balance was untouched. The rejection it hits on a native (wrapped
+SOL) account — `Custom(10)`, "Instruction does not support native tokens" —
+was seen along the way and is not a bug; that case belongs to
+`unwrap-lamports` instead.
 
 ## Composite Convenience Endpoints — none, by decision
 
@@ -426,7 +435,41 @@ create mint (decimals 6)
 token/create-ata
 token/create-ata-idempotent
 token/transfer-from-ata          (+/max; was token/transfer-to-wallet)
+token/ata/derive
+token/ata/validate
+token/ata/recover-nested
 ```
+
+`derive` and `validate` are pure computation — no chain read, no fee payer,
+no blockhash — so they live under `/svm/token/` rather than
+`/svm/v2/transaction/token/`, in `api/handler/token/token.go` and
+`token_types.go`. They started as their own `ata.go`/`ata_types.go` files
+and were folded into `token.go`/`token_types.go` once written: this package
+splits by concern (handlers in one file, types in the other), the same way
+`mint` and `account` already did, not by endpoint. `validate` always returns
+the address it derived alongside `valid`, so a caller who gets `false` back
+knows the right one without a second call.
+
+`recover-nested` derives all three addresses `RecoverNested` touches
+internally — `owner_account`, `nested_account`, and `destination` are never
+request fields. Confirmed end to end on devnet: a nested account was
+deliberately constructed by deriving from `owner_account` as if it were a
+wallet, minted 5,000 base units, then recovered — `destination` received
+exactly 5,000 and `nested` stopped existing. One thing the first attempt got
+wrong: `RecoverNested`'s account list carries no System Program, so it can
+move a balance into `destination` but cannot create it. Calling it before
+`destination` existed came back `InvalidAccountData` from the Token program
+itself, mid-CPI; creating `destination` with `create-ata-idempotent` first
+fixed it. This is an ordering constraint on the caller, not something the
+endpoint can close, since the instruction has nowhere in its account list to
+put a `System.CreateAccount`.
+
+`get-or-create` was built alongside these three and then removed. It built
+exactly the instruction `create-ata-idempotent` already builds, and its only
+addition was a read-derived `already_exists` boolean — not a property of any
+single instruction, which is the whole discipline this v2 surface holds to.
+A caller who wants to know first can read `account/state` before calling
+`create-ata-idempotent`, the same as for any other account.
 
 This is the ATA program rather than the Token program, so it has its own
 `core.ATA` namespace on `AssociatedTokenProgramID`, and it was the first
@@ -571,10 +614,9 @@ token/initialize-wrapped-sol       done
 token/sync-native                  done, devnet (Token-2022)
 token/unwrap-lamports              done, devnet (Token-2022)
 token/unwrap-lamports/max          done, devnet (Token-2022)
-token/withdraw-excess-lamports     built, not yet sent
-token/account-data-size            open
-token/amount-to-ui                 open
-token/ui-to-amount                 open
+token/withdraw-excess-lamports     done, devnet (classic Token)
+token/amount-to-ui                 done, devnet
+token/ui-to-amount                 done, devnet
 token/batch                        open, last
 ```
 
@@ -615,16 +657,49 @@ at its rent-exempt minimum, never closing it. The upstream doc lists the
 authority as "owner/delegate"; which key that resolves to for each of the three
 account kinds is not settled client-side, so the request takes an unqualified
 `account` and `authority`, and a wrong one fails on chain rather than as a 400.
-It has not been sent against a live cluster yet, so it is the next thing to
-confirm here.
+Confirmed on devnet against a classic Token account holding SPL tokens: only
+the excess lamports moved, the token balance was untouched. It explicitly
+rejects a native (wrapped SOL) account — `Custom(10)`,
+"Instruction does not support native tokens" — since a wrapped-SOL account's
+lamports beyond the reserve are its legitimate, deliberate balance, not an
+accident; `unwrap-lamports` is the endpoint for that account kind.
 
-The three return-data instructions produce a value rather than a state change,
-which a transaction-builder response has no field for. In the classic program
-they are also nearly free to compute: the data size is a fixed 165 and the two
-conversions are a shift of the decimal point by the mint's `decimals`. So build
-them as ordinary builders and let a caller who wants the value run the result
-through the existing `/svm/cluster/transaction/simulate`, rather than growing a
-second response shape for three instructions that barely need one.
+`GetAccountDataSize` (21) is dropped rather than built. It returns the byte
+size a Token-owned account needs for a given set of Token-2022 extensions, as
+return data from a simulated instruction — useful to a client that does not
+already know its own extension list, which nothing in this API does: every
+`create-*`/`initialize-*` endpoint here already knows the exact size its
+layout needs (82, 165, or 355, plus whatever `initialize-wrapped-sol` and
+future extension work compute directly) and allocates it without round-tripping
+through a simulation to ask.
+
+`AmountToUiAmount` and `UiAmountToAmount` produce a value rather than a state
+change: nothing they touch is ever written, so they are built, simulated, and
+never sent, under `token/amount-to-ui` and `token/ui-to-amount`. Neither
+endpoint asks a caller to first build a transaction and separately call
+`/svm/cluster/transaction/simulate` — each builds the instruction, wraps it
+in an unsigned transaction of its own, simulates it, and decodes the return
+data itself, so the caller only ever sends mint + amount (or mint +
+ui_amount) + fee_payer + program and gets a value back. That needed one
+piece of infrastructure neither endpoint had before: `rpc.SimulateValue`
+gained a `ReturnData` field and a `DecodedReturnData` method, and the RPC
+client gained `SimulateUnsignedTransaction`, which calls `simulateTransaction`
+with `sigVerify: false` and `replaceRecentBlockhash: true` — the two are
+mutually exclusive on the RPC side, and together they mean the built
+transaction needs no real signature and no real blockhash, only the right
+number of empty signature slots and any 32 bytes where a blockhash goes,
+since the node substitutes its own before running it. `fee_payer` is still
+required even though nothing is ever sent: the node checks the named payer
+can afford the fee before running the instruction, simulated or not.
+Confirmed on devnet against a 6-decimal mint: `amount-to-ui` on 1,500,000
+base units returned `"1.5"`; `ui-to-amount` on `"1.5"` returned `1500000`;
+a garbage `ui_amount` string surfaced the program's own `InvalidArgument`
+rather than failing client-side. Against a plain mint the conversion is
+exactly `amount / 10^decimals` and a client could compute it without the
+network at all — the two endpoints earn their keep specifically against a
+Token-2022 mint carrying the interest-bearing extension, where the true UI
+amount includes interest accrued since the mint's last update and only the
+program itself can compute that.
 
 `token/batch` comes last because it needs a safe typed representation of nested
 Token instructions and strict transaction-size checks.

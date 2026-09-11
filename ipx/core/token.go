@@ -686,8 +686,9 @@ func (t *token) ID() *types.PublicKey {
 // wrapped-SOL mint from, as a PDA of the Token-2022 program itself. A PDA is
 // the only address a program can create without a private key, which is why
 // Token-2022 needs one at all rather than reusing classic Token's fixed
-// NativeMintID: each program can only ever create its own. Unverified
-// against a live cluster; confirm the derived address before relying on it.
+// NativeMintID: each program can only ever create its own. Confirmed on
+// devnet: an account initialized against the address this derives read back
+// as isNative: true, at 9pan9bMn5HatX4EJdBwg9VgCa7Uz5HL8N1m5D3NdXejP.
 var Token2022NativeMintSeed = []byte("native-mint")
 
 // NativeMint returns the mint that stands in for wrapped SOL under this
@@ -930,15 +931,14 @@ func (t *token) InitializeAccount3(account, mint, owner *types.PublicKey) (*type
 // InitializeImmutableOwner permanently locks a token account's owner field
 // against SetAuthority, so it can never be reassigned to a different wallet.
 //
-// This is a Token-2022 extension instruction: it operates on extension space
-// appended after the classic 165-byte layout, which classic Token accounts
-// never have. The classic Token Program's deployed instruction processor
-// predates this opcode and has no arm for it at all, so sending this to a
-// classic account is not merely a no-op, it fails outright. This exists for
-// Token-2022 accounts specifically; the Associated Token Account program
-// initializes this automatically on every Token-2022 ATA it creates, which
-// is what keeps "this address is always this wallet's account for this
-// mint" true even against a malicious SetAuthority.
+// This is a Token-2022 extension: it operates on extension space appended
+// after the classic 165-byte layout, which classic Token accounts never
+// have. On Token-2022 this attaches the real extension. On classic Token,
+// upstream documents the opcode as a no-op there, kept only so the
+// Associated Token Account program can call it on every account it creates
+// without branching on which program it is — which is what keeps "this
+// address is always this wallet's account for this mint" true even against
+// a malicious SetAuthority, on either program.
 //
 // account does not sign, and there is no authority: nothing about locking
 // the owner field needs proving, the same as any other initialize-shaped
@@ -978,6 +978,56 @@ func (t *token) SyncNative(account *types.PublicKey) (*types.Instruction, error)
 
 	return types.NewInstruction(t.id, types.NewAccounts(
 		types.NewWritableAccount(account),
+	), data), nil
+}
+
+// AmountToUiAmount asks the program to reformat a raw base-unit amount as a
+// UI string, using mint's own decimals.
+//
+// This is a return-data instruction, not a state change: nothing about mint
+// or any other account is written. It exists to be simulated, never sent —
+// a caller who lands it on chain pays a real fee for an instruction that did
+// nothing. In this version of the program a mint can only specify decimals,
+// so the conversion is exactly amount / 10^decimals and costs nothing to do
+// client-side; this instruction earns its keep only against a Token-2022
+// mint carrying the interest-bearing extension, where the true UI amount
+// includes interest accrued since the mint's last update and only the
+// program itself can compute that.
+func (t *token) AmountToUiAmount(mint *types.PublicKey, amount uint64) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token amount to ui amount: mint is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionAmountToUiAmount)
+	data = codec.Binary.AppendU64(data, amount)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewReadonlyAccount(mint),
+	), data), nil
+}
+
+// UiAmountToAmount is AmountToUiAmount's inverse: it asks the program to
+// parse a UI string back into a raw base-unit u64, using mint's decimals (and,
+// for an interest-bearing Token-2022 mint, its current accrued rate). Like
+// AmountToUiAmount it only ever returns data; nothing here is meant to be
+// sent.
+//
+// uiAmount is written to the instruction data as raw UTF-8 with no length
+// prefix — it is the trailing field and the program reads it as everything
+// left in the buffer after the discriminant, not as a counted string.
+func (t *token) UiAmountToAmount(mint *types.PublicKey, uiAmount string) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token ui amount to amount: mint is required")
+	}
+	if uiAmount == "" {
+		return nil, fmt.Errorf("token ui amount to amount: ui_amount is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionUiAmountToAmount)
+	data = codec.Binary.AppendBytes(data, []byte(uiAmount))
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewReadonlyAccount(mint),
 	), data), nil
 }
 

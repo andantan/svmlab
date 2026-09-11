@@ -109,13 +109,13 @@ neither is named or verified against the accounts on chain, which is exactly
 the failure mode the checked variants exist to catch.
 `initialize-immutable-owner` attaches the extension on Token-2022 and is a
 documented no-op on classic Token, which keeps it only so the ATA program can
-call it on either. The endpoint currently accepts only Token-2022 for
-`program`; that restriction was built on a mistaken belief that classic Token
-has no handler for the opcode, and should be lifted. On both programs it has to
-run before `initialize-account*`, never after, and this is checked client-side
-as a 400 by decoding just the base 165 bytes, the same "is this already
-initialized" question `initialize-mint*`/`initialize-account*` already answer
-for themselves.
+call it on either. `program` accepts either for that reason; it once accepted
+only Token-2022, on a mistaken belief that classic Token had no handler for
+the opcode, which the upstream doc comment contradicts. On both programs it
+has to run before `initialize-account*`, never after, and this is checked
+client-side as a 400 by decoding just the base 165 bytes, the same "is this
+already initialized" question `initialize-mint*`/`initialize-account*` already
+answer for themselves.
 
 What is not caught client-side: `set-authority/owner/replace` (and any other
 endpoint touching a property an extension can override) has no way to tell
@@ -196,8 +196,8 @@ endpoint asks the cluster for the figure it needs rather than carrying one.
 | RPC, signing, and tools   | done    | done      | account, fee, rent, simulation, send, status, key generation, signing, blockhash refresh, base58/base64 conversion, account/authority |
 | System Program            | done    | done      | all 13 instructions, seed variants, durable nonce, multi/batch/collect transfer, field-fidelity pass done |
 | PDA derivation            | done    | none      | Create and Find, checked against 2044 mainnet accounts; first used by ATA   |
-| SPL Token classic         | done    | done      | lifecycle (create-only + initialize-* pairing), delegation, 7 set-authority, freeze/thaw, max variants, multisig lifecycle, unchecked opcodes (+max), initialize-immutable-owner, withdraw-excess-lamports, and native SOL all live; read-return-data and batch open |
-| Associated Token Account  | done    | done      | create, create-idempotent, transfer-from-ata (+max); recover-nested deferred |
+| SPL Token classic         | done    | done      | lifecycle (create-only + initialize-* pairing), delegation, 7 set-authority, freeze/thaw, max variants, multisig lifecycle, unchecked opcodes (+max), initialize-immutable-owner, withdraw-excess-lamports, native SOL, and amount-to-ui/ui-to-amount all live and devnet-confirmed; batch open, last |
+| Associated Token Account  | done    | done      | create, create-idempotent, transfer-from-ata (+max), derive, validate, recover-nested, all devnet-confirmed |
 | Vault custom program      | none    | none      | first deployed program and PDA signer exercise                              |
 
 Token-2022 left the "later" list for its classic surface. `core.Token2022` is an
@@ -215,7 +215,7 @@ System (done)
 -> SPL Token classic multisig lifecycle (done)
 -> SPL Token classic compatibility opcodes (done)
 -> SPL Token classic native SOL (done)
--> SPL Token classic read-return-data and batch  <- here
+-> SPL Token classic batch  <- here
 -> Vault custom program
 -> Compute Budget
 -> Address Lookup Table
@@ -241,10 +241,14 @@ higher-level API generation (see the note near the end of this file) rather
 than folded into what is otherwise a one-role-per-endpoint surface. Closing an
 associated account needed nothing new:
 close-account already took any 165-byte account regardless of how its
-address came to exist, associated or keypair. What is still open is
-recover-nested, for the rare case of an associated account mistakenly used as
-a wallet with its own nested associated account beneath it; it is deferred
-as a low-frequency cleanup tool rather than blocking anything.
+address came to exist, associated or keypair. `derive`, `validate`, and
+`recover-nested` are also live now, under `/svm/token/` and
+`/svm/v2/transaction/token/ata/` respectively — see group 2 below for what
+each does and what devnet testing found. `get-or-create` was built alongside
+them and then removed: it built exactly `create-ata-idempotent`'s
+instruction and only added a read-derived `already_exists` field, which is
+not a property of any single instruction, so it did not belong on a surface
+where each endpoint is one instruction.
 
 ## Group Catalogue
 
@@ -320,9 +324,35 @@ No dedicated close endpoint was needed: `token/close-account` already takes
 any 165-byte Token or Token-2022 account, and an associated account is that
 same layout at a derived address, indistinguishable to the instruction.
 
-Not done: `recover-nested`, for an associated account that was mistakenly
-funded as if it were a wallet and now has its own nested associated account
-underneath it. Low-frequency cleanup, not on the path to anything else.
+`token/ata/derive` and `token/ata/validate` live under `/svm/token/`, not
+`/svm/v2/transaction/token/`: both are pure computation, never touching the
+chain, so neither needs a fee payer, a blockhash, or anything to sign.
+`derive` returns the address and canonical bump for owner + mint + program;
+`validate` recomputes the same derivation and compares it against a supplied
+address, always returning the correct one alongside `valid` so a caller who
+gets `false` back does not need a second call. Both live in
+`api/handler/token/token.go` and `token_types.go` — split by concern
+(handlers, types) rather than by endpoint, the same layout `mint`/`account`
+already used, and `ata.go`/`ata_types.go` were merged into them once that
+became clear rather than staying a third split beside it.
+
+`token/ata/recover-nested` recovers an associated account that was
+mistakenly funded as if it were a wallet and now has its own nested
+associated account underneath it. `core.ATA.RecoverNested` derives all three
+addresses the instruction touches internally — none are request fields:
+`owner_account` is wallet's associated account for `owner_mint` (the one
+mistaken for a wallet), `nested_account` is `owner_account`'s own associated
+account for `nested_mint` (the mistake itself, being closed), and
+`destination` is wallet's real associated account for `nested_mint`, where
+the balance and reclaimed rent both land. Confirmed end to end on devnet:
+minting 5,000 base units into a deliberately-constructed nested account and
+then recovering it moved exactly 5,000 to `destination` and left `nested`
+not existing. One constraint surfaced only by that test: `RecoverNested`'s
+account list carries no System Program, so it can move a balance into
+`destination` but cannot create it — `destination` has to already exist
+(via `create-ata-idempotent`, say) before `recover-nested` is called, or the
+Token program itself rejects it with `InvalidAccountData`. This is a calling
+order the caller owns, not a bug this endpoint works around.
 
 The token program is a seed of the address, so a wallet has a different
 associated account for classic Token than for Token-2022 over the same mint.
@@ -411,18 +441,48 @@ regardless of who owns it. It works across all three account kinds, so its
 `account`/`authority` fields stay deliberately unqualified rather than named
 `token_account`/`token_account_authority`. Upstream documents the authority
 only as "owner/delegate"; which key that resolves to for each kind is not
-settled client-side, so a wrong one fails on chain rather than as a 400. It has
-not been sent against a live cluster yet.
+settled client-side, so a wrong one fails on chain rather than as a 400.
+Confirmed on devnet against a classic Token account holding SPL tokens: only
+the excess lamports moved, the token balance untouched. It explicitly rejects
+a native (wrapped SOL) account — `unwrap-lamports` is the endpoint for that
+account kind instead.
 
 The native SOL group — initialize-wrapped-sol, sync-native, and
 unwrap-lamports (+max) — is covered in Current Status above; its step-by-step
 account flow, and why create-wrapped-sol and wrap-sol were dropped, is in
 `TOKEN_API_PROPOSAL.md`.
 
-Still open here: the return-data utilities (`account-data-size`,
-`amount-to-ui`, `ui-to-amount`), a live send of `withdraw-excess-lamports`,
-lifting `initialize-immutable-owner`'s Token-2022-only restriction, and
-`batch`, last. Detailed coverage:
+`initialize-immutable-owner` was restricted to Token-2022 only, on a mistaken
+belief that classic Token has no handler for the opcode; the upstream doc
+comment says it is a documented no-op there instead, kept for the Associated
+Token Account program's own use, and the restriction is lifted — `program`
+now accepts either, like every other endpoint.
+
+`GetAccountDataSize` (opcode 21) is dropped rather than built: it returns the
+byte size a Token-2022 account needs for a given extension set, useful to a
+client that does not already know its own extension list, which nothing here
+needs — every `create-*`/`initialize-*` endpoint already knows the exact size
+its layout needs.
+
+`amount-to-ui` and `ui-to-amount` (opcodes 23/24) are return-data
+instructions rather than state changes — a mint account read, never sent —
+so they run through simulation rather than `send`, and needed one piece of
+shared infrastructure neither endpoint had before: `SimulateValue` gained a
+`ReturnData` field, and the RPC client gained
+`SimulateUnsignedTransaction`, which simulates a transaction that carries no
+real signature and no real blockhash, asking the node to substitute its own
+current blockhash (`replaceRecentBlockhash: true`) and skip signature
+verification, since nothing in it was ever meant to be sent. Confirmed on
+devnet against a 6-decimal mint: `amount-to-ui` on 1,500,000 base units
+returned `"1.5"`, `ui-to-amount` on `"1.5"` returned `1500000`, and a
+garbage `ui_amount` string surfaced the program's own `InvalidArgument`
+rather than failing client-side. Against a plain mint this is only ever
+`amount / 10^decimals`, computable without the network at all; the
+instructions earn their keep against a Token-2022 mint carrying the
+interest-bearing extension, where the true UI amount includes interest
+accrued since the mint's last update and only the program can compute that.
+
+Still open here: `batch`, last. Detailed coverage:
 
 ~~~
 TOKEN_API_PROPOSAL.md
@@ -782,9 +842,11 @@ and hand authority to an m-of-n multisig instead of a single wallet. The
 unchecked opcodes (transfer/approve/mint-to/burn, +max) and
 initialize-immutable-owner are live too, alongside the checked variants they
 exist to guard against, and so is native SOL: wrap SOL into a token account,
-sync it, and unwrap part or all of it without closing the account. What is not
-in this milestone — the return-data utilities and batch — is
-TOKEN_API_PROPOSAL.md's next step, not a gap in this one.
+sync it, and unwrap part or all of it without closing the account. The ATA
+helpers — derive, validate, recover-nested — are live as well, and so are
+the return-data utilities, amount-to-ui and ui-to-amount. What is not in
+this milestone — batch — is TOKEN_API_PROPOSAL.md's next step, not a gap in
+this one.
 
 ### Milestone B: Program-Controlled Assets
 
@@ -848,35 +910,41 @@ classic Token.
 `token/initialize-account2`, `token/initialize-account3`,
 `token/initialize-multisig`, `token/initialize-multisig2`, `token/transfer`
 (+max), `token/approve` (+max), `token/mint-to`, `token/burn` (+max),
-`token/initialize-immutable-owner`, and `token/withdraw-excess-lamports` are
-built — see group 3 above. Still open:
+`token/initialize-immutable-owner`, `token/withdraw-excess-lamports`,
+`token/amount-to-ui`, and `token/ui-to-amount` are done — see group 3 above.
+Still open:
 
 ~~~text
-token/account-data-size
-token/amount-to-ui
-token/ui-to-amount
 token/batch
 ~~~
 
-Checked variants remain the normal public path. This group is mainly for
-learning, backwards compatibility, and custom composition. Of the three
-opcodes the interface crate lists past 24, `unwrap-lamports` (45) is now
-confirmed on devnet; `withdraw-excess-lamports` (38) is built but not yet
-sent; `batch` (255) is not built.
+`token/account-data-size` (opcode 21) is dropped rather than open: see group 3
+above.
 
-### ATA helpers
+Checked variants remain the normal public path. This group is mainly for
+learning, backwards compatibility, and custom composition. Of the opcodes
+the interface crate lists past 22, `amount-to-ui`/`ui-to-amount` (23/24),
+`unwrap-lamports` (45), and `withdraw-excess-lamports` (38) are now all
+confirmed on devnet; `batch` (255) is not built.
+
+### ATA helpers — done
 
 ~~~text
 token/ata/derive
 token/ata/validate
 token/ata/recover-nested
-token/ata/get-or-create
 ~~~
 
 `derive` returns the ATA and bump for wallet + mint + token program;
-`validate` checks a supplied address against that derivation. `recover-nested`
-is a low-frequency repair tool. `get-or-create` is a read-plus-transaction
-convenience endpoint, not a new ATA instruction.
+`validate` checks a supplied address against that derivation, always
+reporting the correct one so a caller who gets `false` back needs no second
+call. `recover-nested` moves a mistakenly-nested account's balance back to
+the wallet's real associated account and closes it; see group 2 above for
+the account order and the destination-must-already-exist constraint devnet
+testing surfaced. `get-or-create` was built and then removed: it built
+exactly `create-ata-idempotent`'s instruction and only added a
+read-derived `already_exists` boolean, which does not belong on a surface
+where each endpoint is one instruction.
 
 ### PDA HTTP utilities
 
@@ -1078,7 +1146,7 @@ convenience wrapper. Belongs in a later, more composed API generation
 ## Recommended expanded sequence
 
 ~~~text
-Token read-return-data and batch
+Token batch
 -> PDA HTTP utilities
 -> transaction composer and Compute Budget
 -> Vault program
@@ -1089,7 +1157,7 @@ Token read-return-data and batch
 -> Loader / deployment
 ~~~
 
-Vault may move ahead of the remaining return-data instructions and batch when
-the goal is to exercise PDA signing in a real application. Verification stays
-what it has been throughout: each endpoint is signed, sent against devnet, and
-the affected accounts read back, rather than covered by a test suite.
+Vault may move ahead of the remaining `batch` work when the goal is to
+exercise PDA signing in a real application. Verification stays what it has
+been throughout: each endpoint is signed, sent against devnet, and the
+affected accounts read back, rather than covered by a test suite.

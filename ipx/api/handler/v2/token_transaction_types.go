@@ -2210,26 +2210,29 @@ func NewInitializeMultisig2Response(
 // InitializeImmutableOwnerRequest permanently locks a token account's owner
 // field against SetAuthority.
 //
-// This is a Token-2022 extension instruction: it needs extension space
-// appended after the classic 165-byte layout, which classic Token accounts
-// never have, and the classic Token Program has no instruction-processor arm
-// for this opcode at all. Program is therefore restricted to Token-2022 here
-// rather than accepting either, unlike every other endpoint in this file.
+// This is a Token-2022 extension: it needs extension space appended after
+// the classic 165-byte layout, which classic Token accounts never have. On
+// Token-2022 it attaches the real extension; on classic Token, upstream
+// documents this opcode as a no-op, kept only so the Associated Token
+// Account program can call it on either program without branching. Program
+// therefore accepts either, the same as every other endpoint in this file.
 // There is no authority: nothing about locking the owner field needs
 // proving.
 type InitializeImmutableOwnerRequest struct {
 	// TokenAccount is the account whose owner field is locked. It must
-	// already exist, be owned by Program, and carry the extension space this
-	// instruction writes to — which this endpoint does not verify itself,
-	// since parsing Token-2022 extension layouts is its own separate
-	// undertaking; a mismatch fails on chain instead.
+	// already exist, be owned by Program, and — on Token-2022 — carry the
+	// extension space this instruction writes to. This endpoint does not
+	// verify that itself, since parsing Token-2022 extension layouts is its
+	// own separate undertaking; a mismatch fails on chain instead.
 	TokenAccount string `json:"token_account" example:""`
 
 	// FeePayer signs and pays the transaction fee.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// Program must be the Token-2022 program address: this opcode does not
-	// exist on the classic Token Program.
+	// Program names the account to send the instruction to: classic Token
+	// or Token-2022. On Token-2022 this attaches the real extension; on
+	// classic Token it is a documented no-op, kept for compatibility with
+	// the Associated Token Account program's own create flow.
 	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
 
 	// RecentBlockhash is always required, and there is no server-side fetch
@@ -2287,8 +2290,8 @@ func (r *InitializeImmutableOwnerRequest) ValidateRequest() error {
 	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
 		return errors.New("program: " + err.Error())
 	}
-	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
-		return fmt.Errorf("program: %s is not the Token-2022 program; the classic Token Program has no instruction for this", r.tokenProgramID)
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
 	}
 
 	return nil
@@ -5891,6 +5894,186 @@ func NewCreateATAIdempotentResponse(
 		Program:                tokenProgram.Base58(),
 		Rent:                   newSystemPayer(rentPayer, rentExempt),
 		Fee:                    newSystemPayer(feePayer, fee),
+	}
+}
+
+// ATARecoverNestedRequest recovers a nested associated token account: one
+// that was mistakenly created by deriving from another associated account as
+// if it were a wallet. Wallet, OwnerMint, and NestedMint are exactly
+// RecoverNested's three seeds; every address the instruction actually
+// touches is derived from them internally, none is a request field.
+type ATARecoverNestedRequest struct {
+	// Wallet is the real owner, and the only one who signs: closing the
+	// nested account pays its reclaimed lamports back to Wallet's own
+	// associated account for OwnerMint, so only the real owner may authorize
+	// that.
+	Wallet string `json:"wallet" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// OwnerMint is the mint of the associated account that was mistakenly
+	// used as a wallet — deriving Wallet's associated account for OwnerMint
+	// is what produced the address the nested account was wrongly created
+	// under.
+	OwnerMint string `json:"owner_mint" example:""`
+
+	// NestedMint is the mint of the nested account itself, the one being
+	// recovered and closed. It must differ from OwnerMint.
+	NestedMint string `json:"nested_mint" example:""`
+
+	// FeePayer signs and pays the transaction fee. It may be the same
+	// account as Wallet.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program is a seed of every derived address, so one wallet has
+	// different owner, nested, and destination accounts for classic Token
+	// than for Token-2022 over the same mints.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	wallet         *types.PublicKey
+	ownerMint      *types.PublicKey
+	nestedMint     *types.PublicKey
+	feePayer       *types.PublicKey
+	rbh            *types.Hash
+	dna            *types.PublicKey
+	tokenProgramID *types.PublicKey
+}
+
+func (r *ATARecoverNestedRequest) ValidateRequest() error {
+	var err error
+	if r.wallet, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Wallet)); err != nil {
+		return errors.New("wallet: " + err.Error())
+	}
+	if r.ownerMint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.OwnerMint)); err != nil {
+		return errors.New("owner_mint: " + err.Error())
+	}
+	if r.nestedMint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.NestedMint)); err != nil {
+		return errors.New("nested_mint: " + err.Error())
+	}
+	if r.ownerMint.Equal(r.nestedMint) {
+		return errors.New("owner_mint and nested_mint are the same account")
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ATARecoverNestedRequest) WalletKey() *types.PublicKey     { return r.wallet }
+func (r *ATARecoverNestedRequest) OwnerMintKey() *types.PublicKey  { return r.ownerMint }
+func (r *ATARecoverNestedRequest) NestedMintKey() *types.PublicKey { return r.nestedMint }
+func (r *ATARecoverNestedRequest) FeePayerKey() *types.PublicKey   { return r.feePayer }
+func (r *ATARecoverNestedRequest) Blockhash() *types.Hash          { return r.rbh }
+func (r *ATARecoverNestedRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ATARecoverNestedRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// ATARecoverNestedResponse reports the built transaction plus the three
+// addresses RecoverNested derived internally, none of which were request
+// fields: OwnerAccount is the associated account mistaken for a wallet,
+// NestedAccount is the one being closed, and Destination is where its
+// balance ends up — Wallet's real associated account for NestedMint.
+type ATARecoverNestedResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Wallet        string `json:"wallet"`
+	OwnerMint     string `json:"owner_mint"`
+	NestedMint    string `json:"nested_mint"`
+	Program       string `json:"program"`
+	OwnerAccount  string `json:"owner_account"`
+	NestedAccount string `json:"nested_account"`
+	Destination   string `json:"destination"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewATARecoverNestedResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, wallet, ownerMint, nestedMint, tokenProgram, nonceAuthority *types.PublicKey,
+	ownerAccount, nestedAccount, destination *types.PublicKey,
+	fee uint64,
+) *ATARecoverNestedResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ATARecoverNestedResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Wallet:          wallet.Base58(),
+		OwnerMint:       ownerMint.Base58(),
+		NestedMint:      nestedMint.Base58(),
+		Program:         tokenProgram.Base58(),
+		OwnerAccount:    ownerAccount.Base58(),
+		NestedAccount:   nestedAccount.Base58(),
+		Destination:     destination.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
 

@@ -5511,6 +5511,227 @@ func NewWithdrawExcessLamportsResponse(
 	}
 }
 
+// ReallocateRequest checks whether Account already holds enough space for
+// every named extension, and grows it if not.
+//
+// This is the general tool for adding an extension to a token account
+// after it was created without one. It never touches a mint: a mint's
+// extension list is fixed forever at initialize-mint2, and there is no
+// instruction that reopens it — Reallocate only ever resizes an existing
+// token account.
+type ReallocateRequest struct {
+	// Account is the token account to check and, if needed, grow. It must
+	// already exist and be owned by Program.
+	Account string `json:"account" example:""`
+
+	// RentPayer funds whatever the resize costs, a distinct role from
+	// Owner: Owner authorizes the account being touched, RentPayer covers
+	// what that costs, and they need not be the same key.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Owner is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// ExtensionTypes names every extension Account should have room for
+	// after this lands, by the same lowercase-with-underscores name the
+	// extension is known by (e.g. "immutable_owner", "cpi_guard",
+	// "memo_transfer"). The instruction carries no length prefix for this
+	// list: it is exactly as many u16 values as there are names here.
+	ExtensionTypes []string `json:"extension_types" example:"immutable_owner"`
+
+	// NewSpace is Account's expected total size, in bytes, once every named
+	// extension is present. It is never sent to the program — Reallocate
+	// computes the real size itself from what Account already holds plus
+	// what ExtensionTypes still needs — and exists only so this endpoint
+	// can work out RentPayer's shortfall ahead of time. A value lower than
+	// what the program actually needs is not caught here; it surfaces as
+	// RentPayer's balance falling short on chain instead.
+	NewSpace string `json:"new_space" example:"170"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program names the account to send the instruction to: classic Token
+	// or Token-2022.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+	// itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account         *types.PublicKey
+	rentPayer       *types.PublicKey
+	owner           *types.PublicKey
+	extensionTypes  []core.ExtensionType
+	newSpace        uint64
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *ReallocateRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.rentPayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RentPayer)); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+
+	r.extensionTypes = make([]core.ExtensionType, len(r.ExtensionTypes))
+	for i, name := range r.ExtensionTypes {
+		if r.extensionTypes[i], err = core.ParseExtensionType(strings.TrimSpace(name)); err != nil {
+			return fmt.Errorf("extension_types[%d]: %s", i, err)
+		}
+	}
+
+	newSpace := strings.TrimSpace(r.NewSpace)
+	if newSpace == "" {
+		return errors.New("new_space is required")
+	}
+	if r.newSpace, err = strconv.ParseUint(newSpace, 10, 64); err != nil {
+		return errors.New("new_space: " + err.Error())
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ReallocateRequest) AccountKey() *types.PublicKey           { return r.account }
+func (r *ReallocateRequest) RentPayerKey() *types.PublicKey         { return r.rentPayer }
+func (r *ReallocateRequest) OwnerKey() *types.PublicKey             { return r.owner }
+func (r *ReallocateRequest) ToExtensionTypes() []core.ExtensionType { return r.extensionTypes }
+func (r *ReallocateRequest) ToNewSpace() uint64                     { return r.newSpace }
+func (r *ReallocateRequest) FeePayerKey() *types.PublicKey          { return r.feePayer }
+func (r *ReallocateRequest) Blockhash() *types.Hash                 { return r.rbh }
+func (r *ReallocateRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ReallocateRequest) TokenProgramID() *types.PublicKey { return r.tokenProgramID }
+func (r *ReallocateRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ReallocateResponse reports the built transaction alongside what it
+// resizes Account for.
+type ReallocateResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account        string   `json:"account"`
+	Owner          string   `json:"owner"`
+	ExtensionTypes []string `json:"extension_types"`
+	Program        string   `json:"program"`
+
+	// Rent reports what funds the resize, computed against NewSpace as
+	// given — an estimate, not the value the program itself will use,
+	// since that is computed fresh on chain at landing time from Account's
+	// actual current size.
+	Rent SystemPayer `json:"rent"`
+	Fee  SystemPayer `json:"fee"`
+}
+
+func NewReallocateResponse(
+	tx *types.Transaction, raw, message []byte,
+	rentPayer, feePayer, account, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	extensionTypeNames []string,
+	rentShortfall, fee uint64,
+) *ReallocateResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ReallocateResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Owner:           owner.Base58(),
+		ExtensionTypes:  extensionTypeNames,
+		Program:         tokenProgram.Base58(),
+		Rent:            newSystemPayer(rentPayer, rentShortfall),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
 // CreateATARequest creates the canonical associated token account (ATA) for
 // a wallet and mint.
 //

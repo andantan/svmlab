@@ -70,6 +70,9 @@ func run() error {
 		r.Post("/ata/validate", tokenHandler.ATAValidate)
 		r.Post("/amount-to-ui", tokenHandler.AmountToUi)
 		r.Post("/ui-to-amount", tokenHandler.UiToAmount)
+		r.Route("/extensions", func(r chi.Router) {
+			r.Post("/get-account-data-size", tokenHandler.GetAccountDataSize)
+		})
 	})
 
 	r.Route("/svm/cluster", func(r chi.Router) {

@@ -450,3 +450,82 @@ func NewUiToAmountResponse(mint, program *types.PublicKey, uiAmount string, amou
 		Amount:   strconv.FormatUint(amount, 10),
 	}
 }
+
+// GetAccountDataSizeRequest names the mint and every extension type an
+// account should have room for, and asks the program for the exact byte
+// size that combination needs — the same authority Reallocate itself
+// defers to. FeePayer is required even though nothing is ever sent:
+// simulating is still processing a transaction, and every transaction
+// message requires a loadable fee payer in account_keys[0] regardless of
+// what its instructions do.
+type GetAccountDataSizeRequest struct {
+	Mint string `json:"mint" example:""`
+
+	// ExtensionTypes may be empty, in which case the response is the bare
+	// size a Token-2022 account with no extensions needs. Each name is the
+	// same lowercase-with-underscores form reallocate takes (e.g.
+	// "immutable_owner", "cpi_guard").
+	ExtensionTypes []string `json:"extension_types" example:"immutable_owner"`
+
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+	Program  string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	mint           *types.PublicKey
+	extensionTypes []core.ExtensionType
+	feePayer       *types.PublicKey
+	tokenProgramID *types.PublicKey
+}
+
+func (r *GetAccountDataSizeRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+
+	r.extensionTypes = make([]core.ExtensionType, len(r.ExtensionTypes))
+	for i, name := range r.ExtensionTypes {
+		if r.extensionTypes[i], err = core.ParseExtensionType(strings.TrimSpace(name)); err != nil {
+			return fmt.Errorf("extension_types[%d]: %s", i, err)
+		}
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *GetAccountDataSizeRequest) MintKey() *types.PublicKey              { return r.mint }
+func (r *GetAccountDataSizeRequest) ToExtensionTypes() []core.ExtensionType { return r.extensionTypes }
+func (r *GetAccountDataSizeRequest) FeePayerKey() *types.PublicKey          { return r.feePayer }
+func (r *GetAccountDataSizeRequest) TokenProgramID() *types.PublicKey       { return r.tokenProgramID }
+
+// GetAccountDataSizeResponse reports the size the program itself computed,
+// not one recomputed here.
+type GetAccountDataSizeResponse struct {
+	Mint           string   `json:"mint"`
+	ExtensionTypes []string `json:"extension_types"`
+	Program        string   `json:"program"`
+	Size           string   `json:"size"`
+}
+
+func NewGetAccountDataSizeResponse(mint, program *types.PublicKey, extensionTypeNames []string, size uint64) *GetAccountDataSizeResponse {
+	return &GetAccountDataSizeResponse{
+		Mint:           mint.Base58(),
+		ExtensionTypes: extensionTypeNames,
+		Program:        program.Base58(),
+		Size:           strconv.FormatUint(size, 10),
+	}
+}

@@ -381,3 +381,93 @@ func (h *TokenHandler) UiToAmount(w http.ResponseWriter, r *http.Request) {
 
 	handler.WriteOK(w, NewUiToAmountResponse(req.MintKey(), req.TokenProgramID(), req.ToUIAmount(), amount))
 }
+
+// GetAccountDataSize godoc
+// @Summary      Ask the program for the exact byte size an account needs for a mint and a set of extensions
+// @Description  Builds GetAccountDataSize and simulates it — never sends it, since it writes nothing. Returns the same authority Reallocate itself defers to, asked directly rather than recomputed client-side: a hardcoded copy of the program's own extension-size table would drift the moment the program changes a layout, the same reason a rent-exemption minimum is always asked of the cluster rather than assumed. extension_types may be empty, in which case the response is the bare size a Token-2022 account with no extensions needs. fee_payer is required even though nothing is ever sent: the node still checks the simulated payer can afford the fee before running the instruction.
+// @Tags         token
+// @Accept       json
+// @Produce      json
+// @Param        body  body      GetAccountDataSizeRequest  true  "Mint, extension types, fee payer, and program"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  GetAccountDataSizeResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/token/extensions/get-account-data-size [post]
+func (h *TokenHandler) GetAccountDataSize(w http.ResponseWriter, r *http.Request) {
+	req := new(GetAccountDataSizeRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	ix, err := tokenProgram.GetAccountDataSize(req.MintKey(), req.ToExtensionTypes())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	// This transaction is never signed and never sent, only simulated: the
+	// blockhash field is 32 zero bytes, which the node replaces with its own
+	// current one before execution, and the fee payer's single signature
+	// slot is left empty since sigVerify is off for the same call.
+	message, err := types.NewMessage(req.FeePayerKey(), types.NewHash([types.HashLength]byte{}), types.NewInstructions(ix))
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	raw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	value, err := chain.Cli.SimulateUnsignedTransaction(r.Context(), raw, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if value.Failed() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("simulation failed: %s", value.Err))
+		return
+	}
+
+	decoded, err := value.DecodedReturnData()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	if decoded == nil || len(decoded) != 8 {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("mint: program returned %d bytes, expected 8", len(decoded)))
+		return
+	}
+
+	size, _, err := codec.Binary.ReadU64(decoded)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("mint: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewGetAccountDataSizeResponse(req.MintKey(), req.TokenProgramID(), req.ExtensionTypes, size))
+}

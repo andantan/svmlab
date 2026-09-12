@@ -664,6 +664,42 @@ definitions:
       ui_amount:
         type: string
     type: object
+  token.GetAccountDataSizeRequest:
+    properties:
+      extension_types:
+        description: |-
+          ExtensionTypes may be empty, in which case the response is the bare
+          size a Token-2022 account with no extensions needs. Each name is the
+          same lowercase-with-underscores form reallocate takes (e.g.
+          "immutable_owner", "cpi_guard").
+        example:
+        - immutable_owner
+        items:
+          type: string
+        type: array
+      fee_payer:
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      program:
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+    type: object
+  token.GetAccountDataSizeResponse:
+    properties:
+      extension_types:
+        items:
+          type: string
+        type: array
+      mint:
+        type: string
+      program:
+        type: string
+      size:
+        type: string
+    type: object
   token.MintRequest:
     properties:
       mint_account:
@@ -8117,6 +8153,53 @@ paths:
               type: string
             type: object
       summary: Check a supplied address against the canonical associated token account
+      tags:
+      - token
+  /svm/token/extensions/get-account-data-size:
+    post:
+      consumes:
+      - application/json
+      description: 'Builds GetAccountDataSize and simulates it — never sends it, since
+        it writes nothing. Returns the same authority Reallocate itself defers to,
+        asked directly rather than recomputed client-side: a hardcoded copy of the
+        program''s own extension-size table would drift the moment the program changes
+        a layout, the same reason a rent-exemption minimum is always asked of the
+        cluster rather than assumed. extension_types may be empty, in which case the
+        response is the bare size a Token-2022 account with no extensions needs. fee_payer
+        is required even though nothing is ever sent: the node still checks the simulated
+        payer can afford the fee before running the instruction.'
+      parameters:
+      - description: Mint, extension types, fee payer, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/token.GetAccountDataSizeRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/token.GetAccountDataSizeResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Ask the program for the exact byte size an account needs for a mint
+        and a set of extensions
       tags:
       - token
   /svm/token/mint:

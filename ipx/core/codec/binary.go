@@ -37,6 +37,13 @@ func (_ *binaryCodec) AppendU8(dst []byte, v uint8) []byte {
 	return append(dst, v)
 }
 
+// AppendU16 appends a little-endian uint16, the width Token-2022's own
+// ExtensionType enum uses on the wire — unlike every Token instruction
+// discriminant, which is a single byte.
+func (_ *binaryCodec) AppendU16(dst []byte, v uint16) []byte {
+	return binary.LittleEndian.AppendUint16(dst, v)
+}
+
 // AppendU32 appends a little-endian uint32.
 //
 // Instruction discriminants are u32, so this is what selects a System Program
@@ -219,6 +226,15 @@ func (_ *binaryCodec) ReadU8(src []byte) (uint8, []byte, error) {
 	}
 
 	return src[0], src[1:], nil
+}
+
+// ReadU16 reads a little-endian uint16 and returns the remaining input.
+func (_ *binaryCodec) ReadU16(src []byte) (uint16, []byte, error) {
+	if len(src) < 2 {
+		return 0, nil, fmt.Errorf("binary: need 2 bytes for u16 but got: %d", len(src))
+	}
+
+	return binary.LittleEndian.Uint16(src), src[2:], nil
 }
 
 // ReadU32 reads a little-endian uint32 and returns the remaining input.

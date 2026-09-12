@@ -13,10 +13,13 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
   - `token/batch` — 여러 Token instruction을 하나에 중첩
   - Vault 커스텀 프로그램 — 자체 배포 프로그램, 코어 프로그램의 단일 instruction이 아님
 
-- **다음 후보 (원칙에 맞음, 순서 미정)**
-  - Token-2022 `metadata-pointer` + `spl-token-metadata-interface` — 단일
-    instruction 5개(Initialize/UpdateField/RemoveKey/UpdateAuthority/Emit),
-    기존 Token-2022 인프라 재사용 가능
+- **다음 (순서 확정)**
+  1. Token-2022 `metadata-pointer` + `spl-token-metadata-interface` — 단일
+     instruction 5개(Initialize/UpdateField/RemoveKey/UpdateAuthority/Emit),
+     기존 Token-2022 인프라 재사용 가능. 지금 진행 중.
+  2. Metaplex Token Metadata — Borsh 직렬화 새로 배워야 해서 뒤로, 근데
+     실제 지갑/익스플로러 표준이라 결국 필요함. batch/Vault처럼 스킵하는
+     게 아니라 순서상 다음.
 
 - **작은 후속 작업 (나중에)**
   - `getRecentPrioritizationFees` RPC 래퍼 — `svm/cluster/...`에 읽기 전용으로 추가.

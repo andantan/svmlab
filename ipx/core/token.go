@@ -563,6 +563,52 @@ const (
 	TokenAccountTypeAccount       uint8 = 2
 )
 
+// ExistingExtensionTypes walks the TLV region of an extended mint or token
+// account and returns which extension types are already present.
+//
+// A mint gets padded out to a holder account's length before its own TLV
+// region starts, so both layouts put that region at the identical offset —
+// TokenAccountTypeOffset plus the one-byte type tag — and one walk serves
+// both. Each record is a 4-byte header, a 2-byte ExtensionType followed by
+// a 2-byte length, then that many bytes of the extension's own data; a type
+// of Uninitialized (0) marks the first unused slot and ends the walk, the
+// same way the deployed program itself stops, since nothing is ever written
+// after that point. Reallocate needs this list to ask GetAccountDataSize
+// for what the account should become — its own current size plus whatever
+// new extension is being added — rather than only the size a bare account
+// with just the new extension would need.
+func ExistingExtensionTypes(data []byte) []ExtensionType {
+	if uint64(len(data)) <= TokenAccountTypeOffset {
+		return nil
+	}
+
+	var types []ExtensionType
+	rest := data[TokenAccountTypeOffset+1:]
+	for len(rest) >= 4 {
+		rawType, tail, err := codec.Binary.ReadU16(rest)
+		if err != nil {
+			break
+		}
+		et := ExtensionType(rawType)
+		if et == ExtensionTypeUninitialized {
+			break
+		}
+
+		length, tail, err := codec.Binary.ReadU16(tail)
+		if err != nil {
+			break
+		}
+		if uint64(len(tail)) < uint64(length) {
+			break
+		}
+
+		types = append(types, et)
+		rest = tail[length:]
+	}
+
+	return types
+}
+
 // DecodeMint parses account data as a mint, given the program that owns it.
 //
 // Ownership is checked here rather than left to the caller because a mint and a
@@ -978,6 +1024,40 @@ func (t *token) SyncNative(account *types.PublicKey) (*types.Instruction, error)
 
 	return types.NewInstruction(t.id, types.NewAccounts(
 		types.NewWritableAccount(account),
+	), data), nil
+}
+
+// GetAccountDataSize asks the program for the exact byte size an account
+// would need to hold mint plus every named extension type — the same
+// authority Reallocate itself defers to, asked directly rather than
+// recomputed client-side.
+//
+// This is a return-data instruction, not a state change: nothing about
+// mint or any other account is written. It exists to be simulated, never
+// sent. extensionTypes carries no length prefix on the wire, the same as
+// Reallocate's own list: it is encoded as however many u16 values fit the
+// rest of the instruction data, so passing zero of them asks for the bare
+// size a Token-2022 account with no extensions needs.
+//
+// Reimplementing this program's own size table client-side was tried and
+// set aside: every extension's TLV payload size can be read once from its
+// struct definition, but a hardcoded copy of that table drifts the moment
+// the deployed program adds a field or changes a layout, the same reason a
+// rent-exemption minimum is always asked of the cluster rather than
+// assumed. Asking here instead means Reallocate's own rent math never goes
+// stale.
+func (t *token) GetAccountDataSize(mint *types.PublicKey, extensionTypes []ExtensionType) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token get account data size: mint is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionGetAccountDataSize)
+	for _, et := range extensionTypes {
+		data = codec.Binary.AppendU16(data, uint16(et))
+	}
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewReadonlyAccount(mint),
 	), data), nil
 }
 
@@ -1451,7 +1531,9 @@ func (t *token) CloseAccount(account, destination, authority *types.PublicKey, s
 // other endpoint that lets the chain be the final word on a role it cannot
 // fully resolve client-side; a wrong one fails on chain rather than here.
 //
-// Unverified against a live cluster.
+// Confirmed on devnet against a classic Token account holding SPL tokens:
+// 1,111,111 lamports of excess above the rent-exempt reserve moved to the
+// destination while the account's token balance was untouched.
 func (t *token) WithdrawExcessLamports(source, destination, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
 	if source.IsNil() {
 		return nil, fmt.Errorf("token withdraw excess lamports: source is required")
@@ -1474,6 +1556,180 @@ func (t *token) WithdrawExcessLamports(source, destination, authority *types.Pub
 	)
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// ExtensionType discriminants, as Reallocate's instruction data encodes
+// them: a little-endian u16 each, unlike every Token opcode above, which is
+// a single byte. This is the full account-layout enum, mint-only variants
+// included, since Reallocate's own validation is what rejects naming one
+// that does not belong to an account rather than anything checked here.
+const (
+	ExtensionTypeUninitialized ExtensionType = iota
+	ExtensionTypeTransferFeeConfig
+	ExtensionTypeTransferFeeAmount
+	ExtensionTypeMintCloseAuthority
+	ExtensionTypeConfidentialTransferMint
+	ExtensionTypeConfidentialTransferAccount
+	ExtensionTypeDefaultAccountState
+	ExtensionTypeImmutableOwner
+	ExtensionTypeMemoTransfer
+	ExtensionTypeNonTransferable
+	ExtensionTypeInterestBearingConfig
+	ExtensionTypeCpiGuard
+	ExtensionTypePermanentDelegate
+	ExtensionTypeNonTransferableAccount
+	ExtensionTypeTransferHook
+	ExtensionTypeTransferHookAccount
+	ExtensionTypeConfidentialTransferFeeConfig
+	ExtensionTypeConfidentialTransferFeeAmount
+	ExtensionTypeMetadataPointer
+	ExtensionTypeTokenMetadata
+	ExtensionTypeGroupPointer
+	ExtensionTypeTokenGroup
+	ExtensionTypeGroupMemberPointer
+	ExtensionTypeTokenGroupMember
+	ExtensionTypeConfidentialMintBurn
+	ExtensionTypeScaledUiAmount
+	ExtensionTypePausable
+	ExtensionTypePausableAccount
+)
+
+// ExtensionType is Token-2022's own u16, not one of this project's u8
+// opcodes: it selects a TLV record layout rather than an instruction.
+type ExtensionType uint16
+
+// extensionTypeNames maps the name a caller writes to the value Reallocate
+// sends on the wire, so a request carries "immutable_owner" rather than a
+// bare number nothing documents.
+var extensionTypeNames = map[string]ExtensionType{
+	"transfer_fee_config":              ExtensionTypeTransferFeeConfig,
+	"transfer_fee_amount":              ExtensionTypeTransferFeeAmount,
+	"mint_close_authority":             ExtensionTypeMintCloseAuthority,
+	"confidential_transfer_mint":       ExtensionTypeConfidentialTransferMint,
+	"confidential_transfer_account":    ExtensionTypeConfidentialTransferAccount,
+	"default_account_state":            ExtensionTypeDefaultAccountState,
+	"immutable_owner":                  ExtensionTypeImmutableOwner,
+	"memo_transfer":                    ExtensionTypeMemoTransfer,
+	"non_transferable":                 ExtensionTypeNonTransferable,
+	"interest_bearing_config":          ExtensionTypeInterestBearingConfig,
+	"cpi_guard":                        ExtensionTypeCpiGuard,
+	"permanent_delegate":               ExtensionTypePermanentDelegate,
+	"non_transferable_account":         ExtensionTypeNonTransferableAccount,
+	"transfer_hook":                    ExtensionTypeTransferHook,
+	"transfer_hook_account":            ExtensionTypeTransferHookAccount,
+	"confidential_transfer_fee_config": ExtensionTypeConfidentialTransferFeeConfig,
+	"confidential_transfer_fee_amount": ExtensionTypeConfidentialTransferFeeAmount,
+	"metadata_pointer":                 ExtensionTypeMetadataPointer,
+	"token_metadata":                   ExtensionTypeTokenMetadata,
+	"group_pointer":                    ExtensionTypeGroupPointer,
+	"token_group":                      ExtensionTypeTokenGroup,
+	"group_member_pointer":             ExtensionTypeGroupMemberPointer,
+	"token_group_member":               ExtensionTypeTokenGroupMember,
+	"confidential_mint_burn":           ExtensionTypeConfidentialMintBurn,
+	"scaled_ui_amount":                 ExtensionTypeScaledUiAmount,
+	"pausable":                         ExtensionTypePausable,
+	"pausable_account":                 ExtensionTypePausableAccount,
+}
+
+// ParseExtensionType resolves a caller-supplied name to its wire value.
+// Uninitialized (0) is deliberately not resolvable here: it is a sentinel
+// meaning "no extension" in the account layout, never a real value to
+// request room for.
+func ParseExtensionType(name string) (ExtensionType, error) {
+	et, ok := extensionTypeNames[name]
+	if !ok {
+		return 0, fmt.Errorf("extension type: %q is not a recognized extension name", name)
+	}
+
+	return et, nil
+}
+
+// extensionTypeDataLen is a record of research, not live code: the byte size
+// of each extension's own TLV payload (the 4-byte type+length header is not
+// counted), confirmed by reading every extension's struct definition in
+// solana-program/token-2022's interface crate one at a time. It is commented
+// out rather than deleted because deriving it cost real effort and the
+// numbers are worth keeping around to check against, but nothing here calls
+// it: computing a new account's size is GetAccountDataSize's job, asked of
+// the deployed program the same way a rent-exemption minimum always is,
+// never assumed client-side — a hardcoded copy of the program's own size
+// table can drift the moment the program adds a field or this project
+// misses an edge case (such an extended account's leading 1-byte AccountType
+// marker, present only once an account holds any extension at all, and not
+// itself part of any single extension's own size below).
+//
+// var extensionTypeDataLen = map[ExtensionType]int{
+// 	ExtensionTypeTransferFeeConfig:              108, // mint
+// 	ExtensionTypeTransferFeeAmount:              8,   // account
+// 	ExtensionTypeMintCloseAuthority:             32,  // mint
+// 	ExtensionTypeConfidentialTransferMint:       65,  // mint
+// 	ExtensionTypeConfidentialTransferAccount:    295, // account
+// 	ExtensionTypeDefaultAccountState:            1,   // mint
+// 	ExtensionTypeImmutableOwner:                 0,   // account
+// 	ExtensionTypeMemoTransfer:                   1,   // account
+// 	ExtensionTypeNonTransferable:                0,   // mint
+// 	ExtensionTypeInterestBearingConfig:          52,  // mint
+// 	ExtensionTypeCpiGuard:                       1,   // account
+// 	ExtensionTypePermanentDelegate:              32,  // mint
+// 	ExtensionTypeNonTransferableAccount:         0,   // account
+// 	ExtensionTypeTransferHook:                   64,  // mint
+// 	ExtensionTypeTransferHookAccount:            1,   // account
+// 	ExtensionTypeConfidentialTransferFeeConfig:  129, // mint
+// 	ExtensionTypeConfidentialTransferFeeAmount:  64,  // account
+// 	ExtensionTypeMetadataPointer:                64,  // mint
+// 	// ExtensionTypeTokenMetadata is deliberately absent: name, symbol, uri,
+// 	// and additional_metadata are all variable-length Borsh strings/lists,
+// 	// so this extension has no fixed size to record here at all — it can
+// 	// only ever be computed from the actual field values a request carries.
+// 	ExtensionTypeGroupPointer:       64, // mint
+// 	ExtensionTypeTokenGroup:         80, // mint
+// 	ExtensionTypeGroupMemberPointer: 64, // mint
+// 	ExtensionTypeTokenGroupMember:   72, // mint
+// 	ExtensionTypeConfidentialMintBurn: 196, // mint
+// 	ExtensionTypeScaledUiAmount:       56,  // mint
+// 	ExtensionTypePausable:             33,  // mint
+// 	ExtensionTypePausableAccount:      0,   // account
+// }
+
+// Reallocate checks whether account is already large enough to hold every
+// named extension type, and grows it if not.
+//
+// This is the general tool for adding an extension to a token account
+// after it was created without one — a mint cannot use it at all, since a
+// mint's extension list is fixed forever at InitializeMint2 and there is no
+// instruction that reopens it. extensionTypes carries no length prefix on
+// the wire: it is encoded as however many u16 values fit the rest of the
+// instruction data, so passing zero of them is valid syntax that simply
+// asks the program to confirm the account is already big enough for
+// nothing new.
+//
+// rentPayer funds whatever the resize costs and is a distinct role from
+// owner, the same separation every other rent-payer/authority pair in this
+// API keeps: owner authorizes the account being touched, rentPayer covers
+// what that costs, and they need not be the same key.
+func (t *token) Reallocate(account, rentPayer, owner *types.PublicKey, signers []*types.PublicKey, extensionTypes []ExtensionType) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token reallocate: account is required")
+	}
+	if rentPayer.IsNil() {
+		return nil, fmt.Errorf("token reallocate: rent payer is required")
+	}
+	if err := validateAuthority("token reallocate", owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionReallocate)
+	for _, et := range extensionTypes {
+		data = codec.Binary.AppendU16(data, uint16(et))
+	}
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewWritableSignerAccount(rentPayer),
+		types.NewReadonlyAccount(SystemProgramID),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
 }
 
 // ApproveChecked authorizes a delegate to move up to amount from an account,

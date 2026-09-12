@@ -1866,6 +1866,63 @@
                 }
             }
         },
+        "/svm/token/extensions/get-account-data-size": {
+            "post": {
+                "description": "Builds GetAccountDataSize and simulates it — never sends it, since it writes nothing. Returns the same authority Reallocate itself defers to, asked directly rather than recomputed client-side: a hardcoded copy of the program's own extension-size table would drift the moment the program changes a layout, the same reason a rent-exemption minimum is always asked of the cluster rather than assumed. extension_types may be empty, in which case the response is the bare size a Token-2022 account with no extensions needs. fee_payer is required even though nothing is ever sent: the node still checks the simulated payer can afford the fee before running the instruction.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "token"
+                ],
+                "summary": "Ask the program for the exact byte size an account needs for a mint and a set of extensions",
+                "parameters": [
+                    {
+                        "description": "Mint, extension types, fee payer, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/token.GetAccountDataSizeRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/token.GetAccountDataSizeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/token/mint": {
             "post": {
                 "description": "Parses the 82 bytes a mint account holds. A mint is the closest thing Solana has to an ERC-20 contract, and what it lacks is the point: no balances and no allowances, since those live in separate token accounts owned by each holder. mint_authority and freeze_authority are omitted when absent, which is different from being the zero address; a mint whose mint authority was removed has a permanently fixed supply, and one initialized without a freeze authority can never gain one. Works for both classic Token and Token-2022, whose extensions sit past the base layout.",
@@ -7101,6 +7158,53 @@
                     "type": "string"
                 },
                 "ui_amount": {
+                    "type": "string"
+                }
+            }
+        },
+        "token.GetAccountDataSizeRequest": {
+            "type": "object",
+            "properties": {
+                "extension_types": {
+                    "description": "ExtensionTypes may be empty, in which case the response is the bare\nsize a Token-2022 account with no extensions needs. Each name is the\nsame lowercase-with-underscores form reallocate takes (e.g.\n\"immutable_owner\", \"cpi_guard\").",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "immutable_owner"
+                    ]
+                },
+                "fee_payer": {
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                }
+            }
+        },
+        "token.GetAccountDataSizeResponse": {
+            "type": "object",
+            "properties": {
+                "extension_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "size": {
                     "type": "string"
                 }
             }

@@ -1923,6 +1923,63 @@
                 }
             }
         },
+        "/svm/token/extensions/mint/data-size": {
+            "post": {
+                "description": "Computed client-side, never asked of the chain: GetAccountDataSize only ever answers \"how big does an account need to be to hold this mint\", never \"how big does this mint itself need to be\" -- a different question the interface crate exposes no return-data instruction for at all. create-mint's own System.CreateAccount always sizes for a bare 82-byte mint; a mint that will carry any extension has to be created at this size instead, with create-mint bypassed in favor of system/create-account directly. Each named type must be a mint extension, not a token-account one (rejected here the same way the deployed program would reject it on chain, without the round trip). token_metadata is also rejected: its size depends on actual name/symbol/uri content this endpoint never sees.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "token"
+                ],
+                "summary": "Compute the byte size a new mint needs for a set of extensions",
+                "parameters": [
+                    {
+                        "description": "Extension types the new mint will carry",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/token.MintDataSizeRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/token.MintDataSizeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/token/mint": {
             "post": {
                 "description": "Parses the 82 bytes a mint account holds. A mint is the closest thing Solana has to an ERC-20 contract, and what it lacks is the point: no balances and no allowances, since those live in separate token accounts owned by each holder. mint_authority and freeze_authority are omitted when absent, which is different from being the zero address; a mint whose mint authority was removed has a permanently fixed supply, and one initialized without a freeze authority can never gain one. Works for both classic Token and Token-2022, whose extensions sit past the base layout.",
@@ -4405,6 +4462,177 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.CreateMultisigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/transfer-fee-config/initialize": {
+            "post": {
+                "description": "Fixes the fee rate every transfer-checked-with-fee withholds and who may later change it (transfer_fee_config_authority) or withdraw what accumulates (withdraw_withheld_authority). This can only ever run in the narrow window every mint extension shares: after create-mint has allocated the account and before initialize-mint2 locks the extension list forever -- there is no path back into an already-initialized mint, no Reallocate equivalent exists for mints at all. transfer_fee_basis_points is out of 10,000 and is validated here rather than left to come back as an on-chain rejection. Either authority may be left empty to permanently forgo that capability; unlike a mint or freeze authority there is no later instruction that grants one where none was set. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Attach the TransferFeeConfig extension to a mint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authorities, fee rate, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.InitializeTransferFeeConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.InitializeTransferFeeConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/transfer-fee-config/reallocate": {
+            "post": {
+                "description": "Checks whether account already holds enough space for its existing extensions plus TransferFeeConfig, and grows it if not. The instruction itself only ever needs the one new extension: Reallocate reads account's own existing extensions on chain and unions them with what this sends, so a caller never resends what is already there. Getting the resize's rent right is this endpoint's own job: it reads account's current extensions and actual lamports, asks GetAccountDataSize for the full target size once TransferFeeConfig is unioned in, and only then knows rent_payer's shortfall — the same authority Reallocate itself defers to, asked directly rather than recomputed here. TransferFeeConfig is a mint-side extension in the interface crate's own numbering, not what Reallocate's own account list expects (always a token account); nothing here stops a caller from naming it anyway, and the deployed program is what rejects it, not this endpoint. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Grow a token account to hold room for TransferFeeConfig",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Account, rent payer, owner, fee payer, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ReallocateTransferFeeConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ReallocateTransferFeeConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/transfer-fee-config/set": {
+            "post": {
+                "description": "Sets a new fee rate and maximum, authorized by transfer_fee_config_authority (the role initialize-transfer-fee-config named), not mint's own mint or freeze authority. The change is not immediate: the program keeps an older and a newer rate side by side, each stamped with the epoch it takes effect at. What this sets becomes the newer rate, effective at the start of the next epoch; whatever was already active keeps applying until then, enforced on chain rather than by anything this endpoint does. transfer_fee_basis_points is out of 10,000 and is validated here rather than left to come back as an on-chain rejection. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change the TransferFeeConfig rate on a mint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, new fee rate, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetTransferFeeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetTransferFeeResponse"
                         }
                     },
                     "400": {
@@ -7166,7 +7394,7 @@
             "type": "object",
             "properties": {
                 "extension_types": {
-                    "description": "ExtensionTypes may be empty, in which case the response is the bare\nsize a Token-2022 account with no extensions needs. Each name is the\nsame lowercase-with-underscores form reallocate takes (e.g.\n\"immutable_owner\", \"cpi_guard\").",
+                    "description": "ExtensionTypes may be empty, in which case the response is the bare\nsize a Token-2022 account with no extensions needs. Each name is the\nsame lowercase-with-underscores form reallocate takes. Unlike\nMintDataSizeRequest, nothing here is rejected client-side for being a\nmint-only type (e.g. \"transfer_fee_config\") -- the deployed program\nitself is what checks that, as ExtensionTypeMismatch.\n\nValid names: \"transfer_fee_config\", \"transfer_fee_amount\",\n\"mint_close_authority\", \"confidential_transfer_mint\",\n\"confidential_transfer_account\", \"default_account_state\",\n\"immutable_owner\", \"memo_transfer\", \"non_transferable\",\n\"interest_bearing_config\", \"cpi_guard\", \"permanent_delegate\",\n\"non_transferable_account\", \"transfer_hook\", \"transfer_hook_account\",\n\"confidential_transfer_fee_config\", \"confidential_transfer_fee_amount\",\n\"metadata_pointer\", \"token_metadata\", \"group_pointer\", \"token_group\",\n\"group_member_pointer\", \"token_group_member\", \"confidential_mint_burn\",\n\"scaled_ui_amount\", \"pausable\", \"pausable_account\",\n\"permissioned_burn\".",
                     "type": "array",
                     "items": {
                         "type": "string"
@@ -7203,6 +7431,35 @@
                 },
                 "program": {
                     "type": "string"
+                },
+                "size": {
+                    "type": "string"
+                }
+            }
+        },
+        "token.MintDataSizeRequest": {
+            "type": "object",
+            "properties": {
+                "extension_types": {
+                    "description": "ExtensionTypes must each be a mint extension, not a token-account\none (e.g. \"transfer_fee_amount\" is rejected here the same way the\ndeployed program itself would reject it on chain, just with no chain\nround trip needed to find out). \"token_metadata\" is also rejected:\nits size depends on actual name/symbol/uri content this endpoint\nnever sees.\n\nValid names: \"transfer_fee_config\", \"mint_close_authority\",\n\"confidential_transfer_mint\", \"default_account_state\",\n\"non_transferable\", \"interest_bearing_config\", \"permanent_delegate\",\n\"transfer_hook\", \"confidential_transfer_fee_config\",\n\"metadata_pointer\", \"group_pointer\", \"token_group\",\n\"group_member_pointer\", \"token_group_member\", \"confidential_mint_burn\",\n\"scaled_ui_amount\", \"pausable\".",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "transfer_fee_config"
+                    ]
+                }
+            }
+        },
+        "token.MintDataSizeResponse": {
+            "type": "object",
+            "properties": {
+                "extension_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "size": {
                     "type": "string"
@@ -9582,6 +9839,106 @@
                 }
             }
         },
+        "v2.InitializeTransferFeeConfigRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "maximum_fee": {
+                    "description": "MaximumFee caps what a single transfer-checked-with-fee ever\nwithholds, in raw base units, regardless of how large the transfer\nis or what the rate above would otherwise compute.",
+                    "type": "string",
+                    "example": "1000000"
+                },
+                "mint": {
+                    "description": "Mint is the account this attaches to. It must already exist (see\ncreate-mint) and not yet be initialized -- initialize-mint2 has to\nrun after this, never before.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this\nextension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "transfer_fee_basis_points": {
+                    "description": "TransferFeeBasisPoints is the fee rate, out of 10,000 (500 = 5%). The\nprogram itself rejects anything over 10,000, so this is checked here\ntoo rather than left to come back as an on-chain rejection.",
+                    "type": "integer",
+                    "example": 500
+                },
+                "transfer_fee_config_authority": {
+                    "description": "TransferFeeConfigAuthority may call set-transfer-fee later to change\nthe rate. Left empty, this capability is given up permanently:\nunlike a mint or freeze authority, there is no later instruction that\ngrants one where none was set.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "withdraw_withheld_authority": {
+                    "description": "WithdrawWithheldAuthority may withdraw what\nwithdraw-withheld-tokens-from-mint/from-accounts moves. Left empty,\nwhatever accumulates as withheld fees can never be withdrawn from the\nmint again -- harvest-withheld-tokens-to-mint still works from\naccounts into the mint, but nothing can move it out from there.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.InitializeTransferFeeConfigResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "maximum_fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "transfer_fee_basis_points": {
+                    "type": "integer"
+                },
+                "transfer_fee_config_authority": {
+                    "type": "string"
+                },
+                "withdraw_withheld_authority": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.InitializeWrappedSolRequest": {
             "type": "object",
             "properties": {
@@ -9860,6 +10217,106 @@
                     }
                 },
                 "token_account": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ReallocateTransferFeeConfigRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "description": "Account is the token account to check and, if needed, grow. It must\nalready exist and be owned by Program.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer owner. Non-empty, Owner\nitself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "owner": {
+                    "description": "Owner is Account's owner, or its multisig for a multisig-owned\naccount (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "program": {
+                    "description": "Program must be Token-2022. Unlike every other Token endpoint, this\nis not the usual either-program field: a classic Token account's\nlayout is fixed at 165 bytes forever, with no TLV region to grow\ninto, so classic Token is rejected here rather than left to fail on\nchain.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "rent_payer": {
+                    "description": "RentPayer funds whatever the resize costs, a distinct role from\nOwner: Owner authorizes the account being touched, RentPayer covers\nwhat that costs, and they need not be the same key.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.ReallocateTransferFeeConfigResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "rent": {
+                    "description": "Rent reports what funds the resize: the shortfall between\nTargetSize's rent-exemption minimum and Account's actual current\nlamports, zero when Account already holds enough.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "target_size": {
+                    "description": "TargetSize is the total account size GetAccountDataSize reported for\nAccount's existing extensions plus TransferFeeConfig, asked of the\ndeployed program rather than recomputed here.",
                     "type": "string"
                 },
                 "transaction": {
@@ -10804,6 +11261,105 @@
                     }
                 },
                 "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetTransferFeeRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "maximum_fee": {
+                    "description": "MaximumFee caps what a single transfer-checked-with-fee ever\nwithholds, in raw base units, regardless of how large the transfer\nis or what the rate above would otherwise compute.",
+                    "type": "string",
+                    "example": "1000000"
+                },
+                "mint": {
+                    "description": "Mint must already have the TransferFeeConfig extension (see\ninitialize-transfer-fee-config).",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nTransferFeeConfigAuthority itself does not sign; the named members\ndo, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this\nextension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "transfer_fee_basis_points": {
+                    "description": "TransferFeeBasisPoints is the new fee rate, out of 10,000 (500 = 5%).\nThe program itself rejects anything over 10,000, so this is checked\nhere too rather than left to come back as an on-chain rejection.",
+                    "type": "integer",
+                    "example": 500
+                },
+                "transfer_fee_config_authority": {
+                    "description": "TransferFeeConfigAuthority is the authority\ninitialize-transfer-fee-config named, or its multisig for a\nmultisig-owned authority (see MultisigSigners). Unlike that endpoint,\nthis one cannot be left empty: an authority that was never set has no\nway to sign this instruction in the first place, permanently.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.SetTransferFeeResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "maximum_fee": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "transfer_fee_basis_points": {
+                    "type": "integer"
+                },
+                "transfer_fee_config_authority": {
                     "type": "string"
                 }
             }

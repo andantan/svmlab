@@ -463,8 +463,22 @@ type GetAccountDataSizeRequest struct {
 
 	// ExtensionTypes may be empty, in which case the response is the bare
 	// size a Token-2022 account with no extensions needs. Each name is the
-	// same lowercase-with-underscores form reallocate takes (e.g.
-	// "immutable_owner", "cpi_guard").
+	// same lowercase-with-underscores form reallocate takes. Unlike
+	// MintDataSizeRequest, nothing here is rejected client-side for being a
+	// mint-only type (e.g. "transfer_fee_config") -- the deployed program
+	// itself is what checks that, as ExtensionTypeMismatch.
+	//
+	// Valid names: "transfer_fee_config", "transfer_fee_amount",
+	// "mint_close_authority", "confidential_transfer_mint",
+	// "confidential_transfer_account", "default_account_state",
+	// "immutable_owner", "memo_transfer", "non_transferable",
+	// "interest_bearing_config", "cpi_guard", "permanent_delegate",
+	// "non_transferable_account", "transfer_hook", "transfer_hook_account",
+	// "confidential_transfer_fee_config", "confidential_transfer_fee_amount",
+	// "metadata_pointer", "token_metadata", "group_pointer", "token_group",
+	// "group_member_pointer", "token_group_member", "confidential_mint_burn",
+	// "scaled_ui_amount", "pausable", "pausable_account",
+	// "permissioned_burn".
 	ExtensionTypes []string `json:"extension_types" example:"immutable_owner"`
 
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
@@ -526,6 +540,62 @@ func NewGetAccountDataSizeResponse(mint, program *types.PublicKey, extensionType
 		Mint:           mint.Base58(),
 		ExtensionTypes: extensionTypeNames,
 		Program:        program.Base58(),
+		Size:           strconv.FormatUint(size, 10),
+	}
+}
+
+// MintDataSizeRequest names every extension a mint being created should
+// have room for. Unlike GetAccountDataSizeRequest, there is no mint field
+// at all: the mint does not exist yet, which is the whole reason this
+// endpoint exists rather than asking the chain — GetAccountDataSize can
+// only ever answer for an account against a mint that is already there,
+// never for the mint itself.
+type MintDataSizeRequest struct {
+	// ExtensionTypes must each be a mint extension, not a token-account
+	// one (e.g. "transfer_fee_amount" is rejected here the same way the
+	// deployed program itself would reject it on chain, just with no chain
+	// round trip needed to find out). "token_metadata" is also rejected:
+	// its size depends on actual name/symbol/uri content this endpoint
+	// never sees.
+	//
+	// Valid names: "transfer_fee_config", "mint_close_authority",
+	// "confidential_transfer_mint", "default_account_state",
+	// "non_transferable", "interest_bearing_config", "permanent_delegate",
+	// "transfer_hook", "confidential_transfer_fee_config",
+	// "metadata_pointer", "group_pointer", "token_group",
+	// "group_member_pointer", "token_group_member", "confidential_mint_burn",
+	// "scaled_ui_amount", "pausable".
+	ExtensionTypes []string `json:"extension_types" example:"transfer_fee_config"`
+
+	extensionTypes []core.ExtensionType
+}
+
+func (r *MintDataSizeRequest) ValidateRequest() error {
+	var err error
+	r.extensionTypes = make([]core.ExtensionType, len(r.ExtensionTypes))
+	for i, name := range r.ExtensionTypes {
+		if r.extensionTypes[i], err = core.ParseExtensionType(strings.TrimSpace(name)); err != nil {
+			return fmt.Errorf("extension_types[%d]: %s", i, err)
+		}
+	}
+
+	return nil
+}
+
+func (r *MintDataSizeRequest) ToExtensionTypes() []core.ExtensionType { return r.extensionTypes }
+
+// MintDataSizeResponse reports the size computed client-side from
+// core.CalculateMintExtensionsLen, never asked of the chain: no on-chain
+// instruction answers "how big does this mint need to be" the way
+// GetAccountDataSize answers the account-side question.
+type MintDataSizeResponse struct {
+	ExtensionTypes []string `json:"extension_types"`
+	Size           string   `json:"size"`
+}
+
+func NewMintDataSizeResponse(extensionTypeNames []string, size uint64) *MintDataSizeResponse {
+	return &MintDataSizeResponse{
+		ExtensionTypes: extensionTypeNames,
 		Size:           strconv.FormatUint(size, 10),
 	}
 }

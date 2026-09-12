@@ -471,3 +471,35 @@ func (h *TokenHandler) GetAccountDataSize(w http.ResponseWriter, r *http.Request
 
 	handler.WriteOK(w, NewGetAccountDataSizeResponse(req.MintKey(), req.TokenProgramID(), req.ExtensionTypes, size))
 }
+
+// MintDataSize godoc
+// @Summary      Compute the byte size a new mint needs for a set of extensions
+// @Description  Computed client-side, never asked of the chain: GetAccountDataSize only ever answers "how big does an account need to be to hold this mint", never "how big does this mint itself need to be" -- a different question the interface crate exposes no return-data instruction for at all. create-mint's own System.CreateAccount always sizes for a bare 82-byte mint; a mint that will carry any extension has to be created at this size instead, with create-mint bypassed in favor of system/create-account directly. Each named type must be a mint extension, not a token-account one (rejected here the same way the deployed program would reject it on chain, without the round trip). token_metadata is also rejected: its size depends on actual name/symbol/uri content this endpoint never sees.
+// @Tags         token
+// @Accept       json
+// @Produce      json
+// @Param        body  body      MintDataSizeRequest  true  "Extension types the new mint will carry"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  MintDataSizeResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/token/extensions/mint/data-size [post]
+func (h *TokenHandler) MintDataSize(w http.ResponseWriter, r *http.Request) {
+	req := new(MintDataSizeRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	size, err := core.CalculateMintExtensionsLen(req.ToExtensionTypes())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewMintDataSizeResponse(req.ExtensionTypes, size))
+}

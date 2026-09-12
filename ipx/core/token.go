@@ -71,6 +71,151 @@ const (
 // the u8 range.
 const TokenInstructionBatch uint8 = 255
 
+// Token-2022 extension sub-instructions.
+//
+// Every extension-family top-level opcode above (26–46, excluding the
+// standalone ones already built — InitializeMintCloseAuthority,
+// InitializeNonTransferableMint, InitializePermanentDelegate,
+// WithdrawExcessLamports, UnwrapLamports, Reallocate) carries a second byte
+// selecting one of these, the same two-level shape TransferFeeExtension
+// itself uses: TokenInstructionTransferFeeExtension (26) picks the family,
+// TransferFeeInstructionSetTransferFee (5) picks the operation inside it.
+// None of these are built yet; declared for reference the same way the
+// opcodes above were, confirmed against solana-program/token-2022's
+// interface crate one family at a time rather than guessed.
+const (
+	// Under TokenInstructionTransferFeeExtension (26).
+	TransferFeeInstructionInitializeTransferFeeConfig uint8 = iota
+	TransferFeeInstructionTransferCheckedWithFee
+	TransferFeeInstructionWithdrawWithheldTokensFromMint
+	TransferFeeInstructionWithdrawWithheldTokensFromAccounts
+	TransferFeeInstructionHarvestWithheldTokensToMint
+	TransferFeeInstructionSetTransferFee
+)
+
+const (
+	// Under TokenInstructionConfidentialTransferExtension (27).
+	ConfidentialTransferInstructionInitializeMint uint8 = iota
+	ConfidentialTransferInstructionUpdateMint
+	ConfidentialTransferInstructionConfigureAccount
+	ConfidentialTransferInstructionApproveAccount
+	ConfidentialTransferInstructionEmptyAccount
+	ConfidentialTransferInstructionDeposit
+	ConfidentialTransferInstructionWithdraw
+	ConfidentialTransferInstructionTransfer
+	ConfidentialTransferInstructionApplyPendingBalance
+	ConfidentialTransferInstructionEnableConfidentialCredits
+	ConfidentialTransferInstructionDisableConfidentialCredits
+	ConfidentialTransferInstructionEnableNonConfidentialCredits
+	ConfidentialTransferInstructionDisableNonConfidentialCredits
+	ConfidentialTransferInstructionTransferWithFee
+	ConfidentialTransferInstructionConfigureAccountWithRegistry
+)
+
+const (
+	// Under TokenInstructionDefaultAccountStateExtension (28).
+	DefaultAccountStateInstructionInitialize uint8 = iota
+	DefaultAccountStateInstructionUpdate
+)
+
+const (
+	// Under TokenInstructionMemoTransferExtension (30). The upstream enum
+	// is itself named RequiredMemoTransfersInstruction, not
+	// MemoTransferInstruction, despite the opcode's own name.
+	MemoTransferInstructionEnable uint8 = iota
+	MemoTransferInstructionDisable
+)
+
+const (
+	// Under TokenInstructionInterestBearingMintExtension (33).
+	InterestBearingMintInstructionInitialize uint8 = iota
+	InterestBearingMintInstructionUpdateRate
+)
+
+const (
+	// Under TokenInstructionCpiGuardExtension (34).
+	CpiGuardInstructionEnable uint8 = iota
+	CpiGuardInstructionDisable
+)
+
+const (
+	// Under TokenInstructionTransferHookExtension (36).
+	TransferHookInstructionInitialize uint8 = iota
+	TransferHookInstructionUpdate
+)
+
+const (
+	// Under TokenInstructionConfidentialTransferFeeExtension (37).
+	ConfidentialTransferFeeInstructionInitializeConfidentialTransferFeeConfig uint8 = iota
+	ConfidentialTransferFeeInstructionWithdrawWithheldTokensFromMint
+	ConfidentialTransferFeeInstructionWithdrawWithheldTokensFromAccounts
+	ConfidentialTransferFeeInstructionHarvestWithheldTokensToMint
+	ConfidentialTransferFeeInstructionEnableHarvestToMint
+	ConfidentialTransferFeeInstructionDisableHarvestToMint
+)
+
+const (
+	// Under TokenInstructionMetadataPointerExtension (39). This is
+	// Token-2022's own metadata-pointer config, distinct from the
+	// spl-token-metadata-interface instructions (Initialize, UpdateField,
+	// RemoveKey, UpdateAuthority, Emit) that the pointer's target account
+	// implements separately, with its own 8-byte SHA256-derived
+	// discriminators rather than this simple sequential-byte scheme.
+	MetadataPointerInstructionInitialize uint8 = iota
+	MetadataPointerInstructionUpdate
+)
+
+const (
+	// Under TokenInstructionGroupPointerExtension (40).
+	GroupPointerInstructionInitialize uint8 = iota
+	GroupPointerInstructionUpdate
+)
+
+const (
+	// Under TokenInstructionGroupMemberPointerExtension (41).
+	GroupMemberPointerInstructionInitialize uint8 = iota
+	GroupMemberPointerInstructionUpdate
+)
+
+// TokenGroup (21) and TokenGroupMember (23) are not sub-instructions of any
+// TokenInstruction opcode at all, unlike everything else in this block:
+// GroupPointer/GroupMemberPointer only ever point at an account holding
+// them, and that account's own instructions come from a separate program
+// interface, spl-token-group-interface, with its own discriminator scheme
+// -- not yet researched or declared here.
+
+const (
+	// Under TokenInstructionConfidentialMintBurnExtension (42).
+	ConfidentialMintBurnInstructionInitializeMint uint8 = iota
+	ConfidentialMintBurnInstructionRotateSupplyElGamalPubkey
+	ConfidentialMintBurnInstructionUpdateDecryptableSupply
+	ConfidentialMintBurnInstructionMint
+	ConfidentialMintBurnInstructionBurn
+	ConfidentialMintBurnInstructionApplyPendingBurn
+)
+
+const (
+	// Under TokenInstructionScaledUiAmountExtension (43). The upstream
+	// enum is named ScaledUiAmountMintInstruction.
+	ScaledUiAmountMintInstructionInitialize uint8 = iota
+	ScaledUiAmountMintInstructionUpdateMultiplier
+)
+
+const (
+	// Under TokenInstructionPausableExtension (44).
+	PausableInstructionInitialize uint8 = iota
+	PausableInstructionPause
+	PausableInstructionResume
+)
+
+const (
+	// Under TokenInstructionPermissionedBurnExtension (46).
+	PermissionedBurnInstructionInitialize uint8 = iota
+	PermissionedBurnInstructionBurn
+	PermissionedBurnInstructionBurnChecked
+	PermissionedBurnInstructionConfidentialBurn
+)
+
 // Authority types SetAuthority accepts, a u8 selecting which of an account's
 // roles is being handed over.
 //
@@ -1061,6 +1206,75 @@ func (t *token) GetAccountDataSize(mint *types.PublicKey, extensionTypes []Exten
 	), data), nil
 }
 
+// InitializeTransferFeeConfig attaches the TransferFeeConfig extension to
+// mint, fixing the fee rate every TransferCheckedWithFee withholds and who
+// may later change it or withdraw what accumulates.
+//
+// This can only ever run in the narrow window every mint extension shares:
+// after create-mint has allocated the account (sized to include this
+// extension) and before initialize-mint2 locks the extension list forever.
+// There is no path back into an already-initialized mint — no Reallocate
+// equivalent exists for mints at all, only for token accounts.
+//
+// transferFeeConfigAuthority and withdrawWithheldAuthority are independent
+// roles: the first may call SetTransferFee later, the second may withdraw
+// what WithdrawWithheldTokensFromMint/FromAccounts moves. Either may be nil
+// to permanently forgo that capability, which InitializeMint2's own mint
+// and freeze authorities cannot do without a mint close authority. Despite
+// the COption name upstream gives both, this is instruction data, not
+// account data: each is a single tag byte, the key itself following only
+// when present, confirmed against the interface crate's own pack_pubkey_option
+// rather than assumed from the account-layout COption the rules above warn
+// about — that one pads a four-byte tag whether or not the key is present,
+// which would shift and truncate a real key here.
+func (t *token) InitializeTransferFeeConfig(mint, transferFeeConfigAuthority, withdrawWithheldAuthority *types.PublicKey, transferFeeBasisPoints uint16, maximumFee uint64) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize transfer fee config: mint is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionTransferFeeExtension)
+	data = codec.Binary.AppendU8(data, TransferFeeInstructionInitializeTransferFeeConfig)
+	data = appendPubkeyOption(data, transferFeeConfigAuthority)
+	data = appendPubkeyOption(data, withdrawWithheldAuthority)
+	data = codec.Binary.AppendU16(data, transferFeeBasisPoints)
+	data = codec.Binary.AppendU64(data, maximumFee)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(mint),
+	), data), nil
+}
+
+// SetTransferFee changes the rate InitializeTransferFeeConfig fixed,
+// authorized by transferFeeConfigAuthority rather than mint's own mint or
+// freeze authority — a fee-rate change is not a supply or freeze decision.
+//
+// The new rate is not immediate. The program keeps an older and a newer
+// rate side by side, each stamped with the epoch it takes effect at: what
+// this call sets becomes the newer rate, effective at the start of the
+// next epoch, while whatever was already active keeps applying until then.
+// That delay is enforced on chain, not something this builder or its
+// caller can skip — nobody can be charged a rate they were not already
+// able to see coming.
+func (t *token) SetTransferFee(mint, transferFeeConfigAuthority *types.PublicKey, signers []*types.PublicKey, transferFeeBasisPoints uint16, maximumFee uint64) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token set transfer fee: mint is required")
+	}
+	if err := validateAuthority("token set transfer fee", transferFeeConfigAuthority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionTransferFeeExtension)
+	data = codec.Binary.AppendU8(data, TransferFeeInstructionSetTransferFee)
+	data = codec.Binary.AppendU16(data, transferFeeBasisPoints)
+	data = codec.Binary.AppendU64(data, maximumFee)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(mint),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, transferFeeConfigAuthority, signers), data), nil
+}
+
 // AmountToUiAmount asks the program to reformat a raw base-unit amount as a
 // UI string, using mint's own decimals.
 //
@@ -1592,6 +1806,7 @@ const (
 	ExtensionTypeScaledUiAmount
 	ExtensionTypePausable
 	ExtensionTypePausableAccount
+	ExtensionTypePermissionedBurn
 )
 
 // ExtensionType is Token-2022's own u16, not one of this project's u8
@@ -1629,6 +1844,7 @@ var extensionTypeNames = map[string]ExtensionType{
 	"scaled_ui_amount":                 ExtensionTypeScaledUiAmount,
 	"pausable":                         ExtensionTypePausable,
 	"pausable_account":                 ExtensionTypePausableAccount,
+	"permissioned_burn":                ExtensionTypePermissionedBurn,
 }
 
 // ParseExtensionType resolves a caller-supplied name to its wire value.
@@ -1644,52 +1860,119 @@ func ParseExtensionType(name string) (ExtensionType, error) {
 	return et, nil
 }
 
-// extensionTypeDataLen is a record of research, not live code: the byte size
-// of each extension's own TLV payload (the 4-byte type+length header is not
-// counted), confirmed by reading every extension's struct definition in
-// solana-program/token-2022's interface crate one at a time. It is commented
-// out rather than deleted because deriving it cost real effort and the
-// numbers are worth keeping around to check against, but nothing here calls
-// it: computing a new account's size is GetAccountDataSize's job, asked of
-// the deployed program the same way a rent-exemption minimum always is,
-// never assumed client-side — a hardcoded copy of the program's own size
-// table can drift the moment the program adds a field or this project
-// misses an edge case (such an extended account's leading 1-byte AccountType
-// marker, present only once an account holds any extension at all, and not
-// itself part of any single extension's own size below).
+// extensionTypeDataLen is the byte size of each extension's own TLV payload
+// (the 4-byte type+length header is not counted), confirmed by reading every
+// extension's struct definition in solana-program/token-2022's interface
+// crate one at a time.
 //
-// var extensionTypeDataLen = map[ExtensionType]int{
-// 	ExtensionTypeTransferFeeConfig:              108, // mint
-// 	ExtensionTypeTransferFeeAmount:              8,   // account
-// 	ExtensionTypeMintCloseAuthority:             32,  // mint
-// 	ExtensionTypeConfidentialTransferMint:       65,  // mint
-// 	ExtensionTypeConfidentialTransferAccount:    295, // account
-// 	ExtensionTypeDefaultAccountState:            1,   // mint
-// 	ExtensionTypeImmutableOwner:                 0,   // account
-// 	ExtensionTypeMemoTransfer:                   1,   // account
-// 	ExtensionTypeNonTransferable:                0,   // mint
-// 	ExtensionTypeInterestBearingConfig:          52,  // mint
-// 	ExtensionTypeCpiGuard:                       1,   // account
-// 	ExtensionTypePermanentDelegate:              32,  // mint
-// 	ExtensionTypeNonTransferableAccount:         0,   // account
-// 	ExtensionTypeTransferHook:                   64,  // mint
-// 	ExtensionTypeTransferHookAccount:            1,   // account
-// 	ExtensionTypeConfidentialTransferFeeConfig:  129, // mint
-// 	ExtensionTypeConfidentialTransferFeeAmount:  64,  // account
-// 	ExtensionTypeMetadataPointer:                64,  // mint
-// 	// ExtensionTypeTokenMetadata is deliberately absent: name, symbol, uri,
-// 	// and additional_metadata are all variable-length Borsh strings/lists,
-// 	// so this extension has no fixed size to record here at all — it can
-// 	// only ever be computed from the actual field values a request carries.
-// 	ExtensionTypeGroupPointer:       64, // mint
-// 	ExtensionTypeTokenGroup:         80, // mint
-// 	ExtensionTypeGroupMemberPointer: 64, // mint
-// 	ExtensionTypeTokenGroupMember:   72, // mint
-// 	ExtensionTypeConfidentialMintBurn: 196, // mint
-// 	ExtensionTypeScaledUiAmount:       56,  // mint
-// 	ExtensionTypePausable:             33,  // mint
-// 	ExtensionTypePausableAccount:      0,   // account
-// }
+// Unlike an existing account's size, which GetAccountDataSize always answers
+// by asking the deployed program directly rather than assuming client-side,
+// a mint being created has no equivalent on-chain instruction at all:
+// GetAccountDataSize only ever answers "how big does an account need to be
+// to hold this mint", never "how big does this mint itself need to be" — a
+// different question the interface crate does not expose a return-data
+// instruction for. Sizing a mint with extensions before create-mint has to
+// happen client-side or not at all, which is what this table is for.
+//
+// ExtensionTypeTokenMetadata is deliberately absent: name, symbol, uri, and
+// additional_metadata are all variable-length Borsh strings/lists, so this
+// extension has no fixed size to record here at all — it can only ever be
+// computed from the actual field values a request carries, which is its own
+// endpoint's job, not this table's.
+var extensionTypeDataLen = map[ExtensionType]int{
+	ExtensionTypeTransferFeeConfig:             108, // mint
+	ExtensionTypeTransferFeeAmount:             8,   // account
+	ExtensionTypeMintCloseAuthority:            32,  // mint
+	ExtensionTypeConfidentialTransferMint:      65,  // mint
+	ExtensionTypeConfidentialTransferAccount:   295, // account
+	ExtensionTypeDefaultAccountState:           1,   // mint
+	ExtensionTypeImmutableOwner:                0,   // account
+	ExtensionTypeMemoTransfer:                  1,   // account
+	ExtensionTypeNonTransferable:               0,   // mint
+	ExtensionTypeInterestBearingConfig:         52,  // mint
+	ExtensionTypeCpiGuard:                      1,   // account
+	ExtensionTypePermanentDelegate:             32,  // mint
+	ExtensionTypeNonTransferableAccount:        0,   // account
+	ExtensionTypeTransferHook:                  64,  // mint
+	ExtensionTypeTransferHookAccount:           1,   // account
+	ExtensionTypeConfidentialTransferFeeConfig: 129, // mint
+	ExtensionTypeConfidentialTransferFeeAmount: 64,  // account
+	ExtensionTypeMetadataPointer:               64,  // mint
+	ExtensionTypeGroupPointer:                  64,  // mint
+	ExtensionTypeTokenGroup:                    80,  // mint
+	ExtensionTypeGroupMemberPointer:            64,  // mint
+	ExtensionTypeTokenGroupMember:              72,  // mint
+	ExtensionTypeConfidentialMintBurn:          196, // mint
+	ExtensionTypeScaledUiAmount:                56,  // mint
+	ExtensionTypePausable:                      33,  // mint
+	ExtensionTypePausableAccount:               0,   // account
+}
+
+// mintOnlyExtensionTypes is which of the keys in extensionTypeDataLen may
+// actually appear on a mint, as opposed to only a token account. This is
+// exactly the categorization GetAccountDataSize's own ExtensionTypeMismatch
+// check enforces on chain for an account; a mint has no equivalent
+// instruction to enforce it for, so CalculateMintExtensionsLen checks it
+// here instead.
+var mintOnlyExtensionTypes = map[ExtensionType]bool{
+	ExtensionTypeTransferFeeConfig:             true,
+	ExtensionTypeMintCloseAuthority:            true,
+	ExtensionTypeConfidentialTransferMint:      true,
+	ExtensionTypeDefaultAccountState:           true,
+	ExtensionTypeNonTransferable:               true,
+	ExtensionTypeInterestBearingConfig:         true,
+	ExtensionTypePermanentDelegate:             true,
+	ExtensionTypeTransferHook:                  true,
+	ExtensionTypeConfidentialTransferFeeConfig: true,
+	ExtensionTypeMetadataPointer:               true,
+	ExtensionTypeGroupPointer:                  true,
+	ExtensionTypeTokenGroup:                    true,
+	ExtensionTypeGroupMemberPointer:            true,
+	ExtensionTypeTokenGroupMember:              true,
+	ExtensionTypeConfidentialMintBurn:          true,
+	ExtensionTypeScaledUiAmount:                true,
+	ExtensionTypePausable:                      true,
+}
+
+// CalculateMintExtensionsLen returns the total byte size a mint needs to
+// hold every named extension, computed client-side from
+// extensionTypeDataLen since no on-chain instruction answers this question
+// (see the table's own doc comment). The 1-byte AccountType marker is
+// included once, and only when the list is non-empty: a mint carrying no
+// extension at all stays exactly MintSpace, with no marker byte at all,
+// the same way a bare token account stays exactly TokenAccountSpace.
+//
+// ExtensionTypeTokenMetadata is rejected here, not silently skipped: its
+// size cannot be known without the actual name/symbol/uri content, which
+// belongs to a dedicated endpoint of its own, not this general-purpose
+// calculator.
+func CalculateMintExtensionsLen(extensionTypes []ExtensionType) (uint64, error) {
+	if len(extensionTypes) == 0 {
+		return MintSpace, nil
+	}
+
+	total := uint64(0)
+	for _, et := range extensionTypes {
+		if et == ExtensionTypeTokenMetadata {
+			return 0, fmt.Errorf("extension type: token_metadata is variable-length and not supported by this calculator; its size depends on the actual name/symbol/uri content")
+		}
+		if !mintOnlyExtensionTypes[et] {
+			return 0, fmt.Errorf("extension type: %d is a token-account extension, not a mint extension", et)
+		}
+
+		total += 4 + uint64(extensionTypeDataLen[et])
+	}
+
+	// An extended mint is not left at its own 82-byte layout: it is padded
+	// out to a holder account's 165-byte length first, the same length a
+	// token account's own extensions start from, and only then does the
+	// one-byte AccountType marker and this account's own TLV region begin.
+	// This is not a choice a mint's extensions get to skip, and missing it
+	// once already cost a live devnet attempt an InvalidAccountData: the
+	// account came back exactly 83 bytes short (165 - 82) of what the
+	// program actually required.
+	return TokenAccountSpace + 1 + total, nil
+}
 
 // Reallocate checks whether account is already large enough to hold every
 // named extension type, and grows it if not.

@@ -72,6 +72,7 @@ func run() error {
 		r.Post("/ui-to-amount", tokenHandler.UiToAmount)
 		r.Route("/extensions", func(r chi.Router) {
 			r.Post("/get-account-data-size", tokenHandler.GetAccountDataSize)
+			r.Post("/mint/data-size", tokenHandler.MintDataSize)
 		})
 	})
 
@@ -218,6 +219,11 @@ func run() error {
 			r.Post("/set-authority/close/clear", tk.SetCloseAuthorityClear)
 			r.Post("/freeze-account", tk.FreezeAccount)
 			r.Post("/thaw-account", tk.ThawAccount)
+			r.Route("/extensions/transfer-fee-config", func(r chi.Router) {
+				r.Post("/reallocate", tk.ReallocateTransferFeeConfig)
+				r.Post("/initialize", tk.InitializeTransferFeeConfig)
+				r.Post("/set", tk.SetTransferFee)
+			})
 		})
 
 		cb := v2.NewComputeBudgetTransactionHandler(cfg)

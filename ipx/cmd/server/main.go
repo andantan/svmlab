@@ -216,6 +216,14 @@ func run() error {
 			r.Post("/freeze-account", tk.FreezeAccount)
 			r.Post("/thaw-account", tk.ThawAccount)
 		})
+
+		cb := v2.NewComputeBudgetTransactionHandler(cfg)
+		r.Route("/transaction/compute-budget", func(r chi.Router) {
+			r.Post("/set-compute-unit-limit", cb.SetComputeUnitLimit)
+			r.Post("/set-compute-unit-price", cb.SetComputeUnitPrice)
+			r.Post("/request-heap-frame", cb.RequestHeapFrame)
+			r.Post("/set-loaded-accounts-data-size-limit", cb.SetLoadedAccountsDataSizeLimit)
+		})
 	})
 
 	fmt.Printf("listening on %s\n", cfg.ServerAddr)

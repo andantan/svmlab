@@ -3168,6 +3168,66 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.RequestHeapFrameRequest:
+    properties:
+      bytes:
+        description: |-
+          Bytes must be a multiple of 1024 in [32768, 262144] (32KiB to 256KiB);
+          the runtime rejects anything else as InvalidInstructionData, so this
+          is checked here rather than left to come back as an on-chain
+          rejection.
+        example: "65536"
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.RequestHeapFrameResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      bytes:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.RevokeRequest:
     properties:
       durable_nonce_account:
@@ -3515,6 +3575,124 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.SetComputeUnitLimitRequest:
+    properties:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      units:
+        description: |-
+          Units is the raw compute unit ceiling, not a multiplier or a
+          percentage. Exceeding it during execution fails the transaction with
+          a compute-budget-exceeded error.
+        example: "200000"
+        type: string
+    type: object
+  v2.SetComputeUnitLimitResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+      units:
+        type: string
+    type: object
+  v2.SetComputeUnitPriceRequest:
+    properties:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      micro_lamports:
+        description: |-
+          MicroLamports is the raw priority-fee rate: the runtime multiplies
+          this by whatever compute the transaction actually consumes to get the
+          priority fee on top of the base signature fee.
+        example: "1000"
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.SetComputeUnitPriceResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      micro_lamports:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.SetFreezeAuthorityClearRequest:
     properties:
       durable_nonce_account:
@@ -3667,6 +3845,67 @@ definitions:
       nonce_authority:
         type: string
       program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SetLoadedAccountsDataSizeLimitRequest:
+    properties:
+      bytes:
+        description: |-
+          Bytes must be non-zero — the runtime rejects zero outright as
+          InvalidLoadedAccountsDataSizeLimit, so this is checked here rather
+          than left to come back as an on-chain rejection. Left unset, legacy
+          and v0 transactions default to 64MiB; this only ever lowers that
+          ceiling, since anything larger is clamped back down to it.
+        example: "131072"
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.SetLoadedAccountsDataSizeLimitResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      bytes:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
         type: string
       recent_blockhash:
         type: string
@@ -8123,6 +8362,205 @@ paths:
       summary: Build an unsigned transaction
       tags:
       - transaction
+  /svm/v2/transaction/compute-budget/request-heap-frame:
+    post:
+      consumes:
+      - application/json
+      description: Resizes the heap available to the transaction carrying this instruction,
+        in bytes. bytes must be a multiple of 1024 in [32768, 262144] (32KiB to 256KiB);
+        anything else is rejected here rather than left to come back as an on-chain
+        InvalidInstructionData. The default heap is 32KiB per instruction invocation,
+        and applies to every program the transaction invokes, CPIs included; a program
+        that allocates more fails with an out-of-memory error unless this runs first
+        in the same transaction. It takes no accounts at all — there is nobody to
+        name as an authority, since the frame only ever sizes the transaction it rides
+        in, never any other. recent_blockhash is always required and is never fetched
+        server-side. Left alone, it also builds the message and expires whenever the
+        runtime says it does. Naming durable_nonce_account builds the message against
+        the value that account stores instead, so the transaction never expires, and
+        prepends the advance that consumes it; recent_blockhash then only prices the
+        transaction. The response reports nonce_authority in that case, which has
+        to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Heap frame parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.RequestHeapFrameRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.RequestHeapFrameResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a heap-frame-resize instruction
+      tags:
+      - v2-transaction-compute-budget
+  /svm/v2/transaction/compute-budget/set-compute-unit-limit:
+    post:
+      consumes:
+      - application/json
+      description: Caps how many compute units the transaction carrying this instruction
+        may consume. It takes no accounts at all — there is nobody to name as an authority,
+        since the limit only ever binds the transaction it rides in, never any other.
+        Exceeding it during execution fails that same transaction with a compute-budget-exceeded
+        error. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Compute unit limit parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetComputeUnitLimitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetComputeUnitLimitResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a compute-unit-limit instruction
+      tags:
+      - v2-transaction-compute-budget
+  /svm/v2/transaction/compute-budget/set-compute-unit-price:
+    post:
+      consumes:
+      - application/json
+      description: 'Sets the priority fee for the transaction carrying this instruction,
+        in micro-lamports per compute unit: the runtime multiplies this by whatever
+        compute the transaction actually consumes to get the priority fee on top of
+        the base signature fee. It takes no accounts at all — there is nobody to name
+        as an authority, since the price only ever binds the transaction it rides
+        in, never any other. recent_blockhash is always required and is never fetched
+        server-side. Left alone, it also builds the message and expires whenever the
+        runtime says it does. Naming durable_nonce_account builds the message against
+        the value that account stores instead, so the transaction never expires, and
+        prepends the advance that consumes it; recent_blockhash then only prices the
+        transaction. The response reports nonce_authority in that case, which has
+        to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Compute unit price parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetComputeUnitPriceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetComputeUnitPriceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a compute-unit-price instruction
+      tags:
+      - v2-transaction-compute-budget
+  /svm/v2/transaction/compute-budget/set-loaded-accounts-data-size-limit:
+    post:
+      consumes:
+      - application/json
+      description: Caps the total byte size of every account the transaction carrying
+        this instruction loads, across all its instructions and any CPIs they make.
+        bytes must be non-zero — the runtime rejects zero outright as InvalidLoadedAccountsDataSizeLimit,
+        so this is checked here rather than left to come back as an on-chain rejection.
+        Left unset, legacy and v0 transactions default to 64MiB; naming a value here
+        only ever lowers that ceiling, since anything larger is clamped back down
+        to it. It takes no accounts at all — there is nobody to name as an authority,
+        since the limit only ever bounds the transaction it rides in, never any other.
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        account stores instead, so the transaction never expires, and prepends the
+        advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Loaded accounts data size limit parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetLoadedAccountsDataSizeLimitRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetLoadedAccountsDataSizeLimitResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a loaded-accounts-data-size-limit instruction
+      tags:
+      - v2-transaction-compute-budget
   /svm/v2/transaction/system/allocate:
     post:
       consumes:

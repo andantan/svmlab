@@ -4698,6 +4698,120 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-account/apply-pending-balance": {
+            "post": {
+                "description": "Moves whatever deposit and incoming transfers have accumulated in account's encrypted pending balance into its available balance, the one transfer and withdraw actually spend from. Nothing received since account's last apply can be spent until this runs. No zero-knowledge proof is needed: the program does the pending-into-available ElGamal addition itself. new_available_balance is this endpoint's own bookkeeping catching up to that addition -- the total available balance account should hold once this lands, AE-encrypted here under ae_key the same way configure-account's decryptable_zero_balance was; this endpoint never decrypts a confidential balance itself, so the caller supplies the total. expected_pending_balance_credit_counter is how many pending-balance credits landed since account's last apply -- the program rejects a mismatched count. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Move an account's confidential pending balance into its available balance",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Account, authority, expected credit counter, new balance, AE key, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ApplyPendingBalanceRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ApplyPendingBalanceResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-account/approve-account": {
+            "post": {
+                "description": "Flips account's ConfidentialTransferAccount.approved flag, authorized by mint's ConfidentialTransferMint authority (the role initialize or update named), not account's own owner. Only needed when mint was set up with auto_approve_new_accounts false -- against a mint set up with it true, configure-account already leaves a usable account and this call has nothing left to flip, though the deployed program accepts it regardless. No zero-knowledge proof is needed: unlike configure-account this carries no data beyond the two discriminant bytes. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Approve a token account for confidential transfers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Account, mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ApproveAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ApproveAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/extensions/confidential-transfer-account/configure-account": {
             "post": {
                 "description": "Builds two instructions in one transaction: ConfigureAccount itself, and the VerifyPubkeyValidity instruction it depends on as its very next sibling -- the program has to be convinced elgamal_pubkey has a known secret key before letting account claim it. mint must already carry ConfidentialTransferMint, and account must already hold room for this extension (see extensions/confidential-transfer-account/reallocate). pubkey_proof is checked locally (the same relationship the deployed verifier itself checks) before a transaction is ever built, so a proof built against a different key fails as a 400 rather than a wasted fee. decryptable_zero_balance is computed here from ae_key, always encrypting zero -- a freshly configured account has no balance yet. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -4741,6 +4855,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.ConfigureAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-account/deposit": {
+            "post": {
+                "description": "Moves amount from account's ordinary public balance into its own ConfidentialTransferAccount pending balance, encrypted along the way -- the entry point into the confidential side from a plain SPL balance. account must already carry the extension (see configure-account). No zero-knowledge proof is needed: the amount is still public at this instant, leaving a balance anyone can already see, so there is nothing to prove about it yet. decimals must equal mint's own, checked here the same as every other *Checked-shaped instruction rather than trusting the caller's figure. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Move an account's public balance into its confidential pending balance",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Account, mint, authority, amount, decimals, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.DepositRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.DepositResponse"
                         }
                     },
                     "400": {
@@ -8891,6 +9062,201 @@ const docTemplate = `{
                 }
             }
         },
+        "v2.ApplyPendingBalanceRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "description": "Account is the token account to apply. It must already carry the\nConfidentialTransferAccount extension (see configure-account).",
+                    "type": "string",
+                    "example": ""
+                },
+                "ae_key": {
+                    "description": "AeKey encrypts NewAvailableBalance, base58-encoded -- a raw 16-byte\nAES-128-GCM-SIV key, not a Solana address (see\ntool/derive/ae-key-seed-message and tool/derive/ae-key), the same\nkey Account's own decryptable_zero_balance was set up under.",
+                    "type": "string",
+                    "example": ""
+                },
+                "authority": {
+                    "description": "Authority is Account's owner, or its multisig for a multisig-owned\naccount (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "expected_pending_balance_credit_counter": {
+                    "description": "ExpectedPendingBalanceCreditCounter is how many pending-balance\ncredits (deposits and incoming transfers) landed on Account since\nits last apply. The program rejects a mismatched count rather than\nsilently applying a different set of credits than the caller\nbelieves it is catching up on.",
+                    "type": "string",
+                    "example": "1"
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_available_balance": {
+                    "description": "NewAvailableBalance is the total available balance Account should\nhold once this apply lands, in raw base units -- not a delta, the\nfull new total. AeKey encrypts it into the wire value this\ninstruction actually carries.",
+                    "type": "string",
+                    "example": "10"
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token account can never hold\nthis extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ApplyPendingBalanceResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "expected_pending_balance_credit_counter": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "new_available_balance": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ApproveAccountRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "description": "Account is the token account to approve. It must already carry the\nConfidentialTransferAccount extension (see configure-account).",
+                    "type": "string",
+                    "example": ""
+                },
+                "authority": {
+                    "description": "Authority is the authority initialize (or update) named, or its\nmultisig for a multisig-owned authority (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the ConfidentialTransferMint extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token account can never hold\nthis extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ApproveAccountResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.ApproveCheckedMaxRequest": {
             "type": "object",
             "properties": {
@@ -10428,6 +10794,113 @@ const docTemplate = `{
                             "$ref": "#/definitions/v2.SystemPayer"
                         }
                     ]
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.DepositRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "description": "Account is debited from its public balance and credited to its own\nconfidential pending balance -- the same account both ends.",
+                    "type": "string",
+                    "example": ""
+                },
+                "amount": {
+                    "description": "Amount is the raw base-unit count to move, not a UI decimal string.",
+                    "type": "string",
+                    "example": "1000"
+                },
+                "authority": {
+                    "description": "Authority is Account's owner, or its delegate for no more than what\nwas delegated -- the same role a plain transfer or burn checks,\nsince this spends from the public balance like either of those.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "decimals": {
+                    "description": "Decimals must equal Mint's own, the same check every other\n*Checked-shaped instruction in this API runs rather than trusting\nthe caller's figure.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint is what Account must hold, and is the source of the decimals\nchecked against.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token account can never hold\nthis extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.DepositResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "amount": {
+                    "type": "string"
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "decimals": {
+                    "type": "integer"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
                 },
                 "signers": {
                     "type": "array",

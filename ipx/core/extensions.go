@@ -1129,3 +1129,122 @@ func (t *token) ConfigureAccount(account, mint, authority *types.PublicKey, sign
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
 }
+
+// ApproveAccount flips account's ConfidentialTransferAccount.approved
+// flag, authorized by whoever InitializeConfidentialTransferMint or
+// UpdateConfidentialTransferMint named as mint's authority -- the same
+// role ConfigureAccount itself has no say over, since
+// auto_approve_new_accounts on that mint being false is exactly what
+// makes an unapproved account unusable until this runs.
+//
+// This is opcode 27 sub 3 (ConfidentialTransferInstructionApproveAccount),
+// and unlike ConfigureAccount it carries no data at all beyond the two
+// discriminant bytes and needs no zero-knowledge proof -- confirmed
+// against the interface crate's own approve_account: `&()` for data, no
+// sysvar::instructions account, just [account(writable), mint(readonly),
+// authority(+multisig)].
+func (t *token) ApproveAccount(account, mint, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token approve account: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token approve account: mint is required")
+	}
+	if err := validateAuthority("token approve account", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionApproveAccount)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(mint),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// Deposit moves amount from account's ordinary public balance into its
+// ConfidentialTransferAccount pending balance, encrypted along the way --
+// the entry point into the confidential side from a plain SPL balance,
+// the same direction Withdraw (not yet built) reverses.
+//
+// This is opcode 27 sub 5 (ConfidentialTransferInstructionDeposit), and
+// unlike ConfigureAccount it needs no zero-knowledge proof: the amount is
+// still public at this instant (it is leaving the public balance, which
+// anyone can already see), so there is nothing to prove about it yet --
+// only Transfer, which moves an already-confidential amount, needs a
+// range proof that it is non-negative. Confirmed against the interface
+// crate's own deposit(): accounts are
+// [token_account(writable), mint(readonly), authority(+multisig)], data
+// is amount(u64) + decimals(u8), the same decimals-checks-against-mint
+// shape every other *Checked instruction in this codebase uses.
+func (t *token) Deposit(account, mint, authority *types.PublicKey, signers []*types.PublicKey, amount uint64, decimals uint8) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token deposit: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token deposit: mint is required")
+	}
+	if err := validateAuthority("token deposit", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionDeposit)
+	data = codec.Binary.AppendU64(data, amount)
+	data = codec.Binary.AppendU8(data, decimals)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(mint),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// ApplyPendingBalance moves whatever Deposit and incoming Transfers have
+// accumulated in account's encrypted pending balance into its available
+// balance, the one Transfer and Withdraw actually spend from. Nothing
+// received since account's last apply can be spent until this runs.
+//
+// This is opcode 27 sub 8 (ConfidentialTransferInstructionApplyPendingBalance),
+// and needs no zero-knowledge proof -- the program does the pending-into-
+// available ElGamal addition itself; nothing here is asserted about a
+// value the caller alone knows. newDecryptableAvailableBalance is the
+// caller's own bookkeeping catching up to that addition: an AE encryption
+// (EncryptAeAmount) of what the available balance becomes once this
+// lands, under the same AeKey ConfigureAccount's decryptable_zero_balance
+// used, so the account's own cheap-to-read cache stays in sync with the
+// ElGamal ciphertext the program actually updates.
+//
+// expectedPendingBalanceCreditCounter is how many pending-balance credits
+// (deposits and incoming transfers) landed since account's last apply --
+// the program rejects a mismatched count rather than silently applying a
+// different set of credits than the caller believes it is catching up
+// on. Confirmed against the interface crate's own apply_pending_balance:
+// accounts are just [token_account(writable), authority(+multisig)], no
+// mint account at all, unlike Deposit.
+func (t *token) ApplyPendingBalance(account, authority *types.PublicKey, signers []*types.PublicKey, expectedPendingBalanceCreditCounter uint64, newDecryptableAvailableBalance []byte) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token apply pending balance: account is required")
+	}
+	if err := validateAuthority("token apply pending balance", authority, signers); err != nil {
+		return nil, err
+	}
+	if len(newDecryptableAvailableBalance) != AeCiphertextLen {
+		return nil, fmt.Errorf("token apply pending balance: new decryptable available balance is %d bytes, expected %d", len(newDecryptableAvailableBalance), AeCiphertextLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionApplyPendingBalance)
+	data = codec.Binary.AppendU64(data, expectedPendingBalanceCreditCounter)
+	data = codec.Binary.AppendBytes(data, newDecryptableAvailableBalance)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}

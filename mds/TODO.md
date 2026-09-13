@@ -144,6 +144,34 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
   Schnorr proof부터 AES-GCM-SIV, 별도 zk_elgamal_proof 프로그램 연동까지
   전부 처음부터 구축, 실전 devnet 테스트로 transcript 버그 하나 잡고 수정,
   최종 성공까지 확인.**
+
+  - [x] `extensions/confidential-transfer-account/approve-account`
+    (opcode 27 sub 3, `ApproveAccount`) — devnet-confirmed. proof 불필요,
+    데이터도 discriminant뿐. mint의 `auto_approve_new_accounts=false`일 때
+    `authority`가 계좌의 `approved` 플래그를 켜주는 역할. RPC parsed 로그
+    `type: "approveConfidentialTransferAccount"` 확인.
+  - [x] `extensions/confidential-transfer-account/deposit` (opcode 27
+    sub 5, `Deposit`) — devnet-confirmed. 공개 잔액 → confidential pending
+    balance로 옮기는 진입점, proof 불필요(아직 공개 상태인 금액을 옮기는
+    거라 증명할 게 없음 — proof는 `Transfer`처럼 이미 암호화된 값을 다룰
+    때부터 필요). 데이터 `amount`(u64)+`decimals`(u8), 계좌
+    `[account(writable), mint, authority(+멀티시그)]`. `mint-to`로 공개
+    잔액 10개 찍은 뒤 그중 10개를 deposit, RPC parsed 로그
+    `type: "depositConfidentialTransfer"`, `amount: 10` 확인. 같은 계좌
+    안에서 일어나는 동작이라 계좌 1개로 테스트 가능 — `Transfer`부터는
+    계좌 2개(source+destination 둘 다 confidential 설정 완료) 필요
+  - [x] `extensions/confidential-transfer-account/apply-pending-balance`
+    (opcode 27 sub 8, `ApplyPendingBalance`) — devnet-confirmed. proof
+    불필요, mint 계좌도 안 씀(`[account, authority]`뿐). 데이터
+    `expected_pending_balance_credit_counter`(u64) +
+    `new_decryptable_available_balance`(36바이트 AE 암호문). 이
+    엔드포인트는 confidential 잔액을 직접 복호화하지 않으므로
+    `new_available_balance`(apply 후 총 available 잔액)를 호출자가 직접
+    계산해서 넘겨야 함 — `ae_key`로 서버가 AE 암호화만 해줌. RPC parsed
+    로그 `type: "applyPendingConfidentialTransferBalance"`,
+    `expectedPendingBalanceCreditCounter: 1` 확인. `Deposit`으로 넣은 10개가
+    pending→available로 정상 이동(지갑 UI에서도 계좌 extensions 상태 변화
+    확인됨)
   ApplyPendingBalance 등)는 여전히 진행 중 — 각각 필요한 proof 종류가 다름
   (range proof, ciphertext equality proof 등), 하나씩 순서대로 계속.
   - `core.UpdateConfidentialTransferMint` (opcode 27 sub 1): `UpdateMintData`엔

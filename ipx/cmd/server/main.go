@@ -250,6 +250,9 @@ func run() error {
 			r.Route("/extensions/confidential-transfer-account", func(r chi.Router) {
 				r.Post("/reallocate", tk.ReallocateConfidentialTransferAccount)
 				r.Post("/configure-account", tk.ConfigureAccount)
+				r.Post("/approve-account", tk.ApproveAccount)
+				r.Post("/deposit", tk.Deposit)
+				r.Post("/apply-pending-balance", tk.ApplyPendingBalance)
 			})
 		})
 

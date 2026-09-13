@@ -5,15 +5,17 @@ import (
 
 	"github.com/andantan/svmlab/core/codec"
 	"github.com/andantan/svmlab/core/types"
+	"github.com/andantan/svmlab/core/zkbridge"
 )
 
 // ZkElgamalProofInstructionCloseContextState and the rest of this block
 // are the top-level opcodes the ZkElgamalProof program accepts, confirmed
-// against the interface crate's own ProofInstruction enum. Only
-// VerifyPubkeyValidity is built out below; the rest verify proofs this
-// package does not yet generate (range proofs, ciphertext equality
-// proofs, and the others ConfidentialTransfer's remaining Deposit/
-// Withdraw/Transfer-family sub-instructions would need).
+// against the interface crate's own ProofInstruction enum. VerifyPubkeyValidity,
+// VerifyCiphertextCommitmentEquality, VerifyBatchedGroupedCiphertext3HandlesValidity,
+// and VerifyBatchedRangeProofU128 are built out below -- everything
+// extensions/confidential-transfer-account/{configure-account,transfer}
+// need; the rest verify proofs no sub-instruction built in this codebase
+// yet requires.
 const (
 	ZkElgamalProofInstructionCloseContextState uint8 = iota
 	ZkElgamalProofInstructionVerifyZeroCiphertext
@@ -71,6 +73,55 @@ func (z *zkElgamalProof) VerifyPubkeyValidityInline(elgamalPubkey, proof []byte)
 	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyPubkeyValidity)
 	data = codec.Binary.AppendBytes(data, elgamalPubkey)
 	data = codec.Binary.AppendBytes(data, proof)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyCiphertextCommitmentEqualityInline builds a
+// VerifyCiphertextCommitmentEquality instruction carrying its proof data
+// inline -- opcode 3. proofData is
+// zkbridge.ProveCiphertextCommitmentEquality's own output, solana-zk-sdk's
+// CiphertextCommitmentEqualityProofData wire layout (context then proof,
+// 320 bytes), packed directly rather than reassembled from parts since
+// the wasm bridge already returns it in the exact form this instruction
+// carries.
+func (z *zkElgamalProof) VerifyCiphertextCommitmentEqualityInline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != zkbridge.CiphertextCommitmentEqualityProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify ciphertext commitment equality: proof data is %d bytes, expected %d", len(proofData), zkbridge.CiphertextCommitmentEqualityProofDataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyCiphertextCommitmentEquality)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyBatchedGroupedCiphertext3HandlesValidityInline builds a
+// VerifyBatchedGroupedCiphertext3HandlesValidity instruction carrying its
+// proof data inline -- opcode 10. proofData is
+// zkbridge.ProveBatchedGroupedCiphertext3HandlesValidity's own output
+// (544 bytes).
+func (z *zkElgamalProof) VerifyBatchedGroupedCiphertext3HandlesValidityInline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != zkbridge.BatchedGroupedCiphertext3HandlesValidityProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify batched grouped ciphertext 3 handles validity: proof data is %d bytes, expected %d", len(proofData), zkbridge.BatchedGroupedCiphertext3HandlesValidityProofDataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext3HandlesValidity)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyBatchedRangeProofU128Inline builds a VerifyBatchedRangeProofU128
+// instruction carrying its proof data inline -- opcode 7. proofData is
+// zkbridge.ProveBatchedRangeProofU128's own output (1000 bytes).
+func (z *zkElgamalProof) VerifyBatchedRangeProofU128Inline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != zkbridge.BatchedRangeProofU128DataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify batched range proof u128: proof data is %d bytes, expected %d", len(proofData), zkbridge.BatchedRangeProofU128DataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyBatchedRangeProofU128)
+	data = codec.Binary.AppendBytes(data, proofData)
 
 	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
 }

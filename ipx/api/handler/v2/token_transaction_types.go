@@ -10602,6 +10602,317 @@ func NewApplyPendingBalanceResponse(
 	}
 }
 
+// ConfidentialTransferRequest moves Amount confidentially from Source to
+// Destination -- neither the amount nor either account's resulting
+// balance ever appears in plaintext on chain. Both accounts must already
+// carry the ConfidentialTransferAccount extension (see configure-account
+// and, for Destination, approve-account if Mint requires it).
+//
+// This builds four instructions in one transaction: the Transfer
+// instruction itself, followed by the three zero-knowledge proofs it
+// depends on (equality, ciphertext validity, and the batched range
+// proof) -- all computed by core.BuildTransferProofs, which calls the
+// real solana-zk-sdk proof-generation code via core/zkbridge rather than
+// a from-scratch port (see that package's own doc comment for why).
+//
+// CurrentAvailableBalanceCiphertext and
+// CurrentDecryptableAvailableBalance are Source's own current confidential
+// state, read off chain by the caller rather than fetched here -- this
+// endpoint has no Token-2022 extension TLV parser for
+// ConfidentialTransferAccount specifically, unlike the base account and
+// mint parsing every other endpoint in this API already does.
+type ConfidentialTransferRequest struct {
+	// Source is debited. It must already carry the
+	// ConfidentialTransferAccount extension.
+	Source string `json:"source" example:""`
+
+	// Mint is what both Source and Destination must hold, and must
+	// already carry the ConfidentialTransferMint extension.
+	Mint string `json:"mint" example:""`
+
+	// Destination is credited. It must already carry the
+	// ConfidentialTransferAccount extension.
+	Destination string `json:"destination" example:""`
+
+	// Owner is Source's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// SourceElgamalSecretKey is Source's own ElGamal secret key,
+	// base58-encoded -- the same one configure-account registered the
+	// public half of. The public key is derived from it here rather than
+	// taken as a separate field, so the two can never be mismatched.
+	SourceElgamalSecretKey string `json:"source_elgamal_secret_key" example:""`
+
+	// DestinationElgamalPubkey is Destination's ElGamal public key,
+	// base58-encoded -- the same value its own configure-account call
+	// registered.
+	DestinationElgamalPubkey string `json:"destination_elgamal_pubkey" example:""`
+
+	// AuditorElgamalPubkey may be left empty for a mint with no auditor
+	// (see initialize on extensions/confidential-transfer-mint) --
+	// resolved to the identity key internally, the same convention that
+	// extension's own MaybeNull field uses. Given, it must be the exact
+	// value that mint's ConfidentialTransferMint.auditor_elgamal_pubkey
+	// holds.
+	AuditorElgamalPubkey string `json:"auditor_elgamal_pubkey" example:""`
+
+	// CurrentAvailableBalanceCiphertext is Source's current available
+	// balance, base58-encoded -- the raw 64-byte ElGamal ciphertext its
+	// ConfidentialTransferAccount extension currently stores, read by the
+	// caller off chain.
+	CurrentAvailableBalanceCiphertext string `json:"current_available_balance_ciphertext" example:""`
+
+	// CurrentDecryptableAvailableBalance is Source's current available
+	// balance, base58-encoded -- the raw 36-byte AE ciphertext its
+	// ConfidentialTransferAccount extension currently stores (the same
+	// wire value configure-account's own decryptable_zero_balance and
+	// apply-pending-balance's new_available_balance produce).
+	CurrentDecryptableAvailableBalance string `json:"current_decryptable_available_balance" example:""`
+
+	// AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the
+	// new one this transfer leaves Source with, base58-encoded -- a raw
+	// 16-byte AES-128-GCM-SIV key, not a Solana address (see
+	// tool/derive/ae-key-seed-message and tool/derive/ae-key), the same
+	// key Source's own decryptable balance has always been kept under.
+	AeKey string `json:"ae_key" example:""`
+
+	// Amount is the raw base-unit count to move, not a UI decimal
+	// string. It cannot exceed 2^48 - 1 (a confidential transfer amount's
+	// lo/hi split covers 48 bits total, not the full 64 a balance can
+	// hold), and this endpoint rejects it here rather than leaving that
+	// to a range proof failure -- it also cannot exceed Source's own
+	// current available balance, decrypted from
+	// current_decryptable_available_balance to check.
+	Amount string `json:"amount" example:"250"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty,
+	// Owner itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	source                             *types.PublicKey
+	mint                               *types.PublicKey
+	destination                        *types.PublicKey
+	owner                              *types.PublicKey
+	sourceSecretKey                    []byte
+	destinationElgamalPubkey           []byte
+	auditorElgamalPubkey               []byte
+	currentAvailableBalanceCiphertext  []byte
+	currentDecryptableAvailableBalance []byte
+	aeKey                              []byte
+	amount                             uint64
+	feePayer                           *types.PublicKey
+	rbh                                *types.Hash
+	dna                                *types.PublicKey
+	tokenProgramID                     *types.PublicKey
+	multisigSigners                    []*types.PublicKey
+}
+
+func (r *ConfidentialTransferRequest) ValidateRequest() error {
+	var err error
+	if r.source, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Source)); err != nil {
+		return errors.New("source: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.destination, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Destination)); err != nil {
+		return errors.New("destination: " + err.Error())
+	}
+	if r.source.Equal(r.destination) {
+		return errors.New("source and destination are the same account")
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+
+	if r.sourceSecretKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.SourceElgamalSecretKey), 32); err != nil {
+		return errors.New("source_elgamal_secret_key: " + err.Error())
+	}
+	if r.destinationElgamalPubkey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.DestinationElgamalPubkey), 32); err != nil {
+		return errors.New("destination_elgamal_pubkey: " + err.Error())
+	}
+	if a := strings.TrimSpace(r.AuditorElgamalPubkey); a != "" {
+		if r.auditorElgamalPubkey, err = codec.Base58.DecodeFixed(a, 32); err != nil {
+			return errors.New("auditor_elgamal_pubkey: " + err.Error())
+		}
+	}
+	if r.currentAvailableBalanceCiphertext, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.CurrentAvailableBalanceCiphertext), 64); err != nil {
+		return errors.New("current_available_balance_ciphertext: " + err.Error())
+	}
+	if r.currentDecryptableAvailableBalance, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.CurrentDecryptableAvailableBalance), core.AeCiphertextLen); err != nil {
+		return errors.New("current_decryptable_available_balance: " + err.Error())
+	}
+	if r.aeKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AeKey), core.AeKeyLen); err != nil {
+		return errors.New("ae_key: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: " + err.Error())
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ConfidentialTransferRequest) SourceKey() *types.PublicKey      { return r.source }
+func (r *ConfidentialTransferRequest) MintKey() *types.PublicKey        { return r.mint }
+func (r *ConfidentialTransferRequest) DestinationKey() *types.PublicKey { return r.destination }
+func (r *ConfidentialTransferRequest) OwnerKey() *types.PublicKey       { return r.owner }
+func (r *ConfidentialTransferRequest) ToSourceSecretKey() []byte        { return r.sourceSecretKey }
+func (r *ConfidentialTransferRequest) ToDestinationElgamalPubkey() []byte {
+	return r.destinationElgamalPubkey
+}
+func (r *ConfidentialTransferRequest) ToAuditorElgamalPubkey() []byte { return r.auditorElgamalPubkey }
+func (r *ConfidentialTransferRequest) ToCurrentAvailableBalanceCiphertext() []byte {
+	return r.currentAvailableBalanceCiphertext
+}
+func (r *ConfidentialTransferRequest) ToCurrentDecryptableAvailableBalance() []byte {
+	return r.currentDecryptableAvailableBalance
+}
+func (r *ConfidentialTransferRequest) ToAeKey() []byte               { return r.aeKey }
+func (r *ConfidentialTransferRequest) ToAmount() uint64              { return r.amount }
+func (r *ConfidentialTransferRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *ConfidentialTransferRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *ConfidentialTransferRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ConfidentialTransferRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ConfidentialTransferRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ConfidentialTransferResponse reports the built transaction.
+type ConfidentialTransferResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Source      string `json:"source"`
+	Mint        string `json:"mint"`
+	Destination string `json:"destination"`
+	Owner       string `json:"owner"`
+	Amount      string `json:"amount"`
+	Program     string `json:"program"`
+
+	// NewSourceAvailableBalance is what Source's available balance
+	// becomes once this transfer lands -- decrypted here from
+	// CurrentDecryptableAvailableBalance and Amount, not read back off
+	// chain, since nothing about the resulting state is chain-readable
+	// until this transaction actually lands.
+	NewSourceAvailableBalance string `json:"new_source_available_balance"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewConfidentialTransferResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, source, mint, destination, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	amount, newSourceAvailableBalance, fee uint64,
+) *ConfidentialTransferResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ConfidentialTransferResponse{
+		Transaction:               codec.Base64.Encode(raw),
+		Message:                   codec.Base64.Encode(message),
+		RecentBlockhash:           tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:               keys,
+		Signers:                   signers,
+		NonceAuthority:            nonceAuth,
+		Source:                    source.Base58(),
+		Mint:                      mint.Base58(),
+		Destination:               destination.Base58(),
+		Owner:                     owner.Base58(),
+		Amount:                    strconv.FormatUint(amount, 10),
+		Program:                   tokenProgram.Base58(),
+		NewSourceAvailableBalance: strconv.FormatUint(newSourceAvailableBalance, 10),
+		Fee:                       newSystemPayer(feePayer, fee),
+	}
+}
+
 // InitializeTransferFeeConfigRequest attaches the TransferFeeConfig
 // extension to Mint, fixing the fee rate every transfer-checked-with-fee
 // withholds and who may later change it or withdraw what accumulates.

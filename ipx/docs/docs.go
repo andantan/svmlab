@@ -4983,6 +4983,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-account/transfer": {
+            "post": {
+                "description": "Moves amount confidentially from source to destination -- neither the amount nor either account's resulting balance ever appears in plaintext on chain. Both accounts must already carry the ConfidentialTransferAccount extension. Builds four instructions in one transaction: Transfer itself, followed by the three zero-knowledge proofs it depends on (equality, ciphertext validity, and a batched range proof), all computed by calling the real solana-zk-sdk proof-generation code (compiled to wasm, run through wazero) rather than a from-scratch Go port. current_available_balance_ciphertext and current_decryptable_available_balance are source's own current confidential state, read off chain by the caller -- this endpoint has no ConfidentialTransferAccount TLV parser of its own. amount is checked against the decrypted current balance and against the 48-bit limit a confidential transfer amount's lo/hi split can represent, both before any proof is built. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Move tokens confidentially between two accounts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Source, mint, destination, owner, ElGamal/AE key material, amount, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialTransferRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialTransferResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/extensions/confidential-transfer-mint/initialize": {
             "post": {
                 "description": "Names who may later reconfigure this extension and approve new confidential accounts (authority), whether new accounts need that approval before use (auto_approve_new_accounts), and an optional auditor key that can decrypt any confidential transfer amount (auditor_elgamal_pubkey, base58-encoded raw 32-byte ElGamal public key, not a Solana address). This can only ever run in the narrow window every mint extension shares: after create-mint has allocated the account and before initialize-mint2 locks the extension list forever -- there is no path back into an already-initialized mint, no Reallocate equivalent exists for mints at all. This endpoint only builds InitializeMint, the one sub-instruction of the ConfidentialTransfer family that needs no zero-knowledge proof; the other 14 (ConfigureAccount, Deposit, Withdraw, Transfer, and the rest) are not built here. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -10249,6 +10306,147 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ConfidentialTransferRequest": {
+            "type": "object",
+            "properties": {
+                "ae_key": {
+                    "description": "AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the\nnew one this transfer leaves Source with, base58-encoded -- a raw\n16-byte AES-128-GCM-SIV key, not a Solana address (see\ntool/derive/ae-key-seed-message and tool/derive/ae-key), the same\nkey Source's own decryptable balance has always been kept under.",
+                    "type": "string",
+                    "example": ""
+                },
+                "amount": {
+                    "description": "Amount is the raw base-unit count to move, not a UI decimal\nstring. It cannot exceed 2^48 - 1 (a confidential transfer amount's\nlo/hi split covers 48 bits total, not the full 64 a balance can\nhold), and this endpoint rejects it here rather than leaving that\nto a range proof failure -- it also cannot exceed Source's own\ncurrent available balance, decrypted from\ncurrent_decryptable_available_balance to check.",
+                    "type": "string",
+                    "example": "250"
+                },
+                "auditor_elgamal_pubkey": {
+                    "description": "AuditorElgamalPubkey may be left empty for a mint with no auditor\n(see initialize on extensions/confidential-transfer-mint) --\nresolved to the identity key internally, the same convention that\nextension's own MaybeNull field uses. Given, it must be the exact\nvalue that mint's ConfidentialTransferMint.auditor_elgamal_pubkey\nholds.",
+                    "type": "string",
+                    "example": ""
+                },
+                "current_available_balance_ciphertext": {
+                    "description": "CurrentAvailableBalanceCiphertext is Source's current available\nbalance, base58-encoded -- the raw 64-byte ElGamal ciphertext its\nConfidentialTransferAccount extension currently stores, read by the\ncaller off chain.",
+                    "type": "string",
+                    "example": ""
+                },
+                "current_decryptable_available_balance": {
+                    "description": "CurrentDecryptableAvailableBalance is Source's current available\nbalance, base58-encoded -- the raw 36-byte AE ciphertext its\nConfidentialTransferAccount extension currently stores (the same\nwire value configure-account's own decryptable_zero_balance and\napply-pending-balance's new_available_balance produce).",
+                    "type": "string",
+                    "example": ""
+                },
+                "destination": {
+                    "description": "Destination is credited. It must already carry the\nConfidentialTransferAccount extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "destination_elgamal_pubkey": {
+                    "description": "DestinationElgamalPubkey is Destination's ElGamal public key,\nbase58-encoded -- the same value its own configure-account call\nregistered.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint is what both Source and Destination must hold, and must\nalready carry the ConfidentialTransferMint extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer owner. Non-empty,\nOwner itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "owner": {
+                    "description": "Owner is Source's owner, or its multisig for a multisig-owned\naccount (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token account can never hold\nthis extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source": {
+                    "description": "Source is debited. It must already carry the\nConfidentialTransferAccount extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_elgamal_secret_key": {
+                    "description": "SourceElgamalSecretKey is Source's own ElGamal secret key,\nbase58-encoded -- the same one configure-account registered the\npublic half of. The public key is derived from it here rather than\ntaken as a separate field, so the two can never be mismatched.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ConfidentialTransferResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "amount": {
+                    "type": "string"
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_source_available_balance": {
+                    "description": "NewSourceAvailableBalance is what Source's available balance\nbecomes once this transfer lands -- decrypted here from\nCurrentDecryptableAvailableBalance and Amount, not read back off\nchain, since nothing about the resulting state is chain-readable\nuntil this transaction actually lands.",
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source": {
+                    "type": "string"
                 },
                 "transaction": {
                     "type": "string"

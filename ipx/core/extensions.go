@@ -1248,3 +1248,71 @@ func (t *token) ApplyPendingBalance(account, authority *types.PublicKey, signers
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
 }
+
+// ConfidentialTransfer moves amount confidentially from source to destination,
+// neither the amount nor either account's resulting balance ever
+// appearing in plaintext on chain. This is opcode 27 sub 7
+// (ConfidentialTransferInstructionTransfer), and unlike every other
+// sub-instruction this package builds, it depends on three separate
+// zero-knowledge proofs landing alongside it in the same transaction, in
+// a fixed order right after it: equality, then ciphertext validity, then
+// the range proof (BuildTransferProofs computes all three, along with
+// the two values this instruction's own data carries).
+//
+// newSourceDecryptableAvailableBalance, transferAmountAuditorCiphertextLo,
+// and transferAmountAuditorCiphertextHi are BuildTransferProofs's own
+// NewSourceDecryptableAvailableBalance, AuditorCiphertextLo, and
+// AuditorCiphertextHi fields, packed here rather than recomputed --
+// this builder only assembles bytes it is given, the same separation of
+// concerns every other builder in this package keeps between "compute
+// the value" and "encode the instruction."
+//
+// Confirmed against the interface crate's own inner_transfer: accounts
+// are [source(writable), mint(readonly), destination(writable),
+// sysvar::instructions(readonly) -- always included, since this package
+// only ever builds the inline proof-offset form, never a context-state
+// account -- authority(+multisig)]. Every proof_instruction_offset is
+// fixed at 1: source's own equality proof comes first among the three
+// followups, but Transfer itself always leads, so all three offsets are
+// relative to the same instruction and share the same value.
+func (t *token) ConfidentialTransfer(source, mint, destination, authority *types.PublicKey, signers []*types.PublicKey, newSourceDecryptableAvailableBalance, transferAmountAuditorCiphertextLo, transferAmountAuditorCiphertextHi []byte) (*types.Instruction, error) {
+	if source.IsNil() {
+		return nil, fmt.Errorf("token transfer: source is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token transfer: mint is required")
+	}
+	if destination.IsNil() {
+		return nil, fmt.Errorf("token transfer: destination is required")
+	}
+	if err := validateAuthority("token transfer", authority, signers); err != nil {
+		return nil, err
+	}
+	if len(newSourceDecryptableAvailableBalance) != AeCiphertextLen {
+		return nil, fmt.Errorf("token transfer: new source decryptable available balance is %d bytes, expected %d", len(newSourceDecryptableAvailableBalance), AeCiphertextLen)
+	}
+	if len(transferAmountAuditorCiphertextLo) != 64 {
+		return nil, fmt.Errorf("token transfer: transfer amount auditor ciphertext lo is %d bytes, expected 64", len(transferAmountAuditorCiphertextLo))
+	}
+	if len(transferAmountAuditorCiphertextHi) != 64 {
+		return nil, fmt.Errorf("token transfer: transfer amount auditor ciphertext hi is %d bytes, expected 64", len(transferAmountAuditorCiphertextHi))
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionTransfer)
+	data = codec.Binary.AppendBytes(data, newSourceDecryptableAvailableBalance)
+	data = codec.Binary.AppendBytes(data, transferAmountAuditorCiphertextLo)
+	data = codec.Binary.AppendBytes(data, transferAmountAuditorCiphertextHi)
+	data = codec.Binary.AppendU8(data, 1) // equality_proof_instruction_offset
+	data = codec.Binary.AppendU8(data, 1) // ciphertext_validity_proof_instruction_offset
+	data = codec.Binary.AppendU8(data, 1) // range_proof_instruction_offset
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(source),
+		types.NewReadonlyAccount(mint),
+		types.NewWritableAccount(destination),
+		types.NewReadonlyAccount(Sysvar.Instructions()),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}

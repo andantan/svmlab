@@ -253,6 +253,7 @@ func run() error {
 				r.Post("/approve-account", tk.ApproveAccount)
 				r.Post("/deposit", tk.Deposit)
 				r.Post("/apply-pending-balance", tk.ApplyPendingBalance)
+				r.Post("/transfer", tk.ConfidentialTransfer)
 			})
 		})
 

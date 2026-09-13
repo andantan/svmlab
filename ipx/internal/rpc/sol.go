@@ -224,6 +224,24 @@ func (c *Client) Slot(ctx context.Context, commitment Commitment) (uint64, error
 	return result, err
 }
 
+// EpochInfo is what the cluster reports about where it currently is, not
+// wrapped in the usual Context envelope: unlike a balance or an account,
+// there is no other slot this could be true "as of" -- it already is the
+// slot-and-epoch reading itself.
+type EpochInfo struct {
+	Epoch        uint64 `json:"epoch"`
+	SlotIndex    uint64 `json:"slotIndex"`
+	SlotsInEpoch uint64 `json:"slotsInEpoch"`
+	AbsoluteSlot uint64 `json:"absoluteSlot"`
+}
+
+func (c *Client) EpochInfo(ctx context.Context, commitment Commitment) (*EpochInfo, error) {
+	var result EpochInfo
+	err := c.Call(ctx, SOLGetEpochInfo(commitment, &result))
+
+	return &result, err
+}
+
 func (c *Client) Balance(ctx context.Context, pubkey *types.PublicKey, commitment Commitment) (uint64, error) {
 	var result Result[uint64]
 	if err := c.Call(ctx, SOLGetBalance(pubkey.Base58(), commitment, &result)); err != nil {

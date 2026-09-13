@@ -4482,6 +4482,120 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/token/extensions/transfer-fee-amount/reallocate": {
+            "post": {
+                "description": "Checks whether account already holds enough space for its existing extensions plus TransferFeeAmount, and grows it if not -- the account-side extension a destination needs before it can receive a transfer from a fee-charging mint; without it, any transfer that computes a non-zero fee fails as InvalidState. The instruction itself only ever needs the one new extension: Reallocate reads account's own existing extensions on chain and unions them with what this sends, so a caller never resends what is already there. Getting the resize's rent right is this endpoint's own job: it reads account's current extensions and actual lamports, asks GetAccountDataSize for the full target size once TransferFeeAmount is unioned in, and only then knows rent_payer's shortfall — the same authority Reallocate itself defers to, asked directly rather than recomputed here. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Grow a token account to hold room for TransferFeeAmount",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Account, rent payer, owner, fee payer, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ReallocateTransferFeeAmountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ReallocateTransferFeeAmountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/transfer-fee-config/harvest": {
+            "post": {
+                "description": "Sweeps whatever each of source_token_accounts has withheld in its own TransferFeeAmount extension into mint's TransferFeeConfig withheld_amount. This is permissionless: no authority field exists here at all, since moving a balance between two places it can already only ever sit -- an account's own withheld fees, or the mint's -- needs nobody's permission, only the mint they all agree on. Getting a balance out of the mint (or straight out of the accounts, bypassing the mint) is withdraw-withheld-tokens-from-mint/from-accounts's job instead, and those do require withdraw_withheld_authority's signature. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Sweep withheld transfer fees from token accounts into the mint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, source token accounts, fee payer, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.HarvestWithheldTokensToMintRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.HarvestWithheldTokensToMintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/extensions/transfer-fee-config/initialize": {
             "post": {
                 "description": "Fixes the fee rate every transfer-checked-with-fee withholds and who may later change it (transfer_fee_config_authority) or withdraw what accumulates (withdraw_withheld_authority). This can only ever run in the narrow window every mint extension shares: after create-mint has allocated the account and before initialize-mint2 locks the extension list forever -- there is no path back into an already-initialized mint, no Reallocate equivalent exists for mints at all. transfer_fee_basis_points is out of 10,000 and is validated here rather than left to come back as an on-chain rejection. Either authority may be left empty to permanently forgo that capability; unlike a mint or freeze authority there is no later instruction that grants one where none was set. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -4639,6 +4753,177 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.SetTransferFeeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/transfer-fee-config/transfer": {
+            "post": {
+                "description": "TransferChecked plus a fee: source_token_account_authority and decimals are checked exactly the same way, and the fee withheld into destination_token_account's TransferFeeAmount extension is the only addition. There is no fee field to set -- unlike Reallocate's own generous tolerance, the deployed program recomputes this fee itself from mint's current TransferFeeConfig rate and requires whatever this instruction carries to match byte for byte, failing the whole transfer as FeeMismatch over a single base unit of difference. This handler reads mint's TransferFeeConfig and the cluster's current epoch itself and computes the one fee that can ever be correct, reported back as transfer_fee and epoch. Building a transaction here and sending it after the epoch rolls over risks landing against a stale rate; rebuild first if that much time has passed. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Move tokens between accounts, withholding the mint's transfer fee",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Transfer parameters",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.TransferCheckedWithFeeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.TransferCheckedWithFeeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/transfer-fee-config/withdraw-from-accounts": {
+            "post": {
+                "description": "Moves whatever each of source_token_accounts has withheld in its own TransferFeeAmount extension straight to destination, bypassing mint's own TransferFeeConfig withheld_amount entirely -- the shortcut harvest-withheld-tokens-to-mint does not take. mint itself is read-only: it is named only so the program can confirm every source actually belongs to it, never written to. Unlike harvest-withheld-tokens-to-mint this does require withdraw_withheld_authority to sign, the same authority withdraw-withheld-tokens-from-mint answers to, since real tokens are leaving the accounts entirely rather than settling into a shared pool anyone could later account for. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Withdraw withheld transfer fees directly from token accounts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, destination, authority, source token accounts, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.WithdrawWithheldTokensFromAccountsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.WithdrawWithheldTokensFromAccountsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/transfer-fee-config/withdraw-from-mint": {
+            "post": {
+                "description": "Moves mint's own TransferFeeConfig withheld_amount out to destination as real tokens, authorized by withdraw_withheld_authority rather than mint's own mint or freeze authority. This is the counterpart harvest-withheld-tokens-to-mint's permissionless sweep feeds: harvesting only ever moves a balance into the mint, never out of it, so getting it out from there to somewhere spendable is this endpoint's job alone, and it is the one step in the whole withheld-fee lifecycle that actually requires a signature. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Withdraw a mint's accumulated withheld transfer fees",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, destination, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.WithdrawWithheldTokensFromMintRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.WithdrawWithheldTokensFromMintResponse"
                         }
                     },
                     "400": {
@@ -9176,6 +9461,90 @@ const docTemplate = `{
                 }
             }
         },
+        "v2.HarvestWithheldTokensToMintRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint is what every one of SourceTokenAccounts must hold, and where\nthe harvested total ends up.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold\nTransferFeeConfig.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_token_accounts": {
+                    "description": "SourceTokenAccounts is swept in full: this instruction always sweeps\neach named account's own withheld_amount entirely, there is no\npartial-amount form.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        ""
+                    ]
+                }
+            }
+        },
+        "v2.HarvestWithheldTokensToMintResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source_token_accounts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.InitializeAccount2Request": {
             "type": "object",
             "properties": {
@@ -10223,6 +10592,106 @@ const docTemplate = `{
                     }
                 },
                 "token_account": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ReallocateTransferFeeAmountRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "description": "Account is the token account to check and, if needed, grow. It must\nalready exist and be owned by Program.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer owner. Non-empty, Owner\nitself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "owner": {
+                    "description": "Owner is Account's owner, or its multisig for a multisig-owned\naccount (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "program": {
+                    "description": "Program must be Token-2022. Unlike every other Token endpoint, this\nis not the usual either-program field: a classic Token account's\nlayout is fixed at 165 bytes forever, with no TLV region to grow\ninto, so classic Token is rejected here rather than left to fail on\nchain.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "rent_payer": {
+                    "description": "RentPayer funds whatever the resize costs, a distinct role from\nOwner: Owner authorizes the account being touched, RentPayer covers\nwhat that costs, and they need not be the same key.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.ReallocateTransferFeeAmountResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "rent": {
+                    "description": "Rent reports what funds the resize: the shortfall between\nTargetSize's rent-exemption minimum and Account's actual current\nlamports, zero when Account already holds enough.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/v2.SystemPayer"
+                        }
+                    ]
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "target_size": {
+                    "description": "TargetSize is the total account size GetAccountDataSize reported for\nAccount's existing extensions plus TransferFeeAmount, asked of the\ndeployed program rather than recomputed here.",
                     "type": "string"
                 },
                 "transaction": {
@@ -13277,6 +13746,129 @@ const docTemplate = `{
                 }
             }
         },
+        "v2.TransferCheckedWithFeeRequest": {
+            "type": "object",
+            "properties": {
+                "amount": {
+                    "description": "Amount is the raw base-unit count to move, not a UI decimal string.\nDestinationTokenAccount is credited Amount minus Fee.",
+                    "type": "string",
+                    "example": "250000"
+                },
+                "decimals": {
+                    "description": "Decimals is checked against Mint's own stored value rather than\ntrusted, the same catch every checked variant makes.",
+                    "type": "integer",
+                    "example": 6
+                },
+                "destination_token_account": {
+                    "description": "DestinationTokenAccount is credited Amount minus Fee, and is where\nFee itself accumulates as withheld -- it must already have the\nTransferFeeAmount extension (see reallocate/transfer-fee-amount).",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint is what both token accounts must hold, and is the source of the\ndecimals checked against; it must already have the TransferFeeConfig\nextension (see initialize-transfer-fee-config).",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nthe authority itself does not sign; the named members do, in its\nplace.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold\nTransferFeeConfig.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_token_account": {
+                    "description": "SourceTokenAccount is debited. It must already exist, hold Mint, and\nnot be frozen.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_token_account_authority": {
+                    "description": "SourceTokenAccountAuthority is SourceTokenAccount's owner, or its\ndelegate for no more than what was delegated.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.TransferCheckedWithFeeResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "amount": {
+                    "type": "string"
+                },
+                "decimals": {
+                    "type": "integer"
+                },
+                "destination_token_account": {
+                    "type": "string"
+                },
+                "epoch": {
+                    "description": "Epoch is which epoch's rate TransferFee was computed against: Mint's\nnewer_transfer_fee if this epoch has reached the one it is stamped\nwith, its older_transfer_fee otherwise. A transaction built here and\nsent after the epoch rolls over no longer matches what the program\nwill demand and has to be rebuilt.",
+                    "type": "integer"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source_token_account": {
+                    "type": "string"
+                },
+                "source_token_account_authority": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "transfer_fee": {
+                    "description": "TransferFee is the amount withheld into DestinationTokenAccount's\nTransferFeeAmount extension, computed from Mint's TransferFeeConfig\nat Epoch -- not a value this request ever supplies.",
+                    "type": "string"
+                }
+            }
+        },
         "v2.TransferFromATAMaxRequest": {
             "type": "object",
             "properties": {
@@ -13977,6 +14569,204 @@ const docTemplate = `{
                     }
                 },
                 "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.WithdrawWithheldTokensFromAccountsRequest": {
+            "type": "object",
+            "properties": {
+                "destination": {
+                    "description": "Destination receives everything withdrawn, summed across every\nsource. It must already exist and hold Mint.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint is what every one of SourceTokenAccounts must hold. It is never\nwritten to by this instruction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nWithdrawWithheldAuthority itself does not sign; the named members do,\nin its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold\nTransferFeeConfig.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_token_accounts": {
+                    "description": "SourceTokenAccounts is swept in full: this instruction always\nwithdraws each named account's own withheld_amount entirely, there\nis no partial-amount form. At most 255, since the count travels the\nwire as a single byte.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        ""
+                    ]
+                },
+                "withdraw_withheld_authority": {
+                    "description": "WithdrawWithheldAuthority is the authority\ninitialize-transfer-fee-config named, or its multisig for a\nmultisig-owned authority (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.WithdrawWithheldTokensFromAccountsResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source_token_accounts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "withdraw_withheld_authority": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.WithdrawWithheldTokensFromMintRequest": {
+            "type": "object",
+            "properties": {
+                "destination": {
+                    "description": "Destination receives the withdrawn tokens. It must already exist and\nhold Mint.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already have the TransferFeeConfig extension, with some\namount already harvested into it (see harvest-withheld-tokens-to-mint).",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nWithdrawWithheldAuthority itself does not sign; the named members do,\nin its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold\nTransferFeeConfig.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "withdraw_withheld_authority": {
+                    "description": "WithdrawWithheldAuthority is the authority\ninitialize-transfer-fee-config named, or its multisig for a\nmultisig-owned authority (see MultisigSigners). Unlike\nTransferFeeConfigAuthority, this cannot be left empty when set up:\nan authority that was never named has no way to sign this\ninstruction, permanently.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.WithdrawWithheldTokensFromMintResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "withdraw_withheld_authority": {
                     "type": "string"
                 }
             }

@@ -34,7 +34,11 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
   - [x] `transfer-fee-config` — 로직 완료, mint 전용 타입을 계좌에 넣는 조합이라
     항상 실패하는 게 정상 동작임을 devnet에서 확인 (`ExtensionTypeMismatch`,
     Custom 20 — 우리 핸들러의 GetAccountDataSize 사전검증 단계에서 걸림)
-  - [ ] 나머지 26개, 하나씩 순서대로 (스크립트로 일괄 생성 안 함, 각각 개별 작업)
+  - [x] `transfer-fee-amount` — devnet-confirmed, 계좌 쪽 진짜 확장이라 정상
+    성공. raw 바이트로 TLV(type=2, len=8) 확인, `space: 182`
+    (165+1+ImmutableOwner헤더4+TransferFeeAmount헤더4+데이터8, ATA라
+    ImmutableOwner도 자동으로 붙어있었음)
+  - [ ] 나머지 25개, 하나씩 순서대로 (스크립트로 일괄 생성 안 함, 각각 개별 작업)
   - `token_metadata`(19)만 가변 길이라 GetAccountDataSize 흐름이 다름 —
     name/symbol/uri 받아서 Borsh 공식으로 직접 계산
 
@@ -58,10 +62,40 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
   - [x] `extensions/transfer-fee-config/set` (sub 5, 라우트는 `/set`으로 축약) —
     devnet-confirmed, RPC parsed 로그에서 `type: "setTransferFee"`,
     `transferFeeBasisPoints: 300`, `maximumFee: 2222`까지 정확히 확인
-  - [ ] `transfer-checked-with-fee` (sub 1) — 다음 작업
-  - [ ] `withdraw-withheld-tokens-from-mint` (sub 2)
-  - [ ] `withdraw-withheld-tokens-from-accounts` (sub 3)
-  - [ ] `harvest-withheld-tokens-to-mint` (sub 4)
+  - [x] `extensions/transfer-fee-config/transfer` (sub 1,
+    TransferCheckedWithFee) — devnet-confirmed. **`fee`는 요청 필드가 아니라
+    서버가 자동 계산** — 프로그램이 mint의 TransferFeeConfig로 직접
+    재계산해서 정확히 일치해야만 통과(`FeeMismatch`, 상한이 아니라 정확히
+    일치). `core.DecodeTransferFeeConfig`(mint TLV 값 디코드, MaybeNull<Address>
+    = 전부 0이면 None인 32바이트 고정폭, COption 아님 — 공식 확인함) +
+    `getEpochInfo` RPC 신규 추가 + `core.TransferFeeConfig.CalculateFee`
+    (ceil(amount×basis_points/10000), maximum_fee 상한)로 계산. 1000개 전송에
+    500bps 요율로 수수료 50 정확히 계산됨, raw 바이트로 destination의
+    `TransferFeeAmount.withheld_amount=50`까지 확인
+  - [x] `extensions/transfer-fee-config/harvest` (sub 4,
+    HarvestWithheldTokensToMint) — devnet-confirmed, permissionless(서명 불요).
+    계좌의 `TransferFeeAmount.withheld_amount`(50→0)를 mint의
+    `TransferFeeConfig.withheld_amount`(0→50)로 이동하는 것까지 raw 바이트로
+    확인
+  - [x] `extensions/transfer-fee-config/withdraw-from-mint` (sub 2,
+    WithdrawWithheldTokensFromMint) — devnet-confirmed,
+    `withdraw_withheld_authority` 서명 필요. mint의 `withheld_amount`(50→0)를
+    destination 실제 토큰 잔액(+50)으로 인출하는 것까지 확인
+  - [x] `extensions/transfer-fee-config/withdraw-from-accounts` (sub 3,
+    WithdrawWithheldTokensFromAccounts) — mint를 거치지 않고 계좌들에서 직접
+    authority가 인출. 계정 순서가 특이함(authority가 source 목록보다 먼저:
+    mint, destination, authority(+멀티시그), 그 다음 source들 — 다른 곳처럼
+    authority를 맨 뒤에 붙이는 패턴이 아님, upstream 확인 후 그대로 구현)
+
+  **`TransferFeeExtension`(opcode 26) 6개 서브인스트럭션 전부 완료 — devnet
+  전체 lifecycle 검증 끝.** initialize → set → transfer(자동 수수료 계산) →
+  harvest(계좌→mint) → withdraw-from-mint(mint→실제 인출) →
+  withdraw-from-accounts, 전부 raw 바이트/RPC parsed 로그로 확인.
+
+  `core/extensions.go`로 확장 관련 코드 전부 분리함 (`core/token.go`는 기본
+  Token 인스트럭션만). `ExtensionType` 상수, sub-instruction discriminant,
+  `GetAccountDataSize`/`Reallocate`/`CalculateMintExtensionsLen` 빌더,
+  `TransferFeeConfig` 관련 전부 여기.
 
   그다음: 확장별 enable/disable(활성화) — `Reallocate`는 자리만 만들 뿐 확장을
   "존재하게" 만들진 않음, 그건 패밀리마다 다른 서브인스트럭션의 몫. 대략:

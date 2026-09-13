@@ -72,6 +72,15 @@ func SOLGetSlot(c Commitment, result *uint64) Elem {
 	return Elem{Method: "getSlot", Params: []any{options(c)}, Result: result}
 }
 
+// SOLGetEpochInfo asks which epoch the cluster is currently in, which a
+// caller needs to know for anything the runtime itself schedules by epoch
+// rather than by slot or timestamp -- a Token-2022 TransferFeeConfig rate
+// change, most immediately, since the program picks between its older and
+// newer rate by comparing against exactly this value.
+func SOLGetEpochInfo(c Commitment, result *EpochInfo) Elem {
+	return Elem{Method: "getEpochInfo", Params: []any{options(c)}, Result: result}
+}
+
 func SOLGetBalance(pubkey string, c Commitment, result *Result[uint64]) Elem {
 	return Elem{Method: "getBalance", Params: []any{pubkey, options(c)}, Result: result}
 }

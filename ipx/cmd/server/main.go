@@ -223,6 +223,13 @@ func run() error {
 				r.Post("/reallocate", tk.ReallocateTransferFeeConfig)
 				r.Post("/initialize", tk.InitializeTransferFeeConfig)
 				r.Post("/set", tk.SetTransferFee)
+				r.Post("/transfer", tk.TransferCheckedWithFee)
+				r.Post("/harvest", tk.HarvestWithheldTokensToMint)
+				r.Post("/withdraw-from-mint", tk.WithdrawWithheldTokensFromMint)
+				r.Post("/withdraw-from-accounts", tk.WithdrawWithheldTokensFromAccounts)
+			})
+			r.Route("/extensions/transfer-fee-amount", func(r chi.Router) {
+				r.Post("/reallocate", tk.ReallocateTransferFeeAmount)
 			})
 		})
 

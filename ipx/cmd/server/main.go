@@ -264,6 +264,24 @@ func run() error {
 			r.Post("/request-heap-frame", cb.RequestHeapFrame)
 			r.Post("/set-loaded-accounts-data-size-limit", cb.SetLoadedAccountsDataSizeLimit)
 		})
+
+		zk := v2.NewZkElgamalProofTransactionHandler(cfg)
+		r.Route("/transaction/zk-elgamal-proof", func(r chi.Router) {
+			r.Route("/context-state", func(r chi.Router) {
+				r.Post("/create-account/pubkey-validity", zk.ContextStateCreateAccountPubkeyValidity)
+				r.Post("/create-account/ciphertext-commitment-equality", zk.ContextStateCreateAccountCiphertextCommitmentEquality)
+				r.Post("/create-account/batched-grouped-ciphertext-3-handles-validity", zk.ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidity)
+				r.Post("/create-account/batched-range-proof-u128", zk.ContextStateCreateAccountBatchedRangeProofU128)
+				r.Post("/create-account/zero-ciphertext", zk.ContextStateCreateAccountZeroCiphertext)
+				r.Post("/create-account/ciphertext-ciphertext-equality", zk.ContextStateCreateAccountCiphertextCiphertextEquality)
+				r.Post("/create-account/percentage-with-cap", zk.ContextStateCreateAccountPercentageWithCap)
+				r.Post("/create-account/batched-range-proof-u64", zk.ContextStateCreateAccountBatchedRangeProofU64)
+				r.Post("/create-account/batched-range-proof-u256", zk.ContextStateCreateAccountBatchedRangeProofU256)
+				r.Post("/create-account/grouped-ciphertext-2-handles-validity", zk.ContextStateCreateAccountGroupedCiphertext2HandlesValidity)
+				r.Post("/create-account/batched-grouped-ciphertext-2-handles-validity", zk.ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidity)
+				r.Post("/create-account/grouped-ciphertext-3-handles-validity", zk.ContextStateCreateAccountGroupedCiphertext3HandlesValidity)
+			})
+		})
 	})
 
 	fmt.Printf("listening on %s\n", cfg.ServerAddr)

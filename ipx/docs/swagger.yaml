@@ -2459,6 +2459,837 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a BatchedGroupedCiphertext2HandlesValidity context (289 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a BatchedGroupedCiphertext3HandlesValidity
+          context (385 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountBatchedRangeProofU64Request:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a BatchedRangeProofU64 context (297 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountBatchedRangeProofU64Response:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountBatchedRangeProofU128Request:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a BatchedRangeProofU128 context (297
+          bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountBatchedRangeProofU128Response:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountBatchedRangeProofU256Request:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a BatchedRangeProofU256 context (297 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountBatchedRangeProofU256Response:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountCiphertextCiphertextEqualityRequest:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a CiphertextCiphertextEquality context (225 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountCiphertextCiphertextEqualityResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountCiphertextCommitmentEqualityRequest:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a CiphertextCommitmentEquality context
+          (161 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountCiphertextCommitmentEqualityResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a GroupedCiphertext2HandlesValidity context (193 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a GroupedCiphertext3HandlesValidity context (257 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountPercentageWithCapRequest:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a PercentageWithCap context (137 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountPercentageWithCapResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountPubkeyValidityRequest:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a PubkeyValidity context (65 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountPubkeyValidityResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCreateAccountZeroCiphertextRequest:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is the account created. It signs alongside
+          RentPayer, since an address does not exist until whoever holds its
+          private key authorizes its creation. It must not already exist.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: |-
+          FeePayer signs and pays the transaction fee. It may be the same
+          account as RentPayer.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds ContextStateAccount's creation for exactly the
+          rent-exemption minimum for a ZeroCiphertext context (129 bytes).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ContextStateCreateAccountZeroCiphertextResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_exempt_lamports:
+        type: integer
+      signers:
+        items:
+          type: string
+        type: array
+      space:
+        type: integer
+      transaction:
+        type: string
+    type: object
   v2.CreateATAIdempotentRequest:
     properties:
       durable_nonce_account:
@@ -15668,4 +16499,571 @@ paths:
         minimum
       tags:
       - v2-transaction-token-token-account
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/batched-grouped-ciphertext-2-handles-validity:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (289 bytes) and owned (by the
+        ZkElgamalProof program) for a BatchedGroupedCiphertext2HandlesValidity proof''s
+        context, but not yet written to. This is deliberately the low-level half:
+        the account must be created in the same transaction as (and strictly before)
+        the matching context-state/verify-batched-grouped-ciphertext-2-handles-validity
+        instruction, or another party can claim it first -- build create+verify as
+        two instructions in one transaction, calling this endpoint and context-state/verify-batched-grouped-ciphertext-2-handles-validity
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a BatchedGroupedCiphertext2HandlesValidity
+        proof context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/batched-grouped-ciphertext-3-handles-validity:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (385 bytes) and owned (by the
+        ZkElgamalProof program) for a BatchedGroupedCiphertext3HandlesValidity proof''s
+        context, but not yet written to. This is deliberately the low-level half:
+        the account must be created in the same transaction as (and strictly before)
+        the matching context-state/verify-batched-grouped-ciphertext-3-handles-validity
+        instruction, or another party can claim it first -- build create+verify as
+        two instructions in one transaction, calling this endpoint and context-state/verify-batched-grouped-ciphertext-3-handles-validity
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a BatchedGroupedCiphertext3HandlesValidity
+        proof context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/batched-range-proof-u64:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (297 bytes) and owned (by the
+        ZkElgamalProof program) for a BatchedRangeProofU64 proof''s context, but not
+        yet written to. This is deliberately the low-level half: the account must
+        be created in the same transaction as (and strictly before) the matching context-state/verify-batched-range-proof-u64
+        instruction, or another party can claim it first -- build create+verify as
+        two instructions in one transaction, calling this endpoint and context-state/verify-batched-range-proof-u64
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU64Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU64Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a BatchedRangeProofU64 proof
+        context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/batched-range-proof-u128:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (297 bytes) and owned (by the
+        ZkElgamalProof program) for a BatchedRangeProofU128 proof''s context, but
+        not yet written to. This is deliberately the low-level half: the account must
+        be created in the same transaction as (and strictly before) the matching context-state/verify-batched-range-proof-u128
+        instruction, or another party can claim it first -- build create+verify as
+        two instructions in one transaction, calling this endpoint and context-state/verify-batched-range-proof-u128
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU128Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU128Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a BatchedRangeProofU128 proof
+        context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/batched-range-proof-u256:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (297 bytes) and owned (by the
+        ZkElgamalProof program) for a BatchedRangeProofU256 proof''s context, but
+        not yet written to. This is deliberately the low-level half: the account must
+        be created in the same transaction as (and strictly before) the matching context-state/verify-batched-range-proof-u256
+        instruction, or another party can claim it first -- build create+verify as
+        two instructions in one transaction, calling this endpoint and context-state/verify-batched-range-proof-u256
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU256Request'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU256Response'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a BatchedRangeProofU256 proof
+        context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/ciphertext-ciphertext-equality:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (225 bytes) and owned (by the
+        ZkElgamalProof program) for a CiphertextCiphertextEquality proof''s context,
+        but not yet written to. This is deliberately the low-level half: the account
+        must be created in the same transaction as (and strictly before) the matching
+        context-state/verify-ciphertext-ciphertext-equality instruction, or another
+        party can claim it first -- build create+verify as two instructions in one
+        transaction, calling this endpoint and context-state/verify-ciphertext-ciphertext-equality
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountCiphertextCiphertextEqualityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountCiphertextCiphertextEqualityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a CiphertextCiphertextEquality
+        proof context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/ciphertext-commitment-equality:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (161 bytes) and owned (by the
+        ZkElgamalProof program) for a CiphertextCommitmentEquality proof''s context,
+        but not yet written to. This is deliberately the low-level half: the account
+        must be created in the same transaction as (and strictly before) the matching
+        context-state/verify-ciphertext-commitment-equality instruction, or another
+        party can claim it first -- build create+verify as two instructions in one
+        transaction, calling this endpoint and context-state/verify-ciphertext-commitment-equality
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountCiphertextCommitmentEqualityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountCiphertextCommitmentEqualityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a CiphertextCommitmentEquality
+        proof context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/grouped-ciphertext-2-handles-validity:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (193 bytes) and owned (by the
+        ZkElgamalProof program) for a GroupedCiphertext2HandlesValidity proof''s context,
+        but not yet written to. This is deliberately the low-level half: the account
+        must be created in the same transaction as (and strictly before) the matching
+        context-state/verify-grouped-ciphertext-2-handles-validity instruction, or
+        another party can claim it first -- build create+verify as two instructions
+        in one transaction, calling this endpoint and context-state/verify-grouped-ciphertext-2-handles-validity
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a GroupedCiphertext2HandlesValidity
+        proof context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/grouped-ciphertext-3-handles-validity:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (257 bytes) and owned (by the
+        ZkElgamalProof program) for a GroupedCiphertext3HandlesValidity proof''s context,
+        but not yet written to. This is deliberately the low-level half: the account
+        must be created in the same transaction as (and strictly before) the matching
+        context-state/verify-grouped-ciphertext-3-handles-validity instruction, or
+        another party can claim it first -- build create+verify as two instructions
+        in one transaction, calling this endpoint and context-state/verify-grouped-ciphertext-3-handles-validity
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a GroupedCiphertext3HandlesValidity
+        proof context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/percentage-with-cap:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (137 bytes) and owned (by the
+        ZkElgamalProof program) for a PercentageWithCap proof''s context, but not
+        yet written to. This is deliberately the low-level half: the account must
+        be created in the same transaction as (and strictly before) the matching context-state/verify-percentage-with-cap
+        instruction, or another party can claim it first -- build create+verify as
+        two instructions in one transaction, calling this endpoint and context-state/verify-percentage-with-cap
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountPercentageWithCapRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountPercentageWithCapResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a PercentageWithCap proof context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/pubkey-validity:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (65 bytes) and owned (by the
+        ZkElgamalProof program) for a PubkeyValidity proof''s context, but not yet
+        written to. This is deliberately the low-level half: the account must be created
+        in the same transaction as (and strictly before) the matching context-state/verify-pubkey-validity
+        instruction, or another party can claim it first -- build create+verify as
+        two instructions in one transaction, calling this endpoint and context-state/verify-pubkey-validity
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountPubkeyValidityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountPubkeyValidityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a PubkeyValidity proof context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
+  /svm/v2/transaction/zk-elgamal-proof/context-state/create-account/zero-ciphertext:
+    post:
+      consumes:
+      - application/json
+      description: 'System CreateAccount only, sized (129 bytes) and owned (by the
+        ZkElgamalProof program) for a ZeroCiphertext proof''s context, but not yet
+        written to. This is deliberately the low-level half: the account must be created
+        in the same transaction as (and strictly before) the matching context-state/verify-zero-ciphertext
+        instruction, or another party can claim it first -- build create+verify as
+        two instructions in one transaction, calling this endpoint and context-state/verify-zero-ciphertext
+        and merging their instructions yourself. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state create-account request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCreateAccountZeroCiphertextRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCreateAccountZeroCiphertextResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fund a new account, sized and owned for a ZeroCiphertext proof context-state
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
 swagger: "2.0"

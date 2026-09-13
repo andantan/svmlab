@@ -949,3 +949,183 @@ func (t *token) WithdrawWithheldTokensFromAccounts(mint, destination, withdrawWi
 
 	return types.NewInstruction(t.id, accounts, data), nil
 }
+
+// appendMaybeNullAddress writes a fixed 32-byte field, all-zero for nil --
+// MaybeNull<Address>'s wire encoding, confirmed against the nullable
+// crate's own doc comment: the zero address is the sentinel for None, not
+// a separate length-tagged option. Unlike appendPubkeyOption's 1-byte-tag
+// COption encoding (InitializeTransferFeeConfig's authorities), this field
+// is always exactly 32 bytes long whether or not a key is present -- using
+// the wrong one shifts and truncates every field after it.
+func appendMaybeNullAddress(dst []byte, k *types.PublicKey) []byte {
+	if k.IsNil() {
+		return append(dst, make([]byte, types.PublicKeyLength)...)
+	}
+
+	return codec.Binary.AppendBytes(dst, k.Bytes())
+}
+
+// appendMaybeNull32 is appendMaybeNullAddress's non-Address counterpart,
+// for a fixed 32-byte MaybeNull<T> field that is not itself a Solana
+// address -- ElGamal public keys carried by the ConfidentialTransfer
+// family, which are 32-byte curve points sharing the same on-wire length
+// as an address but not its type.
+func appendMaybeNull32(dst []byte, v []byte) []byte {
+	if len(v) == 0 {
+		return append(dst, make([]byte, 32)...)
+	}
+
+	return codec.Binary.AppendBytes(dst, v)
+}
+
+// InitializeConfidentialTransferMint attaches the ConfidentialTransferMint
+// extension to mint, naming who may later reconfigure it and approve new
+// confidential accounts (authority), whether new accounts need that
+// approval before use (autoApproveNewAccounts), and an optional auditor
+// key that can decrypt any confidential transfer amount
+// (auditorElGamalPubkey).
+//
+// This is opcode 27 sub 0 (ConfidentialTransferInstructionInitializeMint).
+// Unlike InitializeTransferFeeConfig's two authorities, which use the
+// 1-byte-tag COption encoding, both optional fields here are MaybeNull:
+// authority is a fixed 32-byte field (appendMaybeNullAddress, all-zero for
+// nil) and auditorElGamalPubkey is the same shape but not an address
+// (appendMaybeNull32) -- confirmed against the interface crate's
+// InitializeMintData struct rather than assumed from
+// InitializeTransferFeeConfig's pattern. auditorElGamalPubkey, when given,
+// must be exactly 32 bytes: a compressed Ristretto point, not a Solana
+// address, and this package has no ElGamal implementation to derive one
+// from a keypair -- callers supply the raw 32 bytes themselves.
+//
+// Like every mint extension, this can only run after create-mint has
+// allocated the account and before initialize-mint2 commits it; there is
+// no path back into an already-initialized mint.
+func (t *token) InitializeConfidentialTransferMint(mint, authority *types.PublicKey, autoApproveNewAccounts bool, auditorElGamalPubkey []byte) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize confidential transfer mint: mint is required")
+	}
+	if auditorElGamalPubkey != nil && len(auditorElGamalPubkey) != 32 {
+		return nil, fmt.Errorf("token initialize confidential transfer mint: auditor elgamal pubkey is %d bytes, expected 32", len(auditorElGamalPubkey))
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionInitializeMint)
+	data = appendMaybeNullAddress(data, authority)
+	if autoApproveNewAccounts {
+		data = codec.Binary.AppendU8(data, 1)
+	} else {
+		data = codec.Binary.AppendU8(data, 0)
+	}
+	data = appendMaybeNull32(data, auditorElGamalPubkey)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(mint),
+	), data), nil
+}
+
+// UpdateConfidentialTransferMint changes InitializeConfidentialTransferMint's
+// two adjustable fields -- autoApproveNewAccounts and auditorElGamalPubkey
+// -- authorized by whoever InitializeConfidentialTransferMint named as
+// authority, exactly the same as SetTransferFee is authorized by
+// transferFeeConfigAuthority rather than mint's own mint or freeze
+// authority.
+//
+// This is opcode 27 sub 1 (ConfidentialTransferInstructionUpdateMint), and
+// unlike InitializeMint carries no authority field in its own data at
+// all -- upstream's UpdateMintData is only { auto_approve_new_accounts,
+// auditor_elgamal_pubkey }. authority itself is never reassignable through
+// this instruction: it is proven by signing as an account here, the same
+// role SetTransferFee's transferFeeConfigAuthority plays, not a value this
+// call can hand to someone else. Both fields overwrite whatever
+// InitializeConfidentialTransferMint set, with no way to leave one
+// unchanged -- passing the same value back is how a caller keeps it as is.
+//
+// Confirmed against the interface crate's update_mint: no zero-knowledge
+// proof or context-state account is needed, the same as InitializeMint --
+// of ConfidentialTransfer's 15 sub-instructions, only these two are pure
+// data instructions with no ElGamal math required on this server's side.
+func (t *token) UpdateConfidentialTransferMint(mint, authority *types.PublicKey, signers []*types.PublicKey, autoApproveNewAccounts bool, auditorElGamalPubkey []byte) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token update confidential transfer mint: mint is required")
+	}
+	if err := validateAuthority("token update confidential transfer mint", authority, signers); err != nil {
+		return nil, err
+	}
+	if auditorElGamalPubkey != nil && len(auditorElGamalPubkey) != 32 {
+		return nil, fmt.Errorf("token update confidential transfer mint: auditor elgamal pubkey is %d bytes, expected 32", len(auditorElGamalPubkey))
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionUpdateMint)
+	if autoApproveNewAccounts {
+		data = codec.Binary.AppendU8(data, 1)
+	} else {
+		data = codec.Binary.AppendU8(data, 0)
+	}
+	data = appendMaybeNull32(data, auditorElGamalPubkey)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(mint),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// ConfigureAccount attaches the ConfidentialTransferAccount extension to
+// account, the token-account-side counterpart to
+// InitializeConfidentialTransferMint -- mint has to already carry
+// ConfidentialTransferMint (see initialize), the same way a token account
+// belongs to a mint everywhere else in this API.
+//
+// This is opcode 27 sub 2 (ConfidentialTransferInstructionConfigureAccount),
+// and unlike the two mint-side sub-instructions it needs a zero-knowledge
+// proof: the program has to be convinced elgamalPubkey (baked into
+// decryptableZeroBalance's own key material, but not itself a field this
+// instruction's data carries) has a known secret key before letting an
+// account claim it, or anyone could configure an account against a
+// public key they do not control. This builder only ever produces the
+// inline/sibling-instruction form -- proofInstructionOffset names where
+// the accompanying VerifyPubkeyValidity instruction sits relative to this
+// one in the same transaction (1 for immediately after), never a
+// pre-verified context-state account, since this package has no
+// context-state lifecycle (create, verify into, close) built at all.
+//
+// decryptableZeroBalance is always an encryption of zero (a freshly
+// configured account has no balance yet) -- EncryptAeAmount(aeKey, 0),
+// under an AeKey the caller derives themselves, the same reason
+// auditorElGamalPubkey and proof are always caller-supplied bytes rather
+// than something this package derives from a signature it never holds.
+//
+// Confirmed against the interface crate's own accounts list: token
+// account (writable), mint (readonly), the sysvar::instructions account
+// (readonly, standing in for the proof account this offset form always
+// names), then authority -- the same shape resolveProofLocation's
+// instruction-offset branch builds, not its context-state branch.
+func (t *token) ConfigureAccount(account, mint, authority *types.PublicKey, signers []*types.PublicKey, decryptableZeroBalance []byte, maximumPendingBalanceCreditCounter uint64, proofInstructionOffset int8) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token configure account: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token configure account: mint is required")
+	}
+	if err := validateAuthority("token configure account", authority, signers); err != nil {
+		return nil, err
+	}
+	if len(decryptableZeroBalance) != AeCiphertextLen {
+		return nil, fmt.Errorf("token configure account: decryptable zero balance is %d bytes, expected %d", len(decryptableZeroBalance), AeCiphertextLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionConfigureAccount)
+	data = codec.Binary.AppendBytes(data, decryptableZeroBalance)
+	data = codec.Binary.AppendU64(data, maximumPendingBalanceCreditCounter)
+	data = codec.Binary.AppendU8(data, uint8(proofInstructionOffset))
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(mint),
+		types.NewReadonlyAccount(Sysvar.Instructions()),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}

@@ -57,6 +57,16 @@ const (
 	// VoteProgramAddress holds the account a validator votes through, which is
 	// the account stake is delegated to rather than the validator's identity.
 	VoteProgramAddress = "Vote111111111111111111111111111111111111111"
+
+	// ZkElgamalProofProgramAddress verifies the zero-knowledge proofs
+	// Token-2022's ConfidentialTransfer family depends on -- a
+	// PubkeyValidityProof, a range proof, an equality proof -- without
+	// itself knowing anything about tokens. Token-2022 only ever names
+	// this as an account a proof-carrying instruction points at
+	// (proof_instruction_offset, or a context-state account this program
+	// wrote), never as the program an instruction is sent to the way
+	// System or Token-2022 itself is.
+	ZkElgamalProofProgramAddress = "ZkE1Gama1Proof11111111111111111111111111111"
 )
 
 // The same addresses decoded once at startup.
@@ -74,4 +84,5 @@ var (
 	MemoProgramID            = types.MustPublicKeyFromBase58(MemoProgramAddress)
 	StakeProgramID           = types.MustPublicKeyFromBase58(StakeProgramAddress)
 	VoteProgramID            = types.MustPublicKeyFromBase58(VoteProgramAddress)
+	ZkElgamalProofProgramID  = types.MustPublicKeyFromBase58(ZkElgamalProofProgramAddress)
 )

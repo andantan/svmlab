@@ -203,6 +203,20 @@ definitions:
       public_key:
         type: string
     type: object
+  misc.AeKeySeedMessageRequest:
+    properties:
+      token_account:
+        description: |-
+          TokenAccount is the account an AeKey will encrypt the confidential
+          balance for (see extensions/confidential-transfer-account/configure-account).
+        example: ""
+        type: string
+    type: object
+  misc.AeKeySeedMessageResponse:
+    properties:
+      message:
+        type: string
+    type: object
   misc.BatchCall:
     properties:
       method:
@@ -243,6 +257,18 @@ definitions:
       base58:
         type: string
     type: object
+  misc.DeriveAeKeyRequest:
+    properties:
+      signature:
+        description: Signature is base58, the same encoding sign/'s own response uses.
+        example: ""
+        type: string
+    type: object
+  misc.DeriveAeKeyResponse:
+    properties:
+      ae_key:
+        type: string
+    type: object
   misc.FeeRequest:
     properties:
       message:
@@ -256,6 +282,13 @@ definitions:
         type: string
       valid:
         type: boolean
+    type: object
+  misc.GenerateElGamalKeypairResponse:
+    properties:
+      public_key:
+        type: string
+      secret_key:
+        type: string
     type: object
   misc.GenerateKeypairResponse:
     properties:
@@ -276,6 +309,22 @@ definitions:
   misc.HealthResponse:
     properties:
       health:
+        type: string
+    type: object
+  misc.ProvePubkeyValidityRequest:
+    properties:
+      secret_key:
+        description: |-
+          SecretKey is the ElGamal secret key, base58-encoded, exactly what
+          generate/elgamal-keypair's secret_key returns.
+        example: ""
+        type: string
+    type: object
+  misc.ProvePubkeyValidityResponse:
+    properties:
+      proof:
+        type: string
+      public_key:
         type: string
     type: object
   misc.RawRequest:
@@ -1918,6 +1967,132 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.ConfigureAccountRequest:
+    properties:
+      account:
+        description: |-
+          Account is the token account this attaches to. It must already
+          exist, be owned by Program, and already hold enough space (see
+          extensions/confidential-transfer-account/reallocate).
+        example: ""
+        type: string
+      ae_key:
+        description: |-
+          AeKey encrypts Account's decryptable_zero_balance (always zero -- a
+          freshly configured account has no balance yet), base58-encoded --
+          a raw 16-byte AES-128-GCM-SIV key, not a Solana address. Upstream
+          derives this by signing a fixed message with the account owner's
+          real wallet key, which this API never holds; the caller derives it
+          themselves and supplies the raw bytes.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      elgamal_pubkey:
+        description: |-
+          ElgamalPubkey is the ElGamal public key Account's confidential
+          balance will be encrypted under, base58-encoded -- a raw 32-byte
+          ristretto255 value, not a Solana address (see
+          tool/generate/elgamal-keypair).
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      maximum_pending_balance_credit_counter:
+        description: |-
+          MaximumPendingBalanceCreditCounter caps how many deposits and
+          transfers Account can receive before apply-pending-balance (not yet
+          built) has to run before it can receive more.
+        example: "65536"
+        type: string
+      mint:
+        description: |-
+          Mint must already carry the ConfidentialTransferMint extension (see
+          extensions/confidential-transfer-mint/initialize).
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      pubkey_proof:
+        description: |-
+          PubkeyProof proves whoever built this request knows the secret key
+          ElgamalPubkey was derived from, base58-encoded (see
+          tool/prove/pubkey-validity).
+        example: ""
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.ConfigureAccountResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      elgamal_pubkey:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      maximum_pending_balance_credit_counter:
+        type: string
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.CreateATAIdempotentRequest:
     properties:
       durable_nonce_account:
@@ -2727,6 +2902,102 @@ definitions:
         type: array
       token_account:
         type: string
+      transaction:
+        type: string
+    type: object
+  v2.InitializeConfidentialTransferMintRequest:
+    properties:
+      auditor_elgamal_pubkey:
+        description: |-
+          AuditorElgamalPubkey, left empty, means no auditor can ever decrypt a
+          confidential transfer amount on this mint. Given, it is a raw ElGamal
+          public key encoded as base58 -- a 32-byte compressed Ristretto point,
+          not a Solana address, and this API does not derive one from a
+          keypair; the caller supplies the raw bytes themselves.
+        example: ""
+        type: string
+      authority:
+        description: |-
+          Authority may later call whatever reconfigures this extension and
+          approve new confidential accounts when AutoApproveNewAccounts is
+          false. Left empty, this capability is given up permanently.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      auto_approve_new_accounts:
+        description: |-
+          AutoApproveNewAccounts determines whether a newly configured
+          confidential account may be used immediately, or needs Authority to
+          approve it first.
+        example: true
+        type: boolean
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint is the account this attaches to. It must already exist (see
+          create-mint) and not yet be initialized -- initialize-mint2 has to
+          run after this, never before.
+        example: ""
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token mint can never hold this
+          extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.InitializeConfidentialTransferMintResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      auditor_elgamal_pubkey:
+        type: string
+      authority:
+        type: string
+      auto_approve_new_accounts:
+        type: boolean
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
       transaction:
         type: string
     type: object
@@ -3610,6 +3881,214 @@ definitions:
           type: string
         type: array
       token_account:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.ReallocateConfidentialTransferAccountRequest:
+    properties:
+      account:
+        description: |-
+          Account is the token account to check and, if needed, grow. It must
+          already exist and be owned by Program.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. Unlike every other Token endpoint, this
+          is not the usual either-program field: a classic Token account's
+          layout is fixed at 165 bytes forever, with no TLV region to grow
+          into, so classic Token is rejected here rather than left to fail on
+          chain.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds whatever the resize costs, a distinct role from
+          Owner: Owner authorizes the account being touched, RentPayer covers
+          what that costs, and they need not be the same key.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ReallocateConfidentialTransferAccountResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      rent:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Rent reports what funds the resize: the shortfall between
+          TargetSize's rent-exemption minimum and Account's actual current
+          lamports, zero when Account already holds enough.
+      signers:
+        items:
+          type: string
+        type: array
+      target_size:
+        description: |-
+          TargetSize is the total account size GetAccountDataSize reported for
+          Account's existing extensions plus ConfidentialTransferAccount, asked of
+          the deployed program rather than recomputed here.
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.ReallocateConfidentialTransferMintRequest:
+    properties:
+      account:
+        description: |-
+          Account is the token account to check and, if needed, grow. It must
+          already exist and be owned by Program.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. Unlike every other Token endpoint, this
+          is not the usual either-program field: a classic Token account's
+          layout is fixed at 165 bytes forever, with no TLV region to grow
+          into, so classic Token is rejected here rather than left to fail on
+          chain.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds whatever the resize costs, a distinct role from
+          Owner: Owner authorizes the account being touched, RentPayer covers
+          what that costs, and they need not be the same key.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ReallocateConfidentialTransferMintResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      rent:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Rent reports what funds the resize: the shortfall between
+          TargetSize's rent-exemption minimum and Account's actual current
+          lamports, zero when Account already holds enough.
+      signers:
+        items:
+          type: string
+        type: array
+      target_size:
+        description: |-
+          TargetSize is the total account size GetAccountDataSize reported for
+          Account's existing extensions plus ConfidentialTransferMint, asked of
+          the deployed program rather than recomputed here.
         type: string
       transaction:
         type: string
@@ -7839,6 +8318,106 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.UpdateConfidentialTransferMintRequest:
+    properties:
+      auditor_elgamal_pubkey:
+        description: |-
+          AuditorElgamalPubkey replaces whatever initialize set entirely. Left
+          empty, no auditor can decrypt a confidential transfer amount on this
+          mint from this point on. Given, it is a raw ElGamal public key
+          encoded as base58 -- a 32-byte compressed Ristretto point, not a
+          Solana address.
+        example: ""
+        type: string
+      authority:
+        description: |-
+          Authority is the authority initialize named, or its multisig for a
+          multisig-owned authority (see MultisigSigners). This cannot be left
+          empty: an authority that was never set has no way to sign this
+          instruction in the first place, permanently.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      auto_approve_new_accounts:
+        description: AutoApproveNewAccounts replaces whatever initialize set entirely.
+        example: true
+        type: boolean
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint must already have the ConfidentialTransferMint extension (see
+          initialize).
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty,
+          Authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token mint can never hold this
+          extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.UpdateConfidentialTransferMintResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      auditor_elgamal_pubkey:
+        type: string
+      authority:
+        type: string
+      auto_approve_new_accounts:
+        type: boolean
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.WithdrawExcessLamportsRequest:
     properties:
       account:
@@ -9741,7 +10320,91 @@ paths:
       summary: Convert a base64 string to base58
       tags:
       - tool
-  /svm/tool/generate/keypair:
+  /svm/tool/derive/ae-key:
+    post:
+      consumes:
+      - application/json
+      description: 'Reproduces AeKey::new_from_signer''s second half: given the Ed25519
+        signature over ae-key-seed-message''s own output, returns the AeKey that signature
+        determines (two rounds of SHA3-512, keeping the first 16 bytes of the second).
+        A real wallet rederiving the same key needs the same signature every time,
+        so this never generates one itself.'
+      parameters:
+      - description: Signature over ae-key-seed-message's output
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.DeriveAeKeyRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.DeriveAeKeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Derive an AeKey from a signature
+      tags:
+      - tool
+  /svm/tool/derive/ae-key-seed-message:
+    post:
+      consumes:
+      - application/json
+      description: Returns the exact bytes upstream's AeKey::seed_from_signer signs
+        to derive an account's AeKey deterministically -- b"AeKey" followed by token_account's
+        own bytes, the public seed convention real tooling (solana-foundation's Confidential-Balances-Sample)
+        uses. Sign the returned message (base64) with the account owner's own key
+        via sign/, then pass the resulting signature to derive/ae-key.
+      parameters:
+      - description: Token account
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.AeKeySeedMessageRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.AeKeySeedMessageResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build the message to sign for an account's AeKey
+      tags:
+      - tool
+  /svm/tool/generate/ed25519-keypair:
     post:
       description: 'Returns a new key pair in the base58 form config.yaml expects,
         so it can be added as a keys entry and used as a signer. Nothing is written
@@ -9773,6 +10436,83 @@ paths:
               type: string
             type: object
       summary: Generate an ed25519 key pair
+      tags:
+      - tool
+  /svm/tool/generate/elgamal-keypair:
+    post:
+      description: 'Returns a new ElGamal key pair for Token-2022''s ConfidentialTransfer
+        family -- auditor_elgamal_pubkey on extensions/confidential-transfer-mint/initialize
+        is one consumer. Neither value is a Solana address: both are base58-encoded
+        raw 32-byte ristretto255 values (a scalar and a group element), not ed25519
+        keys, and cannot sign a transaction or hold lamports.'
+      parameters:
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.GenerateElGamalKeypairResponse'
+        "500":
+          description: Internal Server Error
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Generate a ristretto255 ElGamal key pair
+      tags:
+      - tool
+  /svm/tool/prove/pubkey-validity:
+    post:
+      consumes:
+      - application/json
+      description: 'Derives the public key secret_key determines and builds a sigma-protocol
+        proof that whoever holds secret_key knows it -- what extensions/confidential-transfer-account/configure-account
+        requires alongside the public key it names, since nothing else lets the deployed
+        program tell a real ElGamal public key from 32 arbitrary bytes. The proof
+        is zero-knowledge: public_key and proof in the response reveal nothing about
+        secret_key beyond what configure-account already needs to see.'
+      parameters:
+      - description: ElGamal secret key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ProvePubkeyValidityRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.ProvePubkeyValidityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build a PubkeyValidityProof for an ElGamal secret key
       tags:
       - tool
   /svm/v1/transaction/build:
@@ -11752,6 +12492,280 @@ paths:
       summary: Fund a new account, sized and owned for a Token multisig
       tags:
       - v2-transaction-token-multisig
+  /svm/v2/transaction/token/extensions/confidential-transfer-account/configure-account:
+    post:
+      consumes:
+      - application/json
+      description: 'Builds two instructions in one transaction: ConfigureAccount itself,
+        and the VerifyPubkeyValidity instruction it depends on as its very next sibling
+        -- the program has to be convinced elgamal_pubkey has a known secret key before
+        letting account claim it. mint must already carry ConfidentialTransferMint,
+        and account must already hold room for this extension (see extensions/confidential-transfer-account/reallocate).
+        pubkey_proof is checked locally (the same relationship the deployed verifier
+        itself checks) before a transaction is ever built, so a proof built against
+        a different key fails as a 400 rather than a wasted fee. decryptable_zero_balance
+        is computed here from ae_key, always encrypting zero -- a freshly configured
+        account has no balance yet. recent_blockhash is always required and is never
+        fetched server-side. Left alone, it also builds the message and expires whenever
+        the runtime says it does. Naming durable_nonce_account builds the message
+        against the value that account stores instead, so the transaction never expires,
+        and prepends the advance that consumes it; recent_blockhash then only prices
+        the transaction. The response reports nonce_authority in that case, which
+        has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, mint, owner, ElGamal pubkey/proof, AE key, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ConfigureAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ConfigureAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Attach the ConfidentialTransferAccount extension to a token account
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-transfer-account/reallocate:
+    post:
+      consumes:
+      - application/json
+      description: 'Checks whether account already holds enough space for its existing
+        extensions plus ConfidentialTransferAccount, and grows it if not. The instruction
+        itself only ever needs the one new extension: Reallocate reads account''s
+        own existing extensions on chain and unions them with what this sends, so
+        a caller never resends what is already there. Getting the resize''s rent right
+        is this endpoint''s own job: it reads account''s current extensions and actual
+        lamports, asks GetAccountDataSize for the full target size once ConfidentialTransferAccount
+        is unioned in, and only then knows rent_payer''s shortfall — the same authority
+        Reallocate itself defers to, asked directly rather than recomputed here. Unlike
+        ConfidentialTransferMint, ConfidentialTransferAccount is exactly the token-account
+        extension Reallocate''s own account list expects: this is the endpoint that
+        actually succeeds, preparing an account for confidential-transfer-account/configure-account,
+        which otherwise fails as InvalidAccountData the moment the program tries to
+        write pending/available balance ciphertexts into an account that never reserved
+        the 295 bytes those TLV fields need. recent_blockhash is always required and
+        is never fetched server-side. Left alone, it also builds the message and expires
+        whenever the runtime says it does. Naming durable_nonce_account builds the
+        message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, rent payer, owner, fee payer, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ReallocateConfidentialTransferAccountRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ReallocateConfidentialTransferAccountResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Grow a token account to hold room for ConfidentialTransferAccount
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-transfer-mint/initialize:
+    post:
+      consumes:
+      - application/json
+      description: 'Names who may later reconfigure this extension and approve new
+        confidential accounts (authority), whether new accounts need that approval
+        before use (auto_approve_new_accounts), and an optional auditor key that can
+        decrypt any confidential transfer amount (auditor_elgamal_pubkey, base58-encoded
+        raw 32-byte ElGamal public key, not a Solana address). This can only ever
+        run in the narrow window every mint extension shares: after create-mint has
+        allocated the account and before initialize-mint2 locks the extension list
+        forever -- there is no path back into an already-initialized mint, no Reallocate
+        equivalent exists for mints at all. This endpoint only builds InitializeMint,
+        the one sub-instruction of the ConfidentialTransfer family that needs no zero-knowledge
+        proof; the other 14 (ConfigureAccount, Deposit, Withdraw, Transfer, and the
+        rest) are not built here. recent_blockhash is always required and is never
+        fetched server-side. Left alone, it also builds the message and expires whenever
+        the runtime says it does. Naming durable_nonce_account builds the message
+        against the value that account stores instead, so the transaction never expires,
+        and prepends the advance that consumes it; recent_blockhash then only prices
+        the transaction. The response reports nonce_authority in that case, which
+        has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint, authority, auto-approve flag, auditor key, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializeConfidentialTransferMintRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializeConfidentialTransferMintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Attach the ConfidentialTransferMint extension to a mint
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-transfer-mint/reallocate:
+    post:
+      consumes:
+      - application/json
+      description: 'Checks whether account already holds enough space for its existing
+        extensions plus ConfidentialTransferMint, and grows it if not. The instruction
+        itself only ever needs the one new extension: Reallocate reads account''s
+        own existing extensions on chain and unions them with what this sends, so
+        a caller never resends what is already there. Getting the resize''s rent right
+        is this endpoint''s own job: it reads account''s current extensions and actual
+        lamports, asks GetAccountDataSize for the full target size once ConfidentialTransferMint
+        is unioned in, and only then knows rent_payer''s shortfall — the same authority
+        Reallocate itself defers to, asked directly rather than recomputed here. ConfidentialTransferMint
+        is a mint-side extension in the interface crate''s own numbering, not what
+        Reallocate''s own account list expects (always a token account); nothing here
+        stops a caller from naming it anyway, and the deployed program is what rejects
+        it, not this endpoint. recent_blockhash is always required and is never fetched
+        server-side. Left alone, it also builds the message and expires whenever the
+        runtime says it does. Naming durable_nonce_account builds the message against
+        the value that account stores instead, so the transaction never expires, and
+        prepends the advance that consumes it; recent_blockhash then only prices the
+        transaction. The response reports nonce_authority in that case, which has
+        to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, rent payer, owner, fee payer, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ReallocateConfidentialTransferMintRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ReallocateConfidentialTransferMintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Grow a token account to hold room for ConfidentialTransferMint
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-transfer-mint/update:
+    post:
+      consumes:
+      - application/json
+      description: 'Replaces auto_approve_new_accounts and auditor_elgamal_pubkey
+        with the values given, authorized by authority (the role initialize named),
+        not mint''s own mint or freeze authority. Both fields are replaced entirely
+        -- passing the current value back is how a caller keeps one unchanged. Unlike
+        initialize, authority itself is never reassignable through this endpoint:
+        upstream''s UpdateMintData carries no authority field at all, since authority
+        is proven by signing as an account rather than named as data. Confirmed against
+        the interface crate''s update_mint: no zero-knowledge proof or context-state
+        account is needed, the same as initialize. recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint, authority, new configuration, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.UpdateConfidentialTransferMintRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.UpdateConfidentialTransferMintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Change the ConfidentialTransferMint configuration on a mint
+      tags:
+      - v2-transaction-token-extensions
   /svm/v2/transaction/token/extensions/mint-close-authority/clear:
     post:
       consumes:

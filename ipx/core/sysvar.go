@@ -22,11 +22,22 @@ import (
 const (
 	RecentBlockhashesSysvarAddress = "SysvarRecentB1ockHashes11111111111111111111"
 	RentSysvarAddress              = "SysvarRent111111111111111111111111111111111"
+
+	// InstructionsSysvarAddress holds the currently executing transaction's
+	// own instructions, readable mid-execution -- the mechanism a proof
+	// instruction placed as a sibling (rather than pre-verified into a
+	// context-state account) is found through:
+	// extensions/confidential-transfer-account/configure-account's
+	// proof_instruction_offset names a relative position, and this
+	// account is what the program reads that neighboring instruction's
+	// data from.
+	InstructionsSysvarAddress = "Sysvar1nstructions1111111111111111111111111"
 )
 
 var (
 	RecentBlockhashesSysvarID = types.MustPublicKeyFromBase58(RecentBlockhashesSysvarAddress)
 	RentSysvarID              = types.MustPublicKeyFromBase58(RentSysvarAddress)
+	InstructionsSysvarID      = types.MustPublicKeyFromBase58(InstructionsSysvarAddress)
 )
 
 // sysvar is a namespace rather than state, since the addresses it hands back
@@ -53,4 +64,10 @@ func (_ *sysvar) RecentBlockhashes() *types.PublicKey {
 // Rent is the account holding the current rent parameters.
 func (_ *sysvar) Rent() *types.PublicKey {
 	return RentSysvarID
+}
+
+// Instructions is the account a program reads the currently executing
+// transaction's own instructions from -- see InstructionsSysvarAddress.
+func (_ *sysvar) Instructions() *types.PublicKey {
+	return InstructionsSysvarID
 }

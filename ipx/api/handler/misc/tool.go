@@ -25,7 +25,7 @@ func NewToolHandler() *ToolHandler {
 // @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
 // @Success      200   {object}  GenerateKeypairResponse
 // @Failure      500   {object}  map[string]string
-// @Router       /svm/tool/generate/keypair [post]
+// @Router       /svm/tool/generate/ed25519-keypair [post]
 func (h *ToolHandler) GenerateKeypair(w http.ResponseWriter, r *http.Request) {
 	key, err := core.GenerateKey()
 	if err != nil {
@@ -34,6 +34,128 @@ func (h *ToolHandler) GenerateKeypair(w http.ResponseWriter, r *http.Request) {
 	}
 
 	handler.WriteOK(w, NewGenerateKeypairResponse(key))
+}
+
+// GenerateElGamalKeypair godoc
+// @Summary      Generate a ristretto255 ElGamal key pair
+// @Description  Returns a new ElGamal key pair for Token-2022's ConfidentialTransfer family -- auditor_elgamal_pubkey on extensions/confidential-transfer-mint/initialize is one consumer. Neither value is a Solana address: both are base58-encoded raw 32-byte ristretto255 values (a scalar and a group element), not ed25519 keys, and cannot sign a transaction or hold lamports.
+// @Tags         tool
+// @Produce      json
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  GenerateElGamalKeypairResponse
+// @Failure      500   {object}  map[string]string
+// @Router       /svm/tool/generate/elgamal-keypair [post]
+func (h *ToolHandler) GenerateElGamalKeypair(w http.ResponseWriter, r *http.Request) {
+	key, err := core.GenerateElGamalKey()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to generate key: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewGenerateElGamalKeypairResponse(key))
+}
+
+// ProvePubkeyValidity godoc
+// @Summary      Build a PubkeyValidityProof for an ElGamal secret key
+// @Description  Derives the public key secret_key determines and builds a sigma-protocol proof that whoever holds secret_key knows it -- what extensions/confidential-transfer-account/configure-account requires alongside the public key it names, since nothing else lets the deployed program tell a real ElGamal public key from 32 arbitrary bytes. The proof is zero-knowledge: public_key and proof in the response reveal nothing about secret_key beyond what configure-account already needs to see.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ProvePubkeyValidityRequest  true  "ElGamal secret key"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ProvePubkeyValidityResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/tool/prove/pubkey-validity [post]
+func (h *ToolHandler) ProvePubkeyValidity(w http.ResponseWriter, r *http.Request) {
+	req := new(ProvePubkeyValidityRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	publicKey, err := core.DeriveElGamalPublicKey(req.ToSecretKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("secret_key: %s", err))
+		return
+	}
+
+	proof, err := core.ProvePubkeyValidity(req.ToSecretKey(), publicKey)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to build proof: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewProvePubkeyValidityResponse(publicKey, proof))
+}
+
+// AeKeySeedMessage godoc
+// @Summary      Build the message to sign for an account's AeKey
+// @Description  Returns the exact bytes upstream's AeKey::seed_from_signer signs to derive an account's AeKey deterministically -- b"AeKey" followed by token_account's own bytes, the public seed convention real tooling (solana-foundation's Confidential-Balances-Sample) uses. Sign the returned message (base64) with the account owner's own key via sign/, then pass the resulting signature to derive/ae-key.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      AeKeySeedMessageRequest  true  "Token account"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  AeKeySeedMessageResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/tool/derive/ae-key-seed-message [post]
+func (h *ToolHandler) AeKeySeedMessage(w http.ResponseWriter, r *http.Request) {
+	req := new(AeKeySeedMessageRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	message, err := core.AeKeySeedMessage(req.TokenAccountKey().Bytes())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewAeKeySeedMessageResponse(message))
+}
+
+// DeriveAeKey godoc
+// @Summary      Derive an AeKey from a signature
+// @Description  Reproduces AeKey::new_from_signer's second half: given the Ed25519 signature over ae-key-seed-message's own output, returns the AeKey that signature determines (two rounds of SHA3-512, keeping the first 16 bytes of the second). A real wallet rederiving the same key needs the same signature every time, so this never generates one itself.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      DeriveAeKeyRequest  true  "Signature over ae-key-seed-message's output"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  DeriveAeKeyResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/tool/derive/ae-key [post]
+func (h *ToolHandler) DeriveAeKey(w http.ResponseWriter, r *http.Request) {
+	req := new(DeriveAeKeyRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	aeKey, err := core.DeriveAeKeyFromSignature(req.ToSignature())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewDeriveAeKeyResponse(aeKey))
 }
 
 // ConvertBase58To64 godoc

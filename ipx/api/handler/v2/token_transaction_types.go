@@ -9317,6 +9317,685 @@ func NewReallocateTransferFeeAmountResponse(
 	}
 }
 
+// ReallocateConfidentialTransferMintRequest checks whether Account already
+// holds room for ConfidentialTransferMint, and grows it if not.
+//
+// ConfidentialTransferMint is a mint-side extension in the interface
+// crate's own numbering, not one Reallocate's own account list ever
+// expects — that list is always a token account, since a mint's extension
+// set is fixed forever at initialize-mint2 and Reallocate has no path back
+// into it. Nothing here stops a caller from naming this type anyway; the
+// deployed program is what rejects it, not this endpoint, the same as
+// every other place in this API where a wrong role is a chain error rather
+// than a 400.
+//
+// The instruction itself only ever needs the one new extension type being
+// added: Reallocate reads Account's own existing extensions on chain and
+// unions them with whatever this sends, so a caller never resends what is
+// already there. Getting the resize's rent right is this handler's own
+// job, not the instruction's — it reads Account's current extensions and
+// actual lamports itself, asks GetAccountDataSize for the full target size
+// once ConfidentialTransferMint is unioned in, and only then knows
+// RentPayer's shortfall.
+type ReallocateConfidentialTransferMintRequest struct {
+	// Account is the token account to check and, if needed, grow. It must
+	// already exist and be owned by Program.
+	Account string `json:"account" example:""`
+
+	// RentPayer funds whatever the resize costs, a distinct role from
+	// Owner: Owner authorizes the account being touched, RentPayer covers
+	// what that costs, and they need not be the same key.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Owner is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. Unlike every other Token endpoint, this
+	// is not the usual either-program field: a classic Token account's
+	// layout is fixed at 165 bytes forever, with no TLV region to grow
+	// into, so classic Token is rejected here rather than left to fail on
+	// chain.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+	// itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account         *types.PublicKey
+	rentPayer       *types.PublicKey
+	owner           *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *ReallocateConfidentialTransferMintRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.rentPayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RentPayer)); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	// Unlike every other Token endpoint, which accepts either program
+	// because the instruction genuinely works on both, an extension has
+	// nowhere to live on a classic Token account: that layout is fixed at
+	// 165 bytes forever, with no TLV region to grow into at all. Rejecting
+	// classic Token here is a structural fact about the account, not a
+	// preference, so it is checked before the request ever reaches the
+	// chain rather than left to come back as an on-chain rejection.
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ReallocateConfidentialTransferMintRequest) AccountKey() *types.PublicKey {
+	return r.account
+}
+func (r *ReallocateConfidentialTransferMintRequest) RentPayerKey() *types.PublicKey {
+	return r.rentPayer
+}
+func (r *ReallocateConfidentialTransferMintRequest) OwnerKey() *types.PublicKey { return r.owner }
+func (r *ReallocateConfidentialTransferMintRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+func (r *ReallocateConfidentialTransferMintRequest) Blockhash() *types.Hash { return r.rbh }
+func (r *ReallocateConfidentialTransferMintRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ReallocateConfidentialTransferMintRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ReallocateConfidentialTransferMintRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ReallocateConfidentialTransferMintResponse reports the built transaction
+// alongside what it resizes Account for.
+type ReallocateConfidentialTransferMintResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account string `json:"account"`
+	Owner   string `json:"owner"`
+	Program string `json:"program"`
+
+	// TargetSize is the total account size GetAccountDataSize reported for
+	// Account's existing extensions plus ConfidentialTransferMint, asked of
+	// the deployed program rather than recomputed here.
+	TargetSize string `json:"target_size"`
+
+	// Rent reports what funds the resize: the shortfall between
+	// TargetSize's rent-exemption minimum and Account's actual current
+	// lamports, zero when Account already holds enough.
+	Rent SystemPayer `json:"rent"`
+	Fee  SystemPayer `json:"fee"`
+}
+
+func NewReallocateConfidentialTransferMintResponse(
+	tx *types.Transaction, raw, message []byte,
+	rentPayer, feePayer, account, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	targetSize, rentShortfall, fee uint64,
+) *ReallocateConfidentialTransferMintResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ReallocateConfidentialTransferMintResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Owner:           owner.Base58(),
+		Program:         tokenProgram.Base58(),
+		TargetSize:      strconv.FormatUint(targetSize, 10),
+		Rent:            newSystemPayer(rentPayer, rentShortfall),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// ReallocateConfidentialTransferAccountRequest checks whether Account
+// already holds room for ConfidentialTransferAccount, and grows it if not.
+//
+// Unlike ConfidentialTransferMint, ConfidentialTransferAccount is exactly
+// the token-account extension Reallocate's own account list expects: this
+// is the endpoint that actually succeeds, preparing an account for
+// extensions/confidential-transfer-account/configure-account -- without
+// it that call fails as InvalidAccountData the moment the program tries
+// to write pending/available balance ciphertexts into an account that
+// never reserved the 295 bytes those TLV fields need.
+//
+// The instruction itself only ever needs the one new extension type being
+// added: Reallocate reads Account's own existing extensions on chain and
+// unions them with whatever this sends, so a caller never resends what is
+// already there. Getting the resize's rent right is this handler's own
+// job, not the instruction's — it reads Account's current extensions and
+// actual lamports itself, asks GetAccountDataSize for the full target size
+// once ConfidentialTransferAccount is unioned in, and only then knows
+// RentPayer's shortfall.
+type ReallocateConfidentialTransferAccountRequest struct {
+	// Account is the token account to check and, if needed, grow. It must
+	// already exist and be owned by Program.
+	Account string `json:"account" example:""`
+
+	// RentPayer funds whatever the resize costs, a distinct role from
+	// Owner: Owner authorizes the account being touched, RentPayer covers
+	// what that costs, and they need not be the same key.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Owner is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. Unlike every other Token endpoint, this
+	// is not the usual either-program field: a classic Token account's
+	// layout is fixed at 165 bytes forever, with no TLV region to grow
+	// into, so classic Token is rejected here rather than left to fail on
+	// chain.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+	// itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account         *types.PublicKey
+	rentPayer       *types.PublicKey
+	owner           *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *ReallocateConfidentialTransferAccountRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.rentPayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RentPayer)); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	// Unlike every other Token endpoint, which accepts either program
+	// because the instruction genuinely works on both, an extension has
+	// nowhere to live on a classic Token account: that layout is fixed at
+	// 165 bytes forever, with no TLV region to grow into at all. Rejecting
+	// classic Token here is a structural fact about the account, not a
+	// preference, so it is checked before the request ever reaches the
+	// chain rather than left to come back as an on-chain rejection.
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ReallocateConfidentialTransferAccountRequest) AccountKey() *types.PublicKey {
+	return r.account
+}
+func (r *ReallocateConfidentialTransferAccountRequest) RentPayerKey() *types.PublicKey {
+	return r.rentPayer
+}
+func (r *ReallocateConfidentialTransferAccountRequest) OwnerKey() *types.PublicKey { return r.owner }
+func (r *ReallocateConfidentialTransferAccountRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+func (r *ReallocateConfidentialTransferAccountRequest) Blockhash() *types.Hash { return r.rbh }
+func (r *ReallocateConfidentialTransferAccountRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ReallocateConfidentialTransferAccountRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ReallocateConfidentialTransferAccountRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ReallocateConfidentialTransferAccountResponse reports the built transaction
+// alongside what it resizes Account for.
+type ReallocateConfidentialTransferAccountResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account string `json:"account"`
+	Owner   string `json:"owner"`
+	Program string `json:"program"`
+
+	// TargetSize is the total account size GetAccountDataSize reported for
+	// Account's existing extensions plus ConfidentialTransferAccount, asked of
+	// the deployed program rather than recomputed here.
+	TargetSize string `json:"target_size"`
+
+	// Rent reports what funds the resize: the shortfall between
+	// TargetSize's rent-exemption minimum and Account's actual current
+	// lamports, zero when Account already holds enough.
+	Rent SystemPayer `json:"rent"`
+	Fee  SystemPayer `json:"fee"`
+}
+
+func NewReallocateConfidentialTransferAccountResponse(
+	tx *types.Transaction, raw, message []byte,
+	rentPayer, feePayer, account, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	targetSize, rentShortfall, fee uint64,
+) *ReallocateConfidentialTransferAccountResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ReallocateConfidentialTransferAccountResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Owner:           owner.Base58(),
+		Program:         tokenProgram.Base58(),
+		TargetSize:      strconv.FormatUint(targetSize, 10),
+		Rent:            newSystemPayer(rentPayer, rentShortfall),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// ConfigureAccountRequest attaches the ConfidentialTransferAccount
+// extension to Account, the token-account-side counterpart to
+// extensions/confidential-transfer-mint/initialize -- Mint has to already
+// carry ConfidentialTransferMint, and Account has to already hold room
+// for this extension (see extensions/confidential-transfer-account/
+// reallocate) before this can succeed.
+//
+// This builds two instructions in one transaction: ConfigureAccount
+// itself, and the VerifyPubkeyValidity instruction it depends on as its
+// very next sibling (proof_instruction_offset = 1) -- the program has to
+// be convinced ElgamalPubkey has a known secret key before letting Account
+// claim it, and this is the only way that ever gets checked. PubkeyProof
+// is built by tool/prove/pubkey-validity from the same secret key
+// ElgamalPubkey was derived from (tool/generate/elgamal-keypair); a proof
+// built against a different key fails here, before a transaction is ever
+// built, via a local check equivalent to what the deployed verifier
+// itself would run.
+type ConfigureAccountRequest struct {
+	// Account is the token account this attaches to. It must already
+	// exist, be owned by Program, and already hold enough space (see
+	// extensions/confidential-transfer-account/reallocate).
+	Account string `json:"account" example:""`
+
+	// Mint must already carry the ConfidentialTransferMint extension (see
+	// extensions/confidential-transfer-mint/initialize).
+	Mint string `json:"mint" example:""`
+
+	// Owner is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// ElgamalPubkey is the ElGamal public key Account's confidential
+	// balance will be encrypted under, base58-encoded -- a raw 32-byte
+	// ristretto255 value, not a Solana address (see
+	// tool/generate/elgamal-keypair).
+	ElgamalPubkey string `json:"elgamal_pubkey" example:""`
+
+	// PubkeyProof proves whoever built this request knows the secret key
+	// ElgamalPubkey was derived from, base58-encoded (see
+	// tool/prove/pubkey-validity).
+	PubkeyProof string `json:"pubkey_proof" example:""`
+
+	// AeKey encrypts Account's decryptable_zero_balance (always zero -- a
+	// freshly configured account has no balance yet), base58-encoded --
+	// a raw 16-byte AES-128-GCM-SIV key, not a Solana address. Upstream
+	// derives this by signing a fixed message with the account owner's
+	// real wallet key, which this API never holds; the caller derives it
+	// themselves and supplies the raw bytes.
+	AeKey string `json:"ae_key" example:""`
+
+	// MaximumPendingBalanceCreditCounter caps how many deposits and
+	// transfers Account can receive before apply-pending-balance (not yet
+	// built) has to run before it can receive more.
+	MaximumPendingBalanceCreditCounter string `json:"maximum_pending_balance_credit_counter" example:"65536"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+	// itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account                            *types.PublicKey
+	mint                               *types.PublicKey
+	owner                              *types.PublicKey
+	elgamalPubkey                      []byte
+	pubkeyProof                        []byte
+	aeKey                              []byte
+	maximumPendingBalanceCreditCounter uint64
+	feePayer                           *types.PublicKey
+	rbh                                *types.Hash
+	dna                                *types.PublicKey
+	tokenProgramID                     *types.PublicKey
+	multisigSigners                    []*types.PublicKey
+}
+
+func (r *ConfigureAccountRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+
+	if r.elgamalPubkey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ElgamalPubkey), 32); err != nil {
+		return errors.New("elgamal_pubkey: " + err.Error())
+	}
+	if r.pubkeyProof, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.PubkeyProof), core.PubkeyValidityProofLen); err != nil {
+		return errors.New("pubkey_proof: " + err.Error())
+	}
+	if r.aeKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AeKey), core.AeKeyLen); err != nil {
+		return errors.New("ae_key: " + err.Error())
+	}
+
+	maximumPendingBalanceCreditCounter := strings.TrimSpace(r.MaximumPendingBalanceCreditCounter)
+	if maximumPendingBalanceCreditCounter == "" {
+		return errors.New("maximum_pending_balance_credit_counter is required")
+	}
+	if r.maximumPendingBalanceCreditCounter, err = strconv.ParseUint(maximumPendingBalanceCreditCounter, 10, 64); err != nil {
+		return errors.New("maximum_pending_balance_credit_counter: " + err.Error())
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ConfigureAccountRequest) AccountKey() *types.PublicKey { return r.account }
+func (r *ConfigureAccountRequest) MintKey() *types.PublicKey    { return r.mint }
+func (r *ConfigureAccountRequest) OwnerKey() *types.PublicKey   { return r.owner }
+func (r *ConfigureAccountRequest) ToElgamalPubkey() []byte      { return r.elgamalPubkey }
+func (r *ConfigureAccountRequest) ToPubkeyProof() []byte        { return r.pubkeyProof }
+func (r *ConfigureAccountRequest) ToAeKey() []byte              { return r.aeKey }
+func (r *ConfigureAccountRequest) ToMaximumPendingBalanceCreditCounter() uint64 {
+	return r.maximumPendingBalanceCreditCounter
+}
+func (r *ConfigureAccountRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *ConfigureAccountRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *ConfigureAccountRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ConfigureAccountRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ConfigureAccountRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ConfigureAccountResponse reports the built transaction alongside the
+// confidential transfer configuration it attaches.
+type ConfigureAccountResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account                            string `json:"account"`
+	Mint                               string `json:"mint"`
+	Owner                              string `json:"owner"`
+	ElgamalPubkey                      string `json:"elgamal_pubkey"`
+	MaximumPendingBalanceCreditCounter string `json:"maximum_pending_balance_credit_counter"`
+	Program                            string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewConfigureAccountResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, mint, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	elgamalPubkey []byte, maximumPendingBalanceCreditCounter, fee uint64,
+) *ConfigureAccountResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ConfigureAccountResponse{
+		Transaction:                        codec.Base64.Encode(raw),
+		Message:                            codec.Base64.Encode(message),
+		RecentBlockhash:                    tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                        keys,
+		Signers:                            signers,
+		NonceAuthority:                     nonceAuth,
+		Account:                            account.Base58(),
+		Mint:                               mint.Base58(),
+		Owner:                              owner.Base58(),
+		ElgamalPubkey:                      codec.Base58.Encode(elgamalPubkey),
+		MaximumPendingBalanceCreditCounter: strconv.FormatUint(maximumPendingBalanceCreditCounter, 10),
+		Program:                            tokenProgram.Base58(),
+		Fee:                                newSystemPayer(feePayer, fee),
+	}
+}
+
 // InitializeTransferFeeConfigRequest attaches the TransferFeeConfig
 // extension to Mint, fixing the fee rate every transfer-checked-with-fee
 // withholds and who may later change it or withdraw what accumulates.
@@ -9707,6 +10386,211 @@ func NewInitializeMintCloseAuthorityResponse(
 	}
 	if !closeAuthority.IsNil() {
 		res.CloseAuthority = closeAuthority.Base58()
+	}
+
+	return res
+}
+
+// InitializeConfidentialTransferMintRequest attaches the
+// ConfidentialTransferMint extension to Mint, naming who may later
+// reconfigure it and approve new confidential accounts (Authority),
+// whether new accounts need that approval before use
+// (AutoApproveNewAccounts), and an optional auditor key that can decrypt
+// any confidential transfer amount (AuditorElgamalPubkey).
+//
+// This can only ever run in the narrow window every mint extension shares:
+// after create-mint has allocated the account (sized to include this
+// extension) and before initialize-mint2 locks the extension list forever.
+// There is no path back into an already-initialized mint -- no Reallocate
+// equivalent exists for mints at all, only for token accounts.
+//
+// This endpoint only ever builds InitializeMint -- the one sub-instruction
+// of ConfidentialTransferExtension (opcode 27) that needs no ElGamal math
+// on this server's side, just raw key bytes the caller already has. The
+// other 14 (ConfigureAccount, Deposit, Withdraw, Transfer, and the rest)
+// need zero-knowledge proofs this package does not yet generate or verify,
+// and are not built here.
+type InitializeConfidentialTransferMintRequest struct {
+	// Mint is the account this attaches to. It must already exist (see
+	// create-mint) and not yet be initialized -- initialize-mint2 has to
+	// run after this, never before.
+	Mint string `json:"mint" example:""`
+
+	// Authority may later call whatever reconfigures this extension and
+	// approve new confidential accounts when AutoApproveNewAccounts is
+	// false. Left empty, this capability is given up permanently.
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// AutoApproveNewAccounts determines whether a newly configured
+	// confidential account may be used immediately, or needs Authority to
+	// approve it first.
+	AutoApproveNewAccounts bool `json:"auto_approve_new_accounts" example:"true"`
+
+	// AuditorElgamalPubkey, left empty, means no auditor can ever decrypt a
+	// confidential transfer amount on this mint. Given, it is a raw ElGamal
+	// public key encoded as base58 -- a 32-byte compressed Ristretto point,
+	// not a Solana address, and this API does not derive one from a
+	// keypair; the caller supplies the raw bytes themselves.
+	AuditorElgamalPubkey string `json:"auditor_elgamal_pubkey" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this
+	// extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint                 *types.PublicKey
+	authority            *types.PublicKey
+	auditorElGamalPubkey []byte
+	feePayer             *types.PublicKey
+	rbh                  *types.Hash
+	dna                  *types.PublicKey
+	tokenProgramID       *types.PublicKey
+}
+
+func (r *InitializeConfidentialTransferMintRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+
+	if a := strings.TrimSpace(r.Authority); a != "" {
+		if r.authority, err = types.NewPublicKeyFromBase58(a); err != nil {
+			return errors.New("authority: " + err.Error())
+		}
+	}
+
+	if a := strings.TrimSpace(r.AuditorElgamalPubkey); a != "" {
+		if r.auditorElGamalPubkey, err = codec.Base58.DecodeFixed(a, 32); err != nil {
+			return errors.New("auditor_elgamal_pubkey: " + err.Error())
+		}
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *InitializeConfidentialTransferMintRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *InitializeConfidentialTransferMintRequest) AuthorityKey() *types.PublicKey {
+	return r.authority
+}
+func (r *InitializeConfidentialTransferMintRequest) ToAuditorElGamalPubkey() []byte {
+	return r.auditorElGamalPubkey
+}
+func (r *InitializeConfidentialTransferMintRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *InitializeConfidentialTransferMintRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *InitializeConfidentialTransferMintRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *InitializeConfidentialTransferMintRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// InitializeConfidentialTransferMintResponse reports the built transaction
+// alongside the confidential transfer configuration it attaches.
+type InitializeConfidentialTransferMintResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint                   string `json:"mint"`
+	Authority              string `json:"authority,omitempty"`
+	AutoApproveNewAccounts bool   `json:"auto_approve_new_accounts"`
+	AuditorElgamalPubkey   string `json:"auditor_elgamal_pubkey,omitempty"`
+	Program                string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewInitializeConfidentialTransferMintResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	autoApproveNewAccounts bool, auditorElGamalPubkey []byte,
+	fee uint64,
+) *InitializeConfidentialTransferMintResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	res := &InitializeConfidentialTransferMintResponse{
+		Transaction:            codec.Base64.Encode(raw),
+		Message:                codec.Base64.Encode(message),
+		RecentBlockhash:        tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:            keys,
+		Signers:                signers,
+		NonceAuthority:         nonceAuth,
+		Mint:                   mint.Base58(),
+		AutoApproveNewAccounts: autoApproveNewAccounts,
+		Program:                tokenProgram.Base58(),
+		Fee:                    newSystemPayer(feePayer, fee),
+	}
+	if !authority.IsNil() {
+		res.Authority = authority.Base58()
+	}
+	if len(auditorElGamalPubkey) > 0 {
+		res.AuditorElgamalPubkey = codec.Base58.Encode(auditorElGamalPubkey)
 	}
 
 	return res
@@ -10469,6 +11353,211 @@ func NewSetTransferFeeResponse(
 		Program:                    tokenProgram.Base58(),
 		Fee:                        newSystemPayer(feePayer, fee),
 	}
+}
+
+// UpdateConfidentialTransferMintRequest changes
+// InitializeConfidentialTransferMint's two adjustable fields --
+// AutoApproveNewAccounts and AuditorElgamalPubkey -- authorized by
+// Authority, exactly as SetTransferFeeRequest changes TransferFeeConfig
+// authorized by TransferFeeConfigAuthority rather than Mint's own mint or
+// freeze authority.
+//
+// Unlike InitializeConfidentialTransferMint, Authority is not itself
+// reassignable through this endpoint: it has to sign here as proof of the
+// role, and there is no field in the underlying instruction's data that
+// could hand it to someone else. Both fields below overwrite whatever is
+// currently set, with no way to leave one unchanged -- passing the same
+// value back is how a caller keeps it as is.
+type UpdateConfidentialTransferMintRequest struct {
+	// Mint must already have the ConfidentialTransferMint extension (see
+	// initialize).
+	Mint string `json:"mint" example:""`
+
+	// Authority is the authority initialize named, or its multisig for a
+	// multisig-owned authority (see MultisigSigners). This cannot be left
+	// empty: an authority that was never set has no way to sign this
+	// instruction in the first place, permanently.
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// AutoApproveNewAccounts replaces whatever initialize set entirely.
+	AutoApproveNewAccounts bool `json:"auto_approve_new_accounts" example:"true"`
+
+	// AuditorElgamalPubkey replaces whatever initialize set entirely. Left
+	// empty, no auditor can decrypt a confidential transfer amount on this
+	// mint from this point on. Given, it is a raw ElGamal public key
+	// encoded as base58 -- a 32-byte compressed Ristretto point, not a
+	// Solana address.
+	AuditorElgamalPubkey string `json:"auditor_elgamal_pubkey" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this
+	// extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty,
+	// Authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint                 *types.PublicKey
+	authority            *types.PublicKey
+	auditorElGamalPubkey []byte
+	feePayer             *types.PublicKey
+	rbh                  *types.Hash
+	dna                  *types.PublicKey
+	tokenProgramID       *types.PublicKey
+	multisigSigners      []*types.PublicKey
+}
+
+func (r *UpdateConfidentialTransferMintRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+
+	if a := strings.TrimSpace(r.AuditorElgamalPubkey); a != "" {
+		if r.auditorElGamalPubkey, err = codec.Base58.DecodeFixed(a, 32); err != nil {
+			return errors.New("auditor_elgamal_pubkey: " + err.Error())
+		}
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *UpdateConfidentialTransferMintRequest) MintKey() *types.PublicKey      { return r.mint }
+func (r *UpdateConfidentialTransferMintRequest) AuthorityKey() *types.PublicKey { return r.authority }
+func (r *UpdateConfidentialTransferMintRequest) ToAuditorElGamalPubkey() []byte {
+	return r.auditorElGamalPubkey
+}
+func (r *UpdateConfidentialTransferMintRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *UpdateConfidentialTransferMintRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *UpdateConfidentialTransferMintRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *UpdateConfidentialTransferMintRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *UpdateConfidentialTransferMintRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// UpdateConfidentialTransferMintResponse reports the built transaction
+// alongside the confidential transfer configuration it sets.
+type UpdateConfidentialTransferMintResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint                   string `json:"mint"`
+	Authority              string `json:"authority"`
+	AutoApproveNewAccounts bool   `json:"auto_approve_new_accounts"`
+	AuditorElgamalPubkey   string `json:"auditor_elgamal_pubkey,omitempty"`
+	Program                string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewUpdateConfidentialTransferMintResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	autoApproveNewAccounts bool, auditorElGamalPubkey []byte,
+	fee uint64,
+) *UpdateConfidentialTransferMintResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	res := &UpdateConfidentialTransferMintResponse{
+		Transaction:            codec.Base64.Encode(raw),
+		Message:                codec.Base64.Encode(message),
+		RecentBlockhash:        tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:            keys,
+		Signers:                signers,
+		NonceAuthority:         nonceAuth,
+		Mint:                   mint.Base58(),
+		Authority:              authority.Base58(),
+		AutoApproveNewAccounts: autoApproveNewAccounts,
+		Program:                tokenProgram.Base58(),
+		Fee:                    newSystemPayer(feePayer, fee),
+	}
+	if len(auditorElGamalPubkey) > 0 {
+		res.AuditorElgamalPubkey = codec.Base58.Encode(auditorElGamalPubkey)
+	}
+
+	return res
 }
 
 // TransferCheckedWithFeeRequest is TransferChecked plus a fee: everything

@@ -43,7 +43,148 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     걸었더니 예상대로 `Custom(20)`(`ExtensionTypeMismatch`)로 실패, 우리
     핸들러의 내부 `GetAccountDataSize` 사전검증 단계에서 걸려서 실제
     `Reallocate` 트랜잭션이 만들어지기도 전에 차단됨
-  - [ ] 나머지 24개, 하나씩 순서대로 (스크립트로 일괄 생성 안 함, 각각 개별 작업)
+  - [x] `confidential-transfer-mint` — devnet-confirmed. mint 전용 타입이라
+    계좌(`DBWKXnofLJnH9uTiLdfMmQd3iEde8VuL4sd6987Xn9ET`)에 걸었더니 예상대로
+    `Custom(20)`(`ExtensionTypeMismatch`)로 실패
+
+  **`ConfidentialTransferMint`(ExtensionType 4, opcode 27 서브패밀리) —
+  `InitializeMint`(sub 0), `UpdateMint`(sub 1) devnet-confirmed.** 15개
+  서브인스트럭션 중 ElGamal 수학이 필요 없는 건 이 둘뿐(처음엔
+  InitializeMint 하나뿐이라고 잘못 판단했다가, `update_mint` 소스 재확인 후
+  정정).
+
+  **"미루지 않고 끝까지 간다"는 방침으로 ZK proof 필요한 서브인스트럭션도
+  착수 — `ConfigureAccount`(sub 2, 계좌 쪽 `ConfidentialTransferAccount`
+  확장) 코드 작성 완료, 빌드/유닛테스트 통과, devnet 테스트는 아직.**
+  필요했던 암호 인프라 전부 신규 구축:
+  - **ElGamal 키 생성 버그 발견+수정**: Solana의 "twisted ElGamal"은
+    `공개키 = 비밀키 × G`(표준)가 아니라 `공개키 = 비밀키⁻¹ × H`(H는 G와
+    다른 별도 생성원 = `SHA3-512(G)`를 hash-to-group한 값) — `pedersen.rs`/
+    `elgamal.rs` 소스로 확인, `core.GenerateElGamalKey` 수정.
+    `core.DeriveElGamalPublicKey(secretKey)`도 추가(secret만으로 public 유도)
+  - **`core/zk_proof.go`**: `PubkeyValidityProof`(Schnorr sigma-protocol)
+    직접 Go로 구현 — `github.com/gtank/merlin`(Rust `merlin` crate와 프로토콜
+    호환되는 Go 포트) 사용. transcript 라벨까지 Rust 소스(`transcript.rs`,
+    `pubkey_validity.rs`)로 바이트 단위 확인:
+    `Transcript::new(b"pubkey-validity-instruction")` →
+    `append_message(b"pubkey", pubkey)` → `append_message(b"dom-sep",
+    b"pubkey-proof")` → `Y=y·H` 커밋 → `append_point(b"Y", Y)` →
+    `challenge_scalar(b"c")`(64바이트 뽑아 mod l 축소) → `z=c·s⁻¹+y`.
+    `ProvePubkeyValidity`/`VerifyPubkeyValidity` 둘 다 구현(로컬 자체 검증용)
+  - **`core/ae_encryption.go`**: `decryptable_zero_balance`용 AES-128-GCM-SIV
+    (RFC 8452) — `github.com/secure-io/siv-go` 사용(2018년 이후 미유지보수지만
+    RFC 8452 공식 테스트 벡터로 직접 고정 검증 완료, 알고리즘 자체는 고정
+    표준이라 라이브러리 낙후는 무관). `AeKey` 유도도 **제대로**(랜덤 아님)
+    구현: upstream `AeKey::new_from_signer`와 동일하게
+    `SHA3-512(SHA3-512(sign(b"AeKey"||token_account)))[:16]` —
+    `solana-foundation/Confidential-Balances-Sample`에서 `public_seed`가
+    토큰 계좌 자신의 주소라는 관례 확인. 서버가 서명키를 안 쥐고 있으므로
+    2단계로 분리: `/svm/tool/derive/ae-key-seed-message`(서명할 메시지 반환)
+    → 기존 `/svm/sign` → `/svm/tool/derive/ae-key`(서명→키)
+  - **`core/zk_elgamal_proof_program.go`**: `zk_elgamal_proof` 프로그램
+    (`ZkE1Gama1Proof11111111111111111111111111111`) 신규 — `agave`가 이
+    프로그램의 interface crate(`solana-program/zk-elgamal-proof`)를
+    가져다 쓰는 구조까지 확인해서 원본 확실히 함. 13개 opcode 전부 상수로
+    선언(공식 Rust 소스로 재검증, `VerifyPubkeyValidity=4`), inline
+    verify(증명을 계좌 없이 인스트럭션 데이터에 직접 실음, accounts 없음)만
+    구현
+  - **`core.(*token).ConfigureAccount`**: opcode 27 sub 2. 데이터
+    `decryptable_zero_balance`(36)+`maximum_pending_balance_credit_counter`(8)+
+    `proof_instruction_offset`(1). 계좌
+    `[account(writable), mint, sysvar::instructions]`+authority — 전부
+    `solana-foundation/solana-go`(공식 Go SDK, Rust 재구현 없이 WASM 브릿지
+    쓰는 걸 확인한 그 라이브러리)의 `ConfidentialTransferConfigureAccount.go`
+    로 계좌 순서/데이터 레이아웃 교차검증
+  - **`/svm/v2/transaction/token/extensions/confidential-transfer-account/
+    configure-account`**: `ConfigureAccount`+`VerifyPubkeyValidity` 두
+    인스트럭션 한 트랜잭션에 자동 조립(offset=1). 요청 시 `pubkey_proof`를
+    로컬에서 먼저 `core.VerifyPubkeyValidity`로 검증(온체인 검증기가 할 걸
+    미리 해봄) 후 안 맞으면 트랜잭션 만들기 전에 400 반환 — 괜히 수수료
+    날리는 것 방지
+  - **`extensions/confidential-transfer-account/reallocate`** devnet-confirmed
+    (계좌 쪽 진짜 확장이라 성공, 위 `reallocate/*` 목록에도 기록). ATA
+    `F6GZ7t5Qj522mYAinGExV3WKEgJ7ySThva8J7cFZnLXn`(mint
+    `8XiV2ZjDnYvRUc7icjiATmmuojpeKJWUidjZcnpGL65y`)로 170→469바이트
+    (165+1+4+0(ImmutableOwner)+4+295(ConfidentialTransferAccount)) 정확히
+    일치 확인. raw 바이트로 `Reallocate`는 공간만 늘리고 TLV는 안 쓴다는 것도
+    재확인(늘어난 영역이 `Uninitialized`(0)로 비어있음) — 다음 단계
+    `ConfigureAccount`가 실제로 채움. 참고: 첫 시도에서 우연히 일시적인
+    `Custom(20)` 실패가 있었는데, 같은 조합을 `get-account-data-size`로
+    단독/조합 재확인 후 재시도하니 정상 성공 — 코드 문제 아니었음(원인
+    특정은 안 됐지만 재현 안 됨)
+  - **테스트 예외**: `no-tests-by-choice` 원칙은 나머지 코드베이스 전체에
+    적용되는 것이고, 이 암호 코드(`core/zk_proof.go`,
+    `core/ae_encryption.go`, `core/crypto.go`의 ElGamal 부분)만 사용자가
+    명시적으로 테스트 작성 요청해서 예외. RFC 8452 공식 벡터, ristretto255
+    G 상수 고정, 증명 라운드트립+변조 거부 등 11개 테스트 전부 통과
+  - **버그 발견+수정 (devnet 실전 테스트로만 잡힘)**: `configure-account`
+    devnet 테스트에서 `ConfigureAccount` 자체는 성공했는데 그 다음
+    `VerifyPubkeyValidity`가 `SigmaProof(PubkeyValidity, AlgebraicRelation)`로
+    실패. 원인: merlin transcript 최상위 래핑을 빼먹음 —
+    `Transcript::new_zk_elgamal_transcript(b"pubkey-validity-instruction")`가
+    실제로는 `Transcript::new(TRANSCRIPT_DOMAIN=b"solana-zk-elgamal-proof-
+    program-v1")` 다음에 **별도로** `dom-sep→"pubkey-validity-instruction"`을
+    또 붙이는 이중 래핑인데, 나는 `"pubkey-validity-instruction"`을 최상위
+    `Transcript::new()` 인자로 바로 써버림 (`TRANSCRIPT_DOMAIN`의 존재
+    자체를 몰랐음). `core.pubkeyValidityTranscript` 수정, `zk_lib.rs`
+    직접 raw로 받아서 `TRANSCRIPT_DOMAIN` 상수 확인.
+    **로컬 라운드트립 테스트로는 이 버그를 못 잡는다는 것도 확인** —
+    prove/verify 둘 다 똑같이 틀린 transcript를 쓰니 서로는 일치해서
+    통과했었음, 실제 온체인 검증기와 대조해야만 드러나는 종류의 버그.
+    수정 후 재빌드+로컬 테스트 통과 → **재시도해서 devnet-confirmed까지
+    완료**: `ConfigureAccount`+`VerifyPubkeyValidity` 둘 다 success, raw
+    바이트로 TLV(type=5, len=295) 안의 `elgamal_pubkey`(payload[1:33] —
+    `approved` bool 1바이트가 맨 앞에 있어서 오프바이원 주의)가 요청 값과
+    정확히 일치하는 것까지 확인. ATA
+    `F6GZ7t5Qj522mYAinGExV3WKEgJ7ySThva8J7cFZnLXn` 최종 469바이트, mint
+    `8XiV2ZjDnYvRUc7icjiATmmuojpeKJWUidjZcnpGL65y`
+
+  **`ConfigureAccount`(opcode 27 sub 2, `ConfidentialTransferAccount`
+  확장 부착) 완전히 끝. ZK proof 필요한 서브인스트럭션 중 첫 완주 사례 —
+  Schnorr proof부터 AES-GCM-SIV, 별도 zk_elgamal_proof 프로그램 연동까지
+  전부 처음부터 구축, 실전 devnet 테스트로 transcript 버그 하나 잡고 수정,
+  최종 성공까지 확인.**
+  ApplyPendingBalance 등)는 여전히 진행 중 — 각각 필요한 proof 종류가 다름
+  (range proof, ciphertext equality proof 등), 하나씩 순서대로 계속.
+  - `core.UpdateConfidentialTransferMint` (opcode 27 sub 1): `UpdateMintData`엔
+    `authority` 필드가 아예 없음(InitializeMint와 다름) — authority는 데이터가
+    아니라 계좌 서명으로 증명, 그래서 이 인스트럭션으로 authority 자체는
+    못 바꿈. `auto_approve_new_accounts`+`auditor_elgamal_pubkey` 두 필드만
+    전부 덮어씀. **`initialize-mint2` 이후에만 동작** — `SetTransferFee`와
+    같은 패턴. `process_update_mint`가 쓰는 `PodStateWithExtensionsMut::
+    <PodMint>::unpack`이 `AccountType`이 정확히 `Mint`(1)여야만 통과하고
+    `Uninitialized`(0)면 `InvalidAccountData`로 실패하는 것까지 소스로 확인.
+    devnet 테스트: `auto_approve_new_accounts` true→false,
+    `auditor_elgamal_pubkey` 교체 — RPC parsed 로그(`autoApproveNewAccounts:
+    false`, `auditorElGamalPubkey` 새 값)와 지갑 UI("New Account Approval
+    Policy: manual")까지 교차 확인
+  - `core.InitializeConfidentialTransferMint`: `authority`/`auditor_elgamal_pubkey`
+    둘 다 `TransferFeeConfig`의 1바이트 태그 COption과 다르게 **고정 32바이트
+    `MaybeNull`**(전부 0이면 None) 인코딩 — `appendMaybeNullAddress`(Address용),
+    `appendMaybeNull32`(ElGamal 키처럼 Address 아닌 32바이트 값용) 신규 헬퍼로
+    구현, `InitializeMintData` struct(`authority: MaybeNull<Address>`,
+    `auto_approve_new_accounts: Bool`, `auditor_elgamal_pubkey:
+    MaybeNull<PodElGamalPubkey>`)로 upstream 확인. 데이터 길이 32+1+32=65,
+    `extensionTypeDataLen`에 이미 있던 값과 일치 확인
+  - `token/extensions/mint/data-size`로 235바이트(165+1+4+65) 계산 →
+    create-account→allocate→assign→initialize 흐름 devnet 성공, raw 바이트로
+    TLV(type=4, len=65) 및 `authority`/`auto_approve_new_accounts` 값까지
+    정확히 확인. None 케이스(`auditor_elgamal_pubkey` 빈 값 → 전부 0)와
+    Some 케이스(`/svm/tool/generate/elgamal-keypair`로 만든 실제 ElGamal
+    공개키 지정 → raw 바이트가 base58 디코드값과 정확히 일치) 둘 다 devnet에서
+    확인 완료
+  - **신규 `/svm/tool/generate/elgamal-keypair`** 추가 — `auditor_elgamal_pubkey`
+    같은 ristretto255 ElGamal 키를 생성해주는 유틸. `github.com/gtank/ristretto255`
+    라이브러리 신규 도입(`core.GenerateElGamalKey`: 64바이트 랜덤 → 스칼라로
+    축소 → `공개키 = 스칼라⁻¹ × H`, 이후 세션에서 정확한 공식으로 수정됨 —
+    자세한 건 위쪽 "ElGamal 키 생성 버그 발견+수정" 항목 참고). 기존
+    `/svm/tool/generate/keypair`는 `/svm/tool/generate/ed25519-keypair`로
+    라우트 이름 변경(ElGamal 것과 구분하기 위해)
+  - `reallocate/confidential-transfer-mint`도 devnet-confirmed (위에서 이미
+    기록, mint 전용이라 계좌에 걸면 실패하는 게 정상)
+  - [ ] 나머지 23개, `ExtensionType` enum 선언 순서대로 하나씩
+    (다음은 `ConfidentialTransferAccount`, 스크립트로 일괄 생성 안 함, 각각
+    개별 작업)
   - `token_metadata`(19)만 가변 길이라 GetAccountDataSize 흐름이 다름 —
     name/symbol/uri 받아서 Borsh 공식으로 직접 계산
 

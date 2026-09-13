@@ -133,7 +133,11 @@ func run() error {
 		r.Use(handler.RequireChain(cluster))
 
 		tool := misc.NewToolHandler()
-		r.Post("/generate/keypair", tool.GenerateKeypair)
+		r.Post("/generate/ed25519-keypair", tool.GenerateKeypair)
+		r.Post("/generate/elgamal-keypair", tool.GenerateElGamalKeypair)
+		r.Post("/prove/pubkey-validity", tool.ProvePubkeyValidity)
+		r.Post("/derive/ae-key-seed-message", tool.AeKeySeedMessage)
+		r.Post("/derive/ae-key", tool.DeriveAeKey)
 		r.Post("/convert/base58264", tool.ConvertBase58To64)
 		r.Post("/convert/base64258", tool.ConvertBase64To58)
 	})
@@ -237,6 +241,15 @@ func run() error {
 				r.Post("/replace", tk.SetCloseMintAuthorityReplace)
 				r.Post("/clear", tk.SetCloseMintAuthorityClear)
 				r.Post("/close", tk.CloseMint)
+			})
+			r.Route("/extensions/confidential-transfer-mint", func(r chi.Router) {
+				r.Post("/reallocate", tk.ReallocateConfidentialTransferMint)
+				r.Post("/initialize", tk.InitializeConfidentialTransferMint)
+				r.Post("/update", tk.UpdateConfidentialTransferMint)
+			})
+			r.Route("/extensions/confidential-transfer-account", func(r chi.Router) {
+				r.Post("/reallocate", tk.ReallocateConfidentialTransferAccount)
+				r.Post("/configure-account", tk.ConfigureAccount)
 			})
 		})
 

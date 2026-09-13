@@ -38,7 +38,12 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     성공. raw 바이트로 TLV(type=2, len=8) 확인, `space: 182`
     (165+1+ImmutableOwner헤더4+TransferFeeAmount헤더4+데이터8, ATA라
     ImmutableOwner도 자동으로 붙어있었음)
-  - [ ] 나머지 25개, 하나씩 순서대로 (스크립트로 일괄 생성 안 함, 각각 개별 작업)
+  - [x] `mint-close-authority` — devnet-confirmed. `transfer-fee-config`와
+    동일하게 mint 전용 타입이라 계좌(`DBWKXnofLJnH9uTiLdfMmQd3iEde8VuL4sd6987Xn9ET`)에
+    걸었더니 예상대로 `Custom(20)`(`ExtensionTypeMismatch`)로 실패, 우리
+    핸들러의 내부 `GetAccountDataSize` 사전검증 단계에서 걸려서 실제
+    `Reallocate` 트랜잭션이 만들어지기도 전에 차단됨
+  - [ ] 나머지 24개, 하나씩 순서대로 (스크립트로 일괄 생성 안 함, 각각 개별 작업)
   - `token_metadata`(19)만 가변 길이라 GetAccountDataSize 흐름이 다름 —
     name/symbol/uri 받아서 Borsh 공식으로 직접 계산
 
@@ -96,6 +101,48 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
   Token 인스트럭션만). `ExtensionType` 상수, sub-instruction discriminant,
   `GetAccountDataSize`/`Reallocate`/`CalculateMintExtensionsLen` 빌더,
   `TransferFeeConfig` 관련 전부 여기.
+
+  `MintCloseAuthority`(ExtensionType 3, mint 전용, 데이터 32바이트) — 진행 상황:
+  - [x] `extensions/mint-close-authority/initialize` (opcode 22,
+    `InitializeMintCloseAuthority` — TransferFeeExtension처럼 서브패밀리가
+    아니라 독립 top-level opcode라 두 번째 discriminant 바이트 없음) —
+    devnet-confirmed. `close_authority`는 `COption<Pubkey>` 타입이지만
+    `appendPubkeyOption`(1바이트 태그)으로 인코딩, `InitializeTransferFeeConfig`
+    때 확인한 것과 동일한 `pack_pubkey_option` 인코딩. 202바이트
+    (165+1+헤더4+데이터32) mint 만들어서 raw 바이트로 TLV(type=3, len=32)와
+    데이터 값(지정한 close_authority 키)까지 정확히 일치 확인
+  - [x] `extensions/mint-close-authority/set-authority/replace`,
+    `/set-authority/clear` — devnet-confirmed. 새 서브인스트럭션이 아니라
+    **기존 `SetAuthority`(opcode 6)를 재사용**, `TokenAuthorityCloseMint = 6`
+    상수 추가(0~3과 non-contiguous, upstream `AuthorityType::CloseMint => 6`
+    확인) + 기존 `SetAuthority` builder 범위 체크에
+    `&& != TokenAuthorityCloseMint` 예외 추가. `close_authority`는
+    `TransferFeeConfig`의 두 authority와 동일한 `MaybeNull<Address>`(전부
+    0이면 None) 인코딩 — 새 `core.DecodeMintCloseAuthority` 헬퍼로 디코드해서
+    현재 authority 일치 검증 후 SetAuthority 호출. RPC parsed 로그에서
+    `authorityType: "closeMint"` 확인, `replace`(지갑0→지갑1) 후
+    `clear`(newAuthority: None)까지 확인, raw 바이트로 최종
+    TLV(type=3, len=32)가 전부 0으로 클리어된 것까지 확인. **clear는
+    영구적** — None이 된 authority로는 아무도 서명 못 해서 다시 set할 방법이
+    없음, mint_authority 클리어와 동일한 원리로 확인 완료
+  - [x] `extensions/mint-close-authority/close` — **정정**: 처음에 "기존
+    `close-account` 엔드포인트 그대로 재사용 가능"이라고 했던 건 틀렸음.
+    온체인 `CloseAccount`(opcode 9) 인스트럭션 자체는 mint든 토큰 계좌든
+    동일하게 재사용 가능한 게 맞지만(`process_close_account`가 TokenAccount로
+    언팩 시도 후 실패하면 Mint로 폴백), 우리 쪽 `close-account` **핸들러**는
+    클라이언트 검증 단계에서 `core.DecodeTokenAccount`로 파싱하고
+    `TokenAccount.CloseAuthority` 필드를 체크하는데, mint의 raw 바이트는
+    완전히 다른 레이아웃(82바이트 base + TLV)이라 이 필드 자체가 존재하지
+    않음 — 그대로 썼으면 파싱 에러나 오검증이 났을 것. 그래서 별도
+    엔드포인트로 새로 만듦: `core.DecodeMint`로 `supply==0` 확인(온체인
+    `MintHasSupply` 체크 클라이언트에서 선제 검증) + `core.DecodeMintCloseAuthority`로
+    close_authority 검증, 빌더는 기존 `core.CloseAccount` 그대로 재사용.
+    devnet-confirmed — supply 0인 mint에 대해 `closeAccount` 성공(RPC parsed
+    로그 확인), 이후 그 mint 주소로 `getAccountInfo` 조회하면 `value: null`
+    (계좌 완전히 삭제 + rent 회수)까지 확인
+
+  **`MintCloseAuthority`(ExtensionType 3) 전체 lifecycle 완료 —
+  initialize → replace/clear → close, 전부 devnet-confirmed.**
 
   그다음: 확장별 enable/disable(활성화) — `Reallocate`는 자리만 만들 뿐 확장을
   "존재하게" 만들진 않음, 그건 패밀리마다 다른 서브인스트럭션의 몫. 대략:

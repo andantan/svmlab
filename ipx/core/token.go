@@ -75,13 +75,25 @@ const TokenInstructionBatch uint8 = 255
 // roles is being handed over.
 //
 // Which ones are valid depends on what the account is: the first two belong to
-// a mint and the last two to a token account, and the program rejects the
+// a mint and the next two to a token account, and the program rejects the
 // wrong pairing rather than silently ignoring it.
+//
+// TokenAuthorityCloseMint is a Token-2022-only extension authority (the
+// MintCloseAuthority extension's role) and is not contiguous with the four
+// classic values above -- upstream's AuthorityType also enumerates
+// TransferFeeConfig (4) and WithheldWithdraw (5) in between, which this
+// codebase does not declare here since those are already covered by their
+// own dedicated builders (InitializeTransferFeeConfig names both at
+// mint-extension setup, not through SetAuthority), confirmed against the
+// interface crate's AuthorityType::into() match rather than assumed
+// contiguous.
 const (
 	TokenAuthorityMintTokens uint8 = iota
 	TokenAuthorityFreezeAccount
 	TokenAuthorityAccountOwner
 	TokenAuthorityCloseAccount
+
+	TokenAuthorityCloseMint uint8 = 6
 )
 
 // NativeMintAddress is the mint that stands in for SOL itself.
@@ -1535,8 +1547,8 @@ func (t *token) Revoke(account, authority *types.PublicKey, signers []*types.Pub
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
 }
 
-// SetAuthority replaces or removes one of a mint's or a token account's four
-// authorities.
+// SetAuthority replaces or removes one of a mint's, token account's, or
+// Token-2022 mint extension's authorities.
 //
 // Which account is writable and which authority is being replaced are the same
 // piece of information told twice — once as which account was passed, once as
@@ -1549,12 +1561,19 @@ func (t *token) Revoke(account, authority *types.PublicKey, signers []*types.Pub
 // it" from "the caller forgot to fill it in", which is why the endpoint above
 // this has to ask for that distinction explicitly rather than reading it off
 // an empty string.
+//
+// TokenAuthorityCloseMint is accepted alongside the four classic values even
+// though it is not contiguous with them (see the const block above) — this
+// is how a mint gains, replaces, or gives up MintCloseAuthority's close
+// authority after initialize-mint-close-authority, or after skipping it
+// there entirely, since unlike transfer_fee_config_authority upstream does
+// expose this one through the plain SetAuthority instruction.
 func (t *token) SetAuthority(account *types.PublicKey, authorityType uint8, currentAuthority, newAuthority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
 	if account.IsNil() {
 		return nil, fmt.Errorf("token set authority: account is required")
 	}
-	if authorityType > TokenAuthorityCloseAccount {
-		return nil, fmt.Errorf("token set authority: authority type is %d, expected 0 through %d", authorityType, TokenAuthorityCloseAccount)
+	if authorityType > TokenAuthorityCloseAccount && authorityType != TokenAuthorityCloseMint {
+		return nil, fmt.Errorf("token set authority: authority type is %d, expected 0 through %d or %d (close mint)", authorityType, TokenAuthorityCloseAccount, TokenAuthorityCloseMint)
 	}
 	if err := validateAuthority("token set authority", currentAuthority, signers); err != nil {
 		return nil, err

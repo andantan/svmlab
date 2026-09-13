@@ -8898,6 +8898,216 @@ func NewReallocateTransferFeeConfigResponse(
 	}
 }
 
+// ReallocateMintCloseAuthorityRequest checks whether Account already holds
+// room for MintCloseAuthority, and grows it if not.
+//
+// MintCloseAuthority is a mint-side extension in the interface crate's own
+// numbering, not one Reallocate's own account list ever expects — that list
+// is always a token account, since a mint's extension set is fixed forever
+// at initialize-mint2 and Reallocate has no path back into it. Nothing here
+// stops a caller from naming this type anyway; the deployed program is what
+// rejects it, not this endpoint, the same as every other place in this API
+// where a wrong role is a chain error rather than a 400.
+//
+// The instruction itself only ever needs the one new extension type being
+// added: Reallocate reads Account's own existing extensions on chain and
+// unions them with whatever this sends, so a caller never resends what is
+// already there. Getting the resize's rent right is this handler's own
+// job, not the instruction's — it reads Account's current extensions and
+// actual lamports itself, asks GetAccountDataSize for the full target size
+// once MintCloseAuthority is unioned in, and only then knows RentPayer's
+// shortfall.
+type ReallocateMintCloseAuthorityRequest struct {
+	// Account is the token account to check and, if needed, grow. It must
+	// already exist and be owned by Program.
+	Account string `json:"account" example:""`
+
+	// RentPayer funds whatever the resize costs, a distinct role from
+	// Owner: Owner authorizes the account being touched, RentPayer covers
+	// what that costs, and they need not be the same key.
+	RentPayer string `json:"rent_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Owner is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. Unlike every other Token endpoint, this
+	// is not the usual either-program field: a classic Token account's
+	// layout is fixed at 165 bytes forever, with no TLV region to grow
+	// into, so classic Token is rejected here rather than left to fail on
+	// chain.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+	// itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account         *types.PublicKey
+	rentPayer       *types.PublicKey
+	owner           *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *ReallocateMintCloseAuthorityRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.rentPayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RentPayer)); err != nil {
+		return errors.New("rent_payer: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	// Unlike every other Token endpoint, which accepts either program
+	// because the instruction genuinely works on both, an extension has
+	// nowhere to live on a classic Token account: that layout is fixed at
+	// 165 bytes forever, with no TLV region to grow into at all. Rejecting
+	// classic Token here is a structural fact about the account, not a
+	// preference, so it is checked before the request ever reaches the
+	// chain rather than left to come back as an on-chain rejection.
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ReallocateMintCloseAuthorityRequest) AccountKey() *types.PublicKey   { return r.account }
+func (r *ReallocateMintCloseAuthorityRequest) RentPayerKey() *types.PublicKey { return r.rentPayer }
+func (r *ReallocateMintCloseAuthorityRequest) OwnerKey() *types.PublicKey     { return r.owner }
+func (r *ReallocateMintCloseAuthorityRequest) FeePayerKey() *types.PublicKey  { return r.feePayer }
+func (r *ReallocateMintCloseAuthorityRequest) Blockhash() *types.Hash         { return r.rbh }
+func (r *ReallocateMintCloseAuthorityRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ReallocateMintCloseAuthorityRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ReallocateMintCloseAuthorityRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ReallocateMintCloseAuthorityResponse reports the built transaction
+// alongside what it resizes Account for.
+type ReallocateMintCloseAuthorityResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account string `json:"account"`
+	Owner   string `json:"owner"`
+	Program string `json:"program"`
+
+	// TargetSize is the total account size GetAccountDataSize reported for
+	// Account's existing extensions plus MintCloseAuthority, asked of the
+	// deployed program rather than recomputed here.
+	TargetSize string `json:"target_size"`
+
+	// Rent reports what funds the resize: the shortfall between
+	// TargetSize's rent-exemption minimum and Account's actual current
+	// lamports, zero when Account already holds enough.
+	Rent SystemPayer `json:"rent"`
+	Fee  SystemPayer `json:"fee"`
+}
+
+func NewReallocateMintCloseAuthorityResponse(
+	tx *types.Transaction, raw, message []byte,
+	rentPayer, feePayer, account, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	targetSize, rentShortfall, fee uint64,
+) *ReallocateMintCloseAuthorityResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ReallocateMintCloseAuthorityResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Owner:           owner.Base58(),
+		Program:         tokenProgram.Base58(),
+		TargetSize:      strconv.FormatUint(targetSize, 10),
+		Rent:            newSystemPayer(rentPayer, rentShortfall),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
 // ReallocateTransferFeeAmountRequest checks whether Account already holds
 // room for TransferFeeAmount, and grows it if not.
 //
@@ -9325,6 +9535,736 @@ func NewInitializeTransferFeeConfigResponse(
 	}
 
 	return res
+}
+
+// InitializeMintCloseAuthorityRequest attaches the MintCloseAuthority
+// extension to Mint, naming who may later close it via close-account --
+// without this extension a mint can never be closed at all, since the base
+// layout has no close-authority field of its own the way a token account
+// does.
+//
+// This can only ever run in the narrow window every mint extension shares:
+// after create-mint has allocated the account (sized to include this
+// extension) and before initialize-mint2 locks the extension list forever.
+// There is no path back into an already-initialized mint -- no Reallocate
+// equivalent exists for mints at all, only for token accounts.
+type InitializeMintCloseAuthorityRequest struct {
+	// Mint is the account this attaches to. It must already exist (see
+	// create-mint) and not yet be initialized -- initialize-mint2 has to
+	// run after this, never before.
+	Mint string `json:"mint" example:""`
+
+	// CloseAuthority may sign close-account against Mint once initialized.
+	// Left empty, the extension is not attached at all. Unlike
+	// transfer_fee_config_authority, upstream also exposes
+	// AuthorityType::CloseMint through the plain set-authority instruction,
+	// so a close authority can still be granted or replaced later even if
+	// none is set here.
+	CloseAuthority string `json:"close_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this
+	// extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint           *types.PublicKey
+	closeAuthority *types.PublicKey
+	feePayer       *types.PublicKey
+	rbh            *types.Hash
+	dna            *types.PublicKey
+	tokenProgramID *types.PublicKey
+}
+
+func (r *InitializeMintCloseAuthorityRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+
+	if a := strings.TrimSpace(r.CloseAuthority); a != "" {
+		if r.closeAuthority, err = types.NewPublicKeyFromBase58(a); err != nil {
+			return errors.New("close_authority: " + err.Error())
+		}
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	// Unlike every other Token endpoint, which accepts either program
+	// because the instruction genuinely works on both, an extension has
+	// nowhere to live on a classic Token mint: that layout is fixed at 82
+	// bytes forever, with no TLV region to grow into at all.
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *InitializeMintCloseAuthorityRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *InitializeMintCloseAuthorityRequest) CloseAuthorityKey() *types.PublicKey {
+	return r.closeAuthority
+}
+func (r *InitializeMintCloseAuthorityRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *InitializeMintCloseAuthorityRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *InitializeMintCloseAuthorityRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *InitializeMintCloseAuthorityRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// InitializeMintCloseAuthorityResponse reports the built transaction
+// alongside the close authority it attaches.
+type InitializeMintCloseAuthorityResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint           string `json:"mint"`
+	CloseAuthority string `json:"close_authority,omitempty"`
+	Program        string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewInitializeMintCloseAuthorityResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, closeAuthority, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *InitializeMintCloseAuthorityResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	res := &InitializeMintCloseAuthorityResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Mint:            mint.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+	if !closeAuthority.IsNil() {
+		res.CloseAuthority = closeAuthority.Base58()
+	}
+
+	return res
+}
+
+// CloseMintRequest closes a Token-2022 mint that carries the
+// MintCloseAuthority extension, reclaiming its rent to RecipientAccount.
+//
+// This cannot reuse close-account (the classic token-account endpoint):
+// that handler decodes TokenAccount and checks its close_authority field,
+// neither of which describes a mint at all -- a mint's close authority
+// lives in the MintCloseAuthority extension's TLV data instead, read via
+// core.DecodeMintCloseAuthority, not TokenAccount.CloseAuthority. The
+// on-chain CloseAccount instruction itself (opcode 9) is exactly the same
+// generic instruction either way -- upstream's own processor tries
+// unpacking the target as a token account first, falling back to a mint --
+// so this only needs its own client-side validation, not a different
+// instruction.
+//
+// Mint's supply must already be zero: the program enforces this
+// (TokenError::MintHasSupply otherwise) since closing destroys the mint
+// account and any outstanding supply would become permanently unaccounted
+// for. There is no burn-and-close in one instruction; supply has to already
+// read zero before this is called.
+type CloseMintRequest struct {
+	// Mint is closed. It must already carry the MintCloseAuthority extension
+	// with an authority set, and its supply must already be zero.
+	Mint string `json:"mint" example:""`
+
+	// RecipientAccount receives Mint's entire reclaimed lamport balance. It
+	// must already exist; this is not a way to bring a new account into
+	// existence.
+	RecipientAccount string `json:"recipient_account" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// CloseAuthority must be Mint's current MintCloseAuthority close
+	// authority exactly.
+	CloseAuthority string `json:"close_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this
+	// extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint             *types.PublicKey
+	recipientAccount *types.PublicKey
+	closeAuthority   *types.PublicKey
+	feePayer         *types.PublicKey
+	rbh              *types.Hash
+	dna              *types.PublicKey
+	tokenProgramID   *types.PublicKey
+	multisigSigners  []*types.PublicKey
+}
+
+func (r *CloseMintRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.recipientAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RecipientAccount)); err != nil {
+		return errors.New("recipient_account: " + err.Error())
+	}
+	if r.mint.Equal(r.recipientAccount) {
+		return errors.New("mint and recipient_account are the same account")
+	}
+	if r.closeAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.CloseAuthority)); err != nil {
+		return errors.New("close_authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *CloseMintRequest) MintKey() *types.PublicKey             { return r.mint }
+func (r *CloseMintRequest) RecipientAccountKey() *types.PublicKey { return r.recipientAccount }
+func (r *CloseMintRequest) CloseAuthorityKey() *types.PublicKey   { return r.closeAuthority }
+func (r *CloseMintRequest) FeePayerKey() *types.PublicKey         { return r.feePayer }
+func (r *CloseMintRequest) Blockhash() *types.Hash                { return r.rbh }
+func (r *CloseMintRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *CloseMintRequest) TokenProgramID() *types.PublicKey { return r.tokenProgramID }
+func (r *CloseMintRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// CloseMintResponse reports the built transaction alongside what closing
+// Mint reclaims.
+type CloseMintResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint             string `json:"mint"`
+	RecipientAccount string `json:"recipient_account"`
+	CloseAuthority   string `json:"close_authority"`
+	Program          string `json:"program"`
+
+	// Reclaimed reports Mint's balance at the moment it was read, which is
+	// what closing hands to recipient_account. It can change between this
+	// response and the transaction landing if anything else touches the
+	// account first.
+	Reclaimed SystemPayer `json:"reclaimed"`
+	Fee       SystemPayer `json:"fee"`
+}
+
+func NewCloseMintResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, recipientAccount, closeAuthority, tokenProgram, nonceAuthority *types.PublicKey,
+	reclaimedLamports, fee uint64,
+) *CloseMintResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &CloseMintResponse{
+		Transaction:      codec.Base64.Encode(raw),
+		Message:          codec.Base64.Encode(message),
+		RecentBlockhash:  tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:      keys,
+		Signers:          signers,
+		NonceAuthority:   nonceAuth,
+		Mint:             mint.Base58(),
+		RecipientAccount: recipientAccount.Base58(),
+		CloseAuthority:   closeAuthority.Base58(),
+		Program:          tokenProgram.Base58(),
+		Reclaimed:        newSystemPayer(recipientAccount, reclaimedLamports),
+		Fee:              newSystemPayer(feePayer, fee),
+	}
+}
+
+// SetCloseMintAuthorityReplaceRequest replaces the MintCloseAuthority
+// extension's close_authority with a new key.
+//
+// Unlike mint_authority or freeze_authority, this is not one of the four
+// classic SetAuthority roles: upstream reuses the same SetAuthority
+// instruction (opcode 6) with AuthorityType::CloseMint (6), a
+// Token-2022-only value this codebase declares as TokenAuthorityCloseMint,
+// non-contiguous with the classic four. Mint must already carry the
+// extension (see initialize-mint-close-authority) with a close_authority
+// set -- there is no granting one here where none exists, since SetAuthority
+// always requires the current authority to sign.
+type SetCloseMintAuthorityReplaceRequest struct {
+	Mint string `json:"mint" example:""`
+
+	// CloseAuthority must be Mint's current MintCloseAuthority close
+	// authority exactly.
+	CloseAuthority string `json:"close_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// NewCloseAuthority replaces CloseAuthority entirely; it is not required
+	// to sign, since SetAuthority-style authority changes only record the
+	// new value rather than checking it against a signer.
+	NewCloseAuthority string `json:"new_close_authority" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this
+	// extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint              *types.PublicKey
+	closeAuthority    *types.PublicKey
+	newCloseAuthority *types.PublicKey
+	feePayer          *types.PublicKey
+	rbh               *types.Hash
+	dna               *types.PublicKey
+	tokenProgramID    *types.PublicKey
+	multisigSigners   []*types.PublicKey
+}
+
+func (r *SetCloseMintAuthorityReplaceRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.closeAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.CloseAuthority)); err != nil {
+		return errors.New("close_authority: " + err.Error())
+	}
+	newCloseAuthority := strings.TrimSpace(r.NewCloseAuthority)
+	if newCloseAuthority == "" {
+		return errors.New("new_close_authority is required")
+	}
+	if r.newCloseAuthority, err = types.NewPublicKeyFromBase58(newCloseAuthority); err != nil {
+		return errors.New("new_close_authority: " + err.Error())
+	}
+	if r.closeAuthority.Equal(r.newCloseAuthority) {
+		return errors.New("new_close_authority: is already the current close authority")
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SetCloseMintAuthorityReplaceRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *SetCloseMintAuthorityReplaceRequest) CloseAuthorityKey() *types.PublicKey {
+	return r.closeAuthority
+}
+func (r *SetCloseMintAuthorityReplaceRequest) NewCloseAuthorityKey() *types.PublicKey {
+	return r.newCloseAuthority
+}
+func (r *SetCloseMintAuthorityReplaceRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *SetCloseMintAuthorityReplaceRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *SetCloseMintAuthorityReplaceRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *SetCloseMintAuthorityReplaceRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *SetCloseMintAuthorityReplaceRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// SetCloseMintAuthorityReplaceResponse reports the authority change just built.
+type SetCloseMintAuthorityReplaceResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint              string      `json:"mint"`
+	CloseAuthority    string      `json:"close_authority"`
+	NewCloseAuthority string      `json:"new_close_authority"`
+	Program           string      `json:"program"`
+	Fee               SystemPayer `json:"fee"`
+}
+
+func NewSetCloseMintAuthorityReplaceResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, closeAuthority, tokenProgram, nonceAuthority, newCloseAuthority *types.PublicKey,
+	fee uint64,
+) *SetCloseMintAuthorityReplaceResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SetCloseMintAuthorityReplaceResponse{
+		Transaction:       codec.Base64.Encode(raw),
+		Message:           codec.Base64.Encode(message),
+		RecentBlockhash:   tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:       keys,
+		Signers:           signers,
+		NonceAuthority:    nonceAuth,
+		Mint:              mint.Base58(),
+		CloseAuthority:    closeAuthority.Base58(),
+		NewCloseAuthority: newCloseAuthority.Base58(),
+		Program:           tokenProgram.Base58(),
+		Fee:               newSystemPayer(feePayer, fee),
+	}
+}
+
+// SetCloseMintAuthorityClearRequest removes the MintCloseAuthority
+// extension's close_authority permanently.
+//
+// Once cleared, no endpoint can set it again: the program stores this as a
+// MaybeNull<Address> and rejects nothing here, but nothing can ever sign as
+// an authority that is now None. This is how a mint becomes permanently
+// unclosable while every other extension it carries stays exactly as it is.
+type SetCloseMintAuthorityClearRequest struct {
+	Mint string `json:"mint" example:""`
+
+	// CloseAuthority must be Mint's current MintCloseAuthority close
+	// authority exactly.
+	CloseAuthority string `json:"close_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this
+	// extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint            *types.PublicKey
+	closeAuthority  *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *SetCloseMintAuthorityClearRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.closeAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.CloseAuthority)); err != nil {
+		return errors.New("close_authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SetCloseMintAuthorityClearRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *SetCloseMintAuthorityClearRequest) CloseAuthorityKey() *types.PublicKey {
+	return r.closeAuthority
+}
+func (r *SetCloseMintAuthorityClearRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *SetCloseMintAuthorityClearRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *SetCloseMintAuthorityClearRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *SetCloseMintAuthorityClearRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *SetCloseMintAuthorityClearRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// SetCloseMintAuthorityClearResponse reports the authority change just built.
+type SetCloseMintAuthorityClearResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint           string      `json:"mint"`
+	CloseAuthority string      `json:"close_authority"`
+	Cleared        bool        `json:"cleared"`
+	Program        string      `json:"program"`
+	Fee            SystemPayer `json:"fee"`
+}
+
+func NewSetCloseMintAuthorityClearResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, closeAuthority, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *SetCloseMintAuthorityClearResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SetCloseMintAuthorityClearResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Mint:            mint.Base58(),
+		CloseAuthority:  closeAuthority.Base58(),
+		Cleared:         true,
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
 }
 
 // SetTransferFeeRequest changes the TransferFeeConfig rate

@@ -231,6 +231,13 @@ func run() error {
 			r.Route("/extensions/transfer-fee-amount", func(r chi.Router) {
 				r.Post("/reallocate", tk.ReallocateTransferFeeAmount)
 			})
+			r.Route("/extensions/mint-close-authority", func(r chi.Router) {
+				r.Post("/reallocate", tk.ReallocateMintCloseAuthority)
+				r.Post("/initialize", tk.InitializeMintCloseAuthority)
+				r.Post("/replace", tk.SetCloseMintAuthorityReplace)
+				r.Post("/clear", tk.SetCloseMintAuthorityClear)
+				r.Post("/close", tk.CloseMint)
+			})
 		})
 
 		cb := v2.NewComputeBudgetTransactionHandler(cfg)

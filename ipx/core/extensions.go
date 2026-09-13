@@ -251,6 +251,41 @@ func (t *token) Reallocate(account, rentPayer, owner *types.PublicKey, signers [
 	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
 }
 
+// InitializeMintCloseAuthority attaches the MintCloseAuthority extension to
+// mint, naming who may later close it via CloseAccount -- without this
+// extension a mint can never be closed at all, since the base layout has no
+// close-authority field of its own the way a token account does.
+//
+// This is a standalone top-level opcode (22), not a sub-instruction under a
+// family the way TransferFeeExtension's members are, and it carries no
+// second discriminant byte. closeAuthority is COption<Pubkey> on the wire --
+// a single tag byte, the key itself following only when present, the same
+// appendPubkeyOption encoding InitializeTransferFeeConfig's authorities use
+// -- confirmed against the interface crate's pack_pubkey_option rather than
+// assumed from the type name.
+//
+// closeAuthority may be left nil to skip the extension. Unlike leaving
+// transferFeeConfigAuthority empty above, upstream also exposes
+// AuthorityType::CloseMint through the plain SetAuthority instruction, so a
+// close authority can still be granted or replaced later even if none was
+// set here -- not yet built.
+//
+// Like every mint extension, this can only run after create-mint has
+// allocated the account and before initialize-mint2 commits it; there is no
+// path back into an already-initialized mint.
+func (t *token) InitializeMintCloseAuthority(mint, closeAuthority *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize mint close authority: mint is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInitializeMintCloseAuthority)
+	data = appendPubkeyOption(data, closeAuthority)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(mint),
+	), data), nil
+}
+
 // Token-2022 extension sub-instructions.
 //
 // Every extension-family top-level opcode above (26–46, excluding the
@@ -619,6 +654,34 @@ func DecodeTransferFeeConfig(mintData []byte) (*TransferFeeConfig, error) {
 		OlderTransferFee:           readTransferFee(raw[72:90]),
 		NewerTransferFee:           readTransferFee(raw[90:108]),
 	}, nil
+}
+
+// DecodeMintCloseAuthority reads the MintCloseAuthority extension's
+// close_authority off mint. Like TransferFeeConfig's two authority fields,
+// this is MaybeNull<Address> on the wire: a plain 32-byte field, all-zero
+// meaning None, not a separate length-tagged COption -- confirmed against
+// the interface crate's struct definition rather than assumed from
+// TransferFeeConfig's pattern.
+//
+// A nil return with a nil error means the extension is present but
+// close_authority was never set (or was cleared) -- the mint can never be
+// closed until set-authority/close-mint/replace names one.
+func DecodeMintCloseAuthority(mintData []byte) (*types.PublicKey, error) {
+	raw := FindExtensionData(mintData, ExtensionTypeMintCloseAuthority)
+	if raw == nil {
+		return nil, fmt.Errorf("mint close authority: mint does not carry the MintCloseAuthority extension")
+	}
+	if len(raw) != 32 {
+		return nil, fmt.Errorf("mint close authority: %d bytes, expected 32", len(raw))
+	}
+
+	for _, v := range raw {
+		if v != 0 {
+			return types.NewPublicKeyFromBytes(raw)
+		}
+	}
+
+	return nil, nil
 }
 
 // GetAccountDataSize asks the program for the exact byte size an account

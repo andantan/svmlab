@@ -1820,6 +1820,104 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.CloseMintRequest:
+    properties:
+      close_authority:
+        description: |-
+          CloseAuthority must be Mint's current MintCloseAuthority close
+          authority exactly.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint is closed. It must already carry the MintCloseAuthority extension
+          with an authority set, and its supply must already be zero.
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token mint can never hold this
+          extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      recipient_account:
+        description: |-
+          RecipientAccount receives Mint's entire reclaimed lamport balance. It
+          must already exist; this is not a way to bring a new account into
+          existence.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.CloseMintResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      close_authority:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      recipient_account:
+        type: string
+      reclaimed:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Reclaimed reports Mint's balance at the moment it was read, which is
+          what closing hands to recipient_account. It can change between this
+          response and the transaction landing if anything else touches the
+          account first.
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.CreateATAIdempotentRequest:
     properties:
       durable_nonce_account:
@@ -2800,6 +2898,85 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.InitializeMintCloseAuthorityRequest:
+    properties:
+      close_authority:
+        description: |-
+          CloseAuthority may sign close-account against Mint once initialized.
+          Left empty, the extension is not attached at all. Unlike
+          transfer_fee_config_authority, upstream also exposes
+          AuthorityType::CloseMint through the plain set-authority instruction,
+          so a close authority can still be granted or replaced later even if
+          none is set here.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint is the account this attaches to. It must already exist (see
+          create-mint) and not yet be initialized -- initialize-mint2 has to
+          run after this, never before.
+        example: ""
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token mint can never hold this
+          extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.InitializeMintCloseAuthorityResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      close_authority:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.InitializeMintRequest:
     properties:
       decimals:
@@ -3437,6 +3614,110 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.ReallocateMintCloseAuthorityRequest:
+    properties:
+      account:
+        description: |-
+          Account is the token account to check and, if needed, grow. It must
+          already exist and be owned by Program.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. Unlike every other Token endpoint, this
+          is not the usual either-program field: a classic Token account's
+          layout is fixed at 165 bytes forever, with no TLV region to grow
+          into, so classic Token is rejected here rather than left to fail on
+          chain.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds whatever the resize costs, a distinct role from
+          Owner: Owner authorizes the account being touched, RentPayer covers
+          what that costs, and they need not be the same key.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ReallocateMintCloseAuthorityResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      rent:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Rent reports what funds the resize: the shortfall between
+          TargetSize's rent-exemption minimum and Account's actual current
+          lamports, zero when Account already holds enough.
+      signers:
+        items:
+          type: string
+        type: array
+      target_size:
+        description: |-
+          TargetSize is the total account size GetAccountDataSize reported for
+          Account's existing extensions plus MintCloseAuthority, asked of the
+          deployed program rather than recomputed here.
+        type: string
+      transaction:
+        type: string
+    type: object
   v2.ReallocateTransferFeeAmountRequest:
     properties:
       account:
@@ -4049,6 +4330,173 @@ definitions:
         type: string
       token_account_close_authority:
         type: string
+      transaction:
+        type: string
+    type: object
+  v2.SetCloseMintAuthorityClearRequest:
+    properties:
+      close_authority:
+        description: |-
+          CloseAuthority must be Mint's current MintCloseAuthority close
+          authority exactly.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token mint can never hold this
+          extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.SetCloseMintAuthorityClearResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      cleared:
+        type: boolean
+      close_authority:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.SetCloseMintAuthorityReplaceRequest:
+    properties:
+      close_authority:
+        description: |-
+          CloseAuthority must be Mint's current MintCloseAuthority close
+          authority exactly.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty, the
+          authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      new_close_authority:
+        description: |-
+          NewCloseAuthority replaces CloseAuthority entirely; it is not required
+          to sign, since SetAuthority-style authority changes only record the
+          new value rather than checking it against a signer.
+        example: ""
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token mint can never hold this
+          extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.SetCloseMintAuthorityReplaceResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      close_authority:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      new_close_authority:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
       transaction:
         type: string
     type: object
@@ -11304,6 +11752,266 @@ paths:
       summary: Fund a new account, sized and owned for a Token multisig
       tags:
       - v2-transaction-token-multisig
+  /svm/v2/transaction/token/extensions/mint-close-authority/clear:
+    post:
+      consumes:
+      - application/json
+      description: 'Clears the MintCloseAuthority extension''s close_authority to
+        None. This makes the mint permanently unclosable: the program accepts a None
+        close_authority, and once it is None nothing can ever sign close-account against
+        this mint again, nor can this endpoint or replace ever restore one. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Authority change parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetCloseMintAuthorityClearRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetCloseMintAuthorityClearResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Remove a mint's MintCloseAuthority close authority permanently
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/mint-close-authority/close:
+    post:
+      consumes:
+      - application/json
+      description: Closes mint, reclaiming its rent to recipient_account, authorized
+        by the MintCloseAuthority extension's close_authority -- not mint_authority
+        or freeze_authority. mint must already have zero supply (the program rejects
+        otherwise with MintHasSupply) and must already carry the extension with an
+        authority set (see extensions/mint-close-authority/initialize, or set-authority/replace
+        if it was skipped at initialization time and later granted). This is the same
+        generic CloseAccount instruction (opcode 9) close-account itself sends, since
+        upstream's own processor tries a token account first and falls back to a mint
+        -- the only reason this is a separate endpoint is that close-account's own
+        validation decodes TokenAccount and checks its close_authority field, neither
+        of which describes a mint, so mint's own extension has to be decoded and checked
+        here instead. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint, recipient, close authority, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.CloseMintRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.CloseMintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Close a Token-2022 mint via its MintCloseAuthority extension
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/mint-close-authority/initialize:
+    post:
+      consumes:
+      - application/json
+      description: 'Names who may later close the mint via close-account -- without
+        this extension a mint can never be closed at all, since the base layout has
+        no close-authority field of its own the way a token account does. This can
+        only ever run in the narrow window every mint extension shares: after create-mint
+        has allocated the account and before initialize-mint2 locks the extension
+        list forever -- there is no path back into an already-initialized mint, no
+        Reallocate equivalent exists for mints at all. close_authority may be left
+        empty to skip the extension; unlike transfer_fee_config_authority, upstream
+        also exposes AuthorityType::CloseMint through the plain set-authority instruction,
+        so a close authority can still be granted or replaced later even if none is
+        set here. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint, close authority, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializeMintCloseAuthorityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializeMintCloseAuthorityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Attach the MintCloseAuthority extension to a mint
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/mint-close-authority/reallocate:
+    post:
+      consumes:
+      - application/json
+      description: 'Checks whether account already holds enough space for its existing
+        extensions plus MintCloseAuthority, and grows it if not. The instruction itself
+        only ever needs the one new extension: Reallocate reads account''s own existing
+        extensions on chain and unions them with what this sends, so a caller never
+        resends what is already there. Getting the resize''s rent right is this endpoint''s
+        own job: it reads account''s current extensions and actual lamports, asks
+        GetAccountDataSize for the full target size once MintCloseAuthority is unioned
+        in, and only then knows rent_payer''s shortfall — the same authority Reallocate
+        itself defers to, asked directly rather than recomputed here. MintCloseAuthority
+        is a mint-side extension in the interface crate''s own numbering, not what
+        Reallocate''s own account list expects (always a token account); nothing here
+        stops a caller from naming it anyway, and the deployed program is what rejects
+        it, not this endpoint. recent_blockhash is always required and is never fetched
+        server-side. Left alone, it also builds the message and expires whenever the
+        runtime says it does. Naming durable_nonce_account builds the message against
+        the value that account stores instead, so the transaction never expires, and
+        prepends the advance that consumes it; recent_blockhash then only prices the
+        transaction. The response reports nonce_authority in that case, which has
+        to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, rent payer, owner, fee payer, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ReallocateMintCloseAuthorityRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ReallocateMintCloseAuthorityResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Grow a token account to hold room for MintCloseAuthority
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/mint-close-authority/replace:
+    post:
+      consumes:
+      - application/json
+      description: Hands the MintCloseAuthority extension's close_authority to new_close_authority.
+        close_authority must be the mint's current close authority exactly; there
+        is no delegate concept for this role. Unlike mint_authority or freeze_authority,
+        this reuses the plain SetAuthority instruction with AuthorityType::CloseMint
+        rather than a dedicated sub-instruction. Mint must already carry the extension
+        with a close_authority set (see extensions/mint-close-authority/initialize)
+        -- there is no granting one here where none exists. recent_blockhash is always
+        required and is never fetched server-side. Left alone, it also builds the
+        message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Authority change parameters
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.SetCloseMintAuthorityReplaceRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.SetCloseMintAuthorityReplaceResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Replace a mint's MintCloseAuthority close authority
+      tags:
+      - v2-transaction-token-extensions
   /svm/v2/transaction/token/extensions/transfer-fee-amount/reallocate:
     post:
       consumes:

@@ -4,17 +4,19 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/core/codec"
 	"github.com/andantan/svmlab/core/types"
+	"github.com/andantan/svmlab/core/zkbridge"
 )
 
-// ContextStateCreateAccountPubkeyValidityRequest funds a new account sized
+// ContextStateCreatePubkeyValidityRequest funds a new account sized
 // and owned for a PubkeyValidity proof's ProofContextState<T> layout --
 // System CreateAccount only, not yet written to. It must land in the same
 // transaction as (and strictly before) the matching
 // context-state/verify-pubkey-validity instruction: nothing stops another
 // party from claiming an uninitialized account in between otherwise.
-type ContextStateCreateAccountPubkeyValidityRequest struct {
+type ContextStateCreatePubkeyValidityRequest struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -51,7 +53,7 @@ type ContextStateCreateAccountPubkeyValidityRequest struct {
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountPubkeyValidityRequest) ValidateRequest() error {
+func (r *ContextStateCreatePubkeyValidityRequest) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -81,19 +83,19 @@ func (r *ContextStateCreateAccountPubkeyValidityRequest) ValidateRequest() error
 	return nil
 }
 
-func (r *ContextStateCreateAccountPubkeyValidityRequest) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreatePubkeyValidityRequest) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountPubkeyValidityRequest) RentPayerKey() *types.PublicKey { return r.rp }
-func (r *ContextStateCreateAccountPubkeyValidityRequest) FeePayerKey() *types.PublicKey  { return r.fp }
-func (r *ContextStateCreateAccountPubkeyValidityRequest) Blockhash() *types.Hash         { return r.rbh }
-func (r *ContextStateCreateAccountPubkeyValidityRequest) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreatePubkeyValidityRequest) RentPayerKey() *types.PublicKey { return r.rp }
+func (r *ContextStateCreatePubkeyValidityRequest) FeePayerKey() *types.PublicKey  { return r.fp }
+func (r *ContextStateCreatePubkeyValidityRequest) Blockhash() *types.Hash         { return r.rbh }
+func (r *ContextStateCreatePubkeyValidityRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountPubkeyValidityResponse reports the built
+// ContextStateCreatePubkeyValidityResponse reports the built
 // transaction.
-type ContextStateCreateAccountPubkeyValidityResponse struct {
+type ContextStateCreatePubkeyValidityResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -109,12 +111,12 @@ type ContextStateCreateAccountPubkeyValidityResponse struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountPubkeyValidityResponse(
+func NewContextStateCreatePubkeyValidityResponse(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountPubkeyValidityResponse {
+) *ContextStateCreatePubkeyValidityResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -130,7 +132,7 @@ func NewContextStateCreateAccountPubkeyValidityResponse(
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountPubkeyValidityResponse{
+	return &ContextStateCreatePubkeyValidityResponse{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -144,7 +146,7 @@ func NewContextStateCreateAccountPubkeyValidityResponse(
 	}
 }
 
-// ContextStateCreateAccountCiphertextCommitmentEqualityRequest funds a new
+// ContextStateCreateCiphertextCommitmentEqualityRequest funds a new
 // account sized and owned for a CiphertextCommitmentEquality proof's
 // ProofContextState<T> layout -- System CreateAccount only, not yet
 // written to. It must land in the same transaction as (and strictly
@@ -152,7 +154,7 @@ func NewContextStateCreateAccountPubkeyValidityResponse(
 // context-state/verify-ciphertext-commitment-equality instruction:
 // nothing stops another party from claiming an uninitialized account in
 // between otherwise.
-type ContextStateCreateAccountCiphertextCommitmentEqualityRequest struct {
+type ContextStateCreateCiphertextCommitmentEqualityRequest struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -190,7 +192,7 @@ type ContextStateCreateAccountCiphertextCommitmentEqualityRequest struct {
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountCiphertextCommitmentEqualityRequest) ValidateRequest() error {
+func (r *ContextStateCreateCiphertextCommitmentEqualityRequest) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -220,25 +222,25 @@ func (r *ContextStateCreateAccountCiphertextCommitmentEqualityRequest) ValidateR
 	return nil
 }
 
-func (r *ContextStateCreateAccountCiphertextCommitmentEqualityRequest) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreateCiphertextCommitmentEqualityRequest) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountCiphertextCommitmentEqualityRequest) RentPayerKey() *types.PublicKey {
+func (r *ContextStateCreateCiphertextCommitmentEqualityRequest) RentPayerKey() *types.PublicKey {
 	return r.rp
 }
-func (r *ContextStateCreateAccountCiphertextCommitmentEqualityRequest) FeePayerKey() *types.PublicKey {
+func (r *ContextStateCreateCiphertextCommitmentEqualityRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
-func (r *ContextStateCreateAccountCiphertextCommitmentEqualityRequest) Blockhash() *types.Hash {
+func (r *ContextStateCreateCiphertextCommitmentEqualityRequest) Blockhash() *types.Hash {
 	return r.rbh
 }
-func (r *ContextStateCreateAccountCiphertextCommitmentEqualityRequest) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreateCiphertextCommitmentEqualityRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountCiphertextCommitmentEqualityResponse reports
+// ContextStateCreateCiphertextCommitmentEqualityResponse reports
 // the built transaction.
-type ContextStateCreateAccountCiphertextCommitmentEqualityResponse struct {
+type ContextStateCreateCiphertextCommitmentEqualityResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -254,12 +256,12 @@ type ContextStateCreateAccountCiphertextCommitmentEqualityResponse struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountCiphertextCommitmentEqualityResponse(
+func NewContextStateCreateCiphertextCommitmentEqualityResponse(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountCiphertextCommitmentEqualityResponse {
+) *ContextStateCreateCiphertextCommitmentEqualityResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -275,7 +277,7 @@ func NewContextStateCreateAccountCiphertextCommitmentEqualityResponse(
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountCiphertextCommitmentEqualityResponse{
+	return &ContextStateCreateCiphertextCommitmentEqualityResponse{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -289,7 +291,7 @@ func NewContextStateCreateAccountCiphertextCommitmentEqualityResponse(
 	}
 }
 
-// ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest
+// ContextStateCreateBatchedGroupedCiphertext3HandlesValidityRequest
 // funds a new account sized and owned for a
 // BatchedGroupedCiphertext3HandlesValidity proof's ProofContextState<T>
 // layout -- System CreateAccount only, not yet written to. It must land
@@ -297,7 +299,7 @@ func NewContextStateCreateAccountCiphertextCommitmentEqualityResponse(
 // context-state/verify-batched-grouped-ciphertext-3-handles-validity
 // instruction: nothing stops another party from claiming an uninitialized
 // account in between otherwise.
-type ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest struct {
+type ContextStateCreateBatchedGroupedCiphertext3HandlesValidityRequest struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -335,7 +337,7 @@ type ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest st
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest) ValidateRequest() error {
+func (r *ContextStateCreateBatchedGroupedCiphertext3HandlesValidityRequest) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -365,25 +367,25 @@ func (r *ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityReques
 	return nil
 }
 
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedGroupedCiphertext3HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest) RentPayerKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedGroupedCiphertext3HandlesValidityRequest) RentPayerKey() *types.PublicKey {
 	return r.rp
 }
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest) FeePayerKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedGroupedCiphertext3HandlesValidityRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest) Blockhash() *types.Hash {
+func (r *ContextStateCreateBatchedGroupedCiphertext3HandlesValidityRequest) Blockhash() *types.Hash {
 	return r.rbh
 }
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedGroupedCiphertext3HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityResponse
+// ContextStateCreateBatchedGroupedCiphertext3HandlesValidityResponse
 // reports the built transaction.
-type ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityResponse struct {
+type ContextStateCreateBatchedGroupedCiphertext3HandlesValidityResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -399,12 +401,12 @@ type ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityResponse s
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityResponse(
+func NewContextStateCreateBatchedGroupedCiphertext3HandlesValidityResponse(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityResponse {
+) *ContextStateCreateBatchedGroupedCiphertext3HandlesValidityResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -420,7 +422,7 @@ func NewContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRespons
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityResponse{
+	return &ContextStateCreateBatchedGroupedCiphertext3HandlesValidityResponse{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -434,14 +436,14 @@ func NewContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRespons
 	}
 }
 
-// ContextStateCreateAccountBatchedRangeProofU128Request funds a new
+// ContextStateCreateBatchedRangeProofU128Request funds a new
 // account sized and owned for a BatchedRangeProofU128 proof's
 // ProofContextState<T> layout -- System CreateAccount only, not yet
 // written to. It must land in the same transaction as (and strictly
 // before) the matching context-state/verify-batched-range-proof-u128
 // instruction: nothing stops another party from claiming an uninitialized
 // account in between otherwise.
-type ContextStateCreateAccountBatchedRangeProofU128Request struct {
+type ContextStateCreateBatchedRangeProofU128Request struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -479,7 +481,7 @@ type ContextStateCreateAccountBatchedRangeProofU128Request struct {
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountBatchedRangeProofU128Request) ValidateRequest() error {
+func (r *ContextStateCreateBatchedRangeProofU128Request) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -509,25 +511,25 @@ func (r *ContextStateCreateAccountBatchedRangeProofU128Request) ValidateRequest(
 	return nil
 }
 
-func (r *ContextStateCreateAccountBatchedRangeProofU128Request) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU128Request) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountBatchedRangeProofU128Request) RentPayerKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU128Request) RentPayerKey() *types.PublicKey {
 	return r.rp
 }
-func (r *ContextStateCreateAccountBatchedRangeProofU128Request) FeePayerKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU128Request) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
-func (r *ContextStateCreateAccountBatchedRangeProofU128Request) Blockhash() *types.Hash {
+func (r *ContextStateCreateBatchedRangeProofU128Request) Blockhash() *types.Hash {
 	return r.rbh
 }
-func (r *ContextStateCreateAccountBatchedRangeProofU128Request) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU128Request) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountBatchedRangeProofU128Response reports the
+// ContextStateCreateBatchedRangeProofU128Response reports the
 // built transaction.
-type ContextStateCreateAccountBatchedRangeProofU128Response struct {
+type ContextStateCreateBatchedRangeProofU128Response struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -543,12 +545,12 @@ type ContextStateCreateAccountBatchedRangeProofU128Response struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountBatchedRangeProofU128Response(
+func NewContextStateCreateBatchedRangeProofU128Response(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountBatchedRangeProofU128Response {
+) *ContextStateCreateBatchedRangeProofU128Response {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -564,7 +566,7 @@ func NewContextStateCreateAccountBatchedRangeProofU128Response(
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountBatchedRangeProofU128Response{
+	return &ContextStateCreateBatchedRangeProofU128Response{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -578,13 +580,13 @@ func NewContextStateCreateAccountBatchedRangeProofU128Response(
 	}
 }
 
-// ContextStateCreateAccountZeroCiphertextRequest funds a new account sized and owned
+// ContextStateCreateZeroCiphertextRequest funds a new account sized and owned
 // for a ZeroCiphertext proof's ProofContextState<T> layout -- System CreateAccount
 // only, not yet written to. It must land in the same transaction as (and
 // strictly before) the matching context-state/verify-zero-ciphertext
 // instruction: nothing stops another party from claiming an
 // uninitialized account in between otherwise.
-type ContextStateCreateAccountZeroCiphertextRequest struct {
+type ContextStateCreateZeroCiphertextRequest struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -621,7 +623,7 @@ type ContextStateCreateAccountZeroCiphertextRequest struct {
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountZeroCiphertextRequest) ValidateRequest() error {
+func (r *ContextStateCreateZeroCiphertextRequest) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -651,18 +653,18 @@ func (r *ContextStateCreateAccountZeroCiphertextRequest) ValidateRequest() error
 	return nil
 }
 
-func (r *ContextStateCreateAccountZeroCiphertextRequest) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreateZeroCiphertextRequest) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountZeroCiphertextRequest) RentPayerKey() *types.PublicKey { return r.rp }
-func (r *ContextStateCreateAccountZeroCiphertextRequest) FeePayerKey() *types.PublicKey  { return r.fp }
-func (r *ContextStateCreateAccountZeroCiphertextRequest) Blockhash() *types.Hash         { return r.rbh }
-func (r *ContextStateCreateAccountZeroCiphertextRequest) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreateZeroCiphertextRequest) RentPayerKey() *types.PublicKey { return r.rp }
+func (r *ContextStateCreateZeroCiphertextRequest) FeePayerKey() *types.PublicKey  { return r.fp }
+func (r *ContextStateCreateZeroCiphertextRequest) Blockhash() *types.Hash         { return r.rbh }
+func (r *ContextStateCreateZeroCiphertextRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountZeroCiphertextResponse reports the built transaction.
-type ContextStateCreateAccountZeroCiphertextResponse struct {
+// ContextStateCreateZeroCiphertextResponse reports the built transaction.
+type ContextStateCreateZeroCiphertextResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -678,12 +680,12 @@ type ContextStateCreateAccountZeroCiphertextResponse struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountZeroCiphertextResponse(
+func NewContextStateCreateZeroCiphertextResponse(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountZeroCiphertextResponse {
+) *ContextStateCreateZeroCiphertextResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -699,7 +701,7 @@ func NewContextStateCreateAccountZeroCiphertextResponse(
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountZeroCiphertextResponse{
+	return &ContextStateCreateZeroCiphertextResponse{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -713,13 +715,13 @@ func NewContextStateCreateAccountZeroCiphertextResponse(
 	}
 }
 
-// ContextStateCreateAccountCiphertextCiphertextEqualityRequest funds a new account sized and owned
+// ContextStateCreateCiphertextCiphertextEqualityRequest funds a new account sized and owned
 // for a CiphertextCiphertextEquality proof's ProofContextState<T> layout -- System CreateAccount
 // only, not yet written to. It must land in the same transaction as (and
 // strictly before) the matching context-state/verify-ciphertext-ciphertext-equality
 // instruction: nothing stops another party from claiming an
 // uninitialized account in between otherwise.
-type ContextStateCreateAccountCiphertextCiphertextEqualityRequest struct {
+type ContextStateCreateCiphertextCiphertextEqualityRequest struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -756,7 +758,7 @@ type ContextStateCreateAccountCiphertextCiphertextEqualityRequest struct {
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountCiphertextCiphertextEqualityRequest) ValidateRequest() error {
+func (r *ContextStateCreateCiphertextCiphertextEqualityRequest) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -786,24 +788,24 @@ func (r *ContextStateCreateAccountCiphertextCiphertextEqualityRequest) ValidateR
 	return nil
 }
 
-func (r *ContextStateCreateAccountCiphertextCiphertextEqualityRequest) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreateCiphertextCiphertextEqualityRequest) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountCiphertextCiphertextEqualityRequest) RentPayerKey() *types.PublicKey {
+func (r *ContextStateCreateCiphertextCiphertextEqualityRequest) RentPayerKey() *types.PublicKey {
 	return r.rp
 }
-func (r *ContextStateCreateAccountCiphertextCiphertextEqualityRequest) FeePayerKey() *types.PublicKey {
+func (r *ContextStateCreateCiphertextCiphertextEqualityRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
-func (r *ContextStateCreateAccountCiphertextCiphertextEqualityRequest) Blockhash() *types.Hash {
+func (r *ContextStateCreateCiphertextCiphertextEqualityRequest) Blockhash() *types.Hash {
 	return r.rbh
 }
-func (r *ContextStateCreateAccountCiphertextCiphertextEqualityRequest) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreateCiphertextCiphertextEqualityRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountCiphertextCiphertextEqualityResponse reports the built transaction.
-type ContextStateCreateAccountCiphertextCiphertextEqualityResponse struct {
+// ContextStateCreateCiphertextCiphertextEqualityResponse reports the built transaction.
+type ContextStateCreateCiphertextCiphertextEqualityResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -819,12 +821,12 @@ type ContextStateCreateAccountCiphertextCiphertextEqualityResponse struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountCiphertextCiphertextEqualityResponse(
+func NewContextStateCreateCiphertextCiphertextEqualityResponse(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountCiphertextCiphertextEqualityResponse {
+) *ContextStateCreateCiphertextCiphertextEqualityResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -840,7 +842,7 @@ func NewContextStateCreateAccountCiphertextCiphertextEqualityResponse(
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountCiphertextCiphertextEqualityResponse{
+	return &ContextStateCreateCiphertextCiphertextEqualityResponse{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -854,13 +856,13 @@ func NewContextStateCreateAccountCiphertextCiphertextEqualityResponse(
 	}
 }
 
-// ContextStateCreateAccountPercentageWithCapRequest funds a new account sized and owned
+// ContextStateCreatePercentageWithCapRequest funds a new account sized and owned
 // for a PercentageWithCap proof's ProofContextState<T> layout -- System CreateAccount
 // only, not yet written to. It must land in the same transaction as (and
 // strictly before) the matching context-state/verify-percentage-with-cap
 // instruction: nothing stops another party from claiming an
 // uninitialized account in between otherwise.
-type ContextStateCreateAccountPercentageWithCapRequest struct {
+type ContextStateCreatePercentageWithCapRequest struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -897,7 +899,7 @@ type ContextStateCreateAccountPercentageWithCapRequest struct {
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountPercentageWithCapRequest) ValidateRequest() error {
+func (r *ContextStateCreatePercentageWithCapRequest) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -927,22 +929,22 @@ func (r *ContextStateCreateAccountPercentageWithCapRequest) ValidateRequest() er
 	return nil
 }
 
-func (r *ContextStateCreateAccountPercentageWithCapRequest) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreatePercentageWithCapRequest) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountPercentageWithCapRequest) RentPayerKey() *types.PublicKey {
+func (r *ContextStateCreatePercentageWithCapRequest) RentPayerKey() *types.PublicKey {
 	return r.rp
 }
-func (r *ContextStateCreateAccountPercentageWithCapRequest) FeePayerKey() *types.PublicKey {
+func (r *ContextStateCreatePercentageWithCapRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
-func (r *ContextStateCreateAccountPercentageWithCapRequest) Blockhash() *types.Hash { return r.rbh }
-func (r *ContextStateCreateAccountPercentageWithCapRequest) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreatePercentageWithCapRequest) Blockhash() *types.Hash { return r.rbh }
+func (r *ContextStateCreatePercentageWithCapRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountPercentageWithCapResponse reports the built transaction.
-type ContextStateCreateAccountPercentageWithCapResponse struct {
+// ContextStateCreatePercentageWithCapResponse reports the built transaction.
+type ContextStateCreatePercentageWithCapResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -958,12 +960,12 @@ type ContextStateCreateAccountPercentageWithCapResponse struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountPercentageWithCapResponse(
+func NewContextStateCreatePercentageWithCapResponse(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountPercentageWithCapResponse {
+) *ContextStateCreatePercentageWithCapResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -979,7 +981,7 @@ func NewContextStateCreateAccountPercentageWithCapResponse(
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountPercentageWithCapResponse{
+	return &ContextStateCreatePercentageWithCapResponse{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -993,13 +995,13 @@ func NewContextStateCreateAccountPercentageWithCapResponse(
 	}
 }
 
-// ContextStateCreateAccountBatchedRangeProofU64Request funds a new account sized and owned
+// ContextStateCreateBatchedRangeProofU64Request funds a new account sized and owned
 // for a BatchedRangeProofU64 proof's ProofContextState<T> layout -- System CreateAccount
 // only, not yet written to. It must land in the same transaction as (and
 // strictly before) the matching context-state/verify-batched-range-proof-u64
 // instruction: nothing stops another party from claiming an
 // uninitialized account in between otherwise.
-type ContextStateCreateAccountBatchedRangeProofU64Request struct {
+type ContextStateCreateBatchedRangeProofU64Request struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -1036,7 +1038,7 @@ type ContextStateCreateAccountBatchedRangeProofU64Request struct {
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountBatchedRangeProofU64Request) ValidateRequest() error {
+func (r *ContextStateCreateBatchedRangeProofU64Request) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -1066,22 +1068,22 @@ func (r *ContextStateCreateAccountBatchedRangeProofU64Request) ValidateRequest()
 	return nil
 }
 
-func (r *ContextStateCreateAccountBatchedRangeProofU64Request) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU64Request) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountBatchedRangeProofU64Request) RentPayerKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU64Request) RentPayerKey() *types.PublicKey {
 	return r.rp
 }
-func (r *ContextStateCreateAccountBatchedRangeProofU64Request) FeePayerKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU64Request) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
-func (r *ContextStateCreateAccountBatchedRangeProofU64Request) Blockhash() *types.Hash { return r.rbh }
-func (r *ContextStateCreateAccountBatchedRangeProofU64Request) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU64Request) Blockhash() *types.Hash { return r.rbh }
+func (r *ContextStateCreateBatchedRangeProofU64Request) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountBatchedRangeProofU64Response reports the built transaction.
-type ContextStateCreateAccountBatchedRangeProofU64Response struct {
+// ContextStateCreateBatchedRangeProofU64Response reports the built transaction.
+type ContextStateCreateBatchedRangeProofU64Response struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -1097,12 +1099,12 @@ type ContextStateCreateAccountBatchedRangeProofU64Response struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountBatchedRangeProofU64Response(
+func NewContextStateCreateBatchedRangeProofU64Response(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountBatchedRangeProofU64Response {
+) *ContextStateCreateBatchedRangeProofU64Response {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -1118,7 +1120,7 @@ func NewContextStateCreateAccountBatchedRangeProofU64Response(
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountBatchedRangeProofU64Response{
+	return &ContextStateCreateBatchedRangeProofU64Response{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -1132,13 +1134,13 @@ func NewContextStateCreateAccountBatchedRangeProofU64Response(
 	}
 }
 
-// ContextStateCreateAccountBatchedRangeProofU256Request funds a new account sized and owned
+// ContextStateCreateBatchedRangeProofU256Request funds a new account sized and owned
 // for a BatchedRangeProofU256 proof's ProofContextState<T> layout -- System CreateAccount
 // only, not yet written to. It must land in the same transaction as (and
 // strictly before) the matching context-state/verify-batched-range-proof-u256
 // instruction: nothing stops another party from claiming an
 // uninitialized account in between otherwise.
-type ContextStateCreateAccountBatchedRangeProofU256Request struct {
+type ContextStateCreateBatchedRangeProofU256Request struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -1175,7 +1177,7 @@ type ContextStateCreateAccountBatchedRangeProofU256Request struct {
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountBatchedRangeProofU256Request) ValidateRequest() error {
+func (r *ContextStateCreateBatchedRangeProofU256Request) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -1205,22 +1207,22 @@ func (r *ContextStateCreateAccountBatchedRangeProofU256Request) ValidateRequest(
 	return nil
 }
 
-func (r *ContextStateCreateAccountBatchedRangeProofU256Request) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU256Request) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountBatchedRangeProofU256Request) RentPayerKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU256Request) RentPayerKey() *types.PublicKey {
 	return r.rp
 }
-func (r *ContextStateCreateAccountBatchedRangeProofU256Request) FeePayerKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU256Request) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
-func (r *ContextStateCreateAccountBatchedRangeProofU256Request) Blockhash() *types.Hash { return r.rbh }
-func (r *ContextStateCreateAccountBatchedRangeProofU256Request) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedRangeProofU256Request) Blockhash() *types.Hash { return r.rbh }
+func (r *ContextStateCreateBatchedRangeProofU256Request) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountBatchedRangeProofU256Response reports the built transaction.
-type ContextStateCreateAccountBatchedRangeProofU256Response struct {
+// ContextStateCreateBatchedRangeProofU256Response reports the built transaction.
+type ContextStateCreateBatchedRangeProofU256Response struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -1236,12 +1238,12 @@ type ContextStateCreateAccountBatchedRangeProofU256Response struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountBatchedRangeProofU256Response(
+func NewContextStateCreateBatchedRangeProofU256Response(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountBatchedRangeProofU256Response {
+) *ContextStateCreateBatchedRangeProofU256Response {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -1257,7 +1259,7 @@ func NewContextStateCreateAccountBatchedRangeProofU256Response(
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountBatchedRangeProofU256Response{
+	return &ContextStateCreateBatchedRangeProofU256Response{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -1271,13 +1273,13 @@ func NewContextStateCreateAccountBatchedRangeProofU256Response(
 	}
 }
 
-// ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest funds a new account sized and owned
+// ContextStateCreateGroupedCiphertext2HandlesValidityRequest funds a new account sized and owned
 // for a GroupedCiphertext2HandlesValidity proof's ProofContextState<T> layout -- System CreateAccount
 // only, not yet written to. It must land in the same transaction as (and
 // strictly before) the matching context-state/verify-grouped-ciphertext-2-handles-validity
 // instruction: nothing stops another party from claiming an
 // uninitialized account in between otherwise.
-type ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest struct {
+type ContextStateCreateGroupedCiphertext2HandlesValidityRequest struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -1314,7 +1316,7 @@ type ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest struct {
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest) ValidateRequest() error {
+func (r *ContextStateCreateGroupedCiphertext2HandlesValidityRequest) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -1344,24 +1346,24 @@ func (r *ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest) Vali
 	return nil
 }
 
-func (r *ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreateGroupedCiphertext2HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest) RentPayerKey() *types.PublicKey {
+func (r *ContextStateCreateGroupedCiphertext2HandlesValidityRequest) RentPayerKey() *types.PublicKey {
 	return r.rp
 }
-func (r *ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest) FeePayerKey() *types.PublicKey {
+func (r *ContextStateCreateGroupedCiphertext2HandlesValidityRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
-func (r *ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest) Blockhash() *types.Hash {
+func (r *ContextStateCreateGroupedCiphertext2HandlesValidityRequest) Blockhash() *types.Hash {
 	return r.rbh
 }
-func (r *ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreateGroupedCiphertext2HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse reports the built transaction.
-type ContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse struct {
+// ContextStateCreateGroupedCiphertext2HandlesValidityResponse reports the built transaction.
+type ContextStateCreateGroupedCiphertext2HandlesValidityResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -1377,12 +1379,12 @@ type ContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse(
+func NewContextStateCreateGroupedCiphertext2HandlesValidityResponse(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse {
+) *ContextStateCreateGroupedCiphertext2HandlesValidityResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -1398,7 +1400,7 @@ func NewContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse(
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse{
+	return &ContextStateCreateGroupedCiphertext2HandlesValidityResponse{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -1412,13 +1414,13 @@ func NewContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse(
 	}
 }
 
-// ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest funds a new account sized and owned
+// ContextStateCreateBatchedGroupedCiphertext2HandlesValidityRequest funds a new account sized and owned
 // for a BatchedGroupedCiphertext2HandlesValidity proof's ProofContextState<T> layout -- System CreateAccount
 // only, not yet written to. It must land in the same transaction as (and
 // strictly before) the matching context-state/verify-batched-grouped-ciphertext-2-handles-validity
 // instruction: nothing stops another party from claiming an
 // uninitialized account in between otherwise.
-type ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest struct {
+type ContextStateCreateBatchedGroupedCiphertext2HandlesValidityRequest struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -1455,7 +1457,7 @@ type ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest st
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest) ValidateRequest() error {
+func (r *ContextStateCreateBatchedGroupedCiphertext2HandlesValidityRequest) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -1485,24 +1487,24 @@ func (r *ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityReques
 	return nil
 }
 
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedGroupedCiphertext2HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest) RentPayerKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedGroupedCiphertext2HandlesValidityRequest) RentPayerKey() *types.PublicKey {
 	return r.rp
 }
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest) FeePayerKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedGroupedCiphertext2HandlesValidityRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest) Blockhash() *types.Hash {
+func (r *ContextStateCreateBatchedGroupedCiphertext2HandlesValidityRequest) Blockhash() *types.Hash {
 	return r.rbh
 }
-func (r *ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreateBatchedGroupedCiphertext2HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityResponse reports the built transaction.
-type ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityResponse struct {
+// ContextStateCreateBatchedGroupedCiphertext2HandlesValidityResponse reports the built transaction.
+type ContextStateCreateBatchedGroupedCiphertext2HandlesValidityResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -1518,12 +1520,12 @@ type ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityResponse s
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityResponse(
+func NewContextStateCreateBatchedGroupedCiphertext2HandlesValidityResponse(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityResponse {
+) *ContextStateCreateBatchedGroupedCiphertext2HandlesValidityResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -1539,7 +1541,7 @@ func NewContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRespons
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityResponse{
+	return &ContextStateCreateBatchedGroupedCiphertext2HandlesValidityResponse{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -1553,13 +1555,13 @@ func NewContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRespons
 	}
 }
 
-// ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest funds a new account sized and owned
+// ContextStateCreateGroupedCiphertext3HandlesValidityRequest funds a new account sized and owned
 // for a GroupedCiphertext3HandlesValidity proof's ProofContextState<T> layout -- System CreateAccount
 // only, not yet written to. It must land in the same transaction as (and
 // strictly before) the matching context-state/verify-grouped-ciphertext-3-handles-validity
 // instruction: nothing stops another party from claiming an
 // uninitialized account in between otherwise.
-type ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest struct {
+type ContextStateCreateGroupedCiphertext3HandlesValidityRequest struct {
 	// ContextStateAccount is the account created. It signs alongside
 	// RentPayer, since an address does not exist until whoever holds its
 	// private key authorizes its creation. It must not already exist.
@@ -1596,7 +1598,7 @@ type ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest struct {
 	dna *types.PublicKey
 }
 
-func (r *ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest) ValidateRequest() error {
+func (r *ContextStateCreateGroupedCiphertext3HandlesValidityRequest) ValidateRequest() error {
 	var err error
 
 	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
@@ -1626,24 +1628,24 @@ func (r *ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest) Vali
 	return nil
 }
 
-func (r *ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
+func (r *ContextStateCreateGroupedCiphertext3HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
 	return r.csa
 }
-func (r *ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest) RentPayerKey() *types.PublicKey {
+func (r *ContextStateCreateGroupedCiphertext3HandlesValidityRequest) RentPayerKey() *types.PublicKey {
 	return r.rp
 }
-func (r *ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest) FeePayerKey() *types.PublicKey {
+func (r *ContextStateCreateGroupedCiphertext3HandlesValidityRequest) FeePayerKey() *types.PublicKey {
 	return r.fp
 }
-func (r *ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest) Blockhash() *types.Hash {
+func (r *ContextStateCreateGroupedCiphertext3HandlesValidityRequest) Blockhash() *types.Hash {
 	return r.rbh
 }
-func (r *ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
+func (r *ContextStateCreateGroupedCiphertext3HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
 	return r.dna
 }
 
-// ContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse reports the built transaction.
-type ContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse struct {
+// ContextStateCreateGroupedCiphertext3HandlesValidityResponse reports the built transaction.
+type ContextStateCreateGroupedCiphertext3HandlesValidityResponse struct {
 	Transaction     string   `json:"transaction"`
 	Message         string   `json:"message"`
 	RecentBlockhash string   `json:"recent_blockhash"`
@@ -1659,12 +1661,12 @@ type ContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse struct {
 	Fee SystemPayer `json:"fee"`
 }
 
-func NewContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse(
+func NewContextStateCreateGroupedCiphertext3HandlesValidityResponse(
 	tx *types.Transaction, raw, message []byte,
 	feePayer, contextStateAccount *types.PublicKey, space, rentExemptLamports uint64,
 	nonceAuthority *types.PublicKey,
 	fee uint64,
-) *ContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse {
+) *ContextStateCreateGroupedCiphertext3HandlesValidityResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
 		nonceAuth = nonceAuthority.Base58()
@@ -1680,7 +1682,7 @@ func NewContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse(
 		signers[i] = k.Base58()
 	}
 
-	return &ContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse{
+	return &ContextStateCreateGroupedCiphertext3HandlesValidityResponse{
 		Transaction:         codec.Base64.Encode(raw),
 		Message:             codec.Base64.Encode(message),
 		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
@@ -1691,5 +1693,1770 @@ func NewContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse(
 		Space:               space,
 		RentExemptLamports:  rentExemptLamports,
 		Fee:                 newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyPubkeyValidityRequest verifies a PubkeyValidity proof
+// and persists its context (the ElGamal pubkey alone) into an existing
+// context-state account -- ZkElgamalProof opcode VerifyPubkeyValidity,
+// context-state form. contextStateAccount must already exist, sized and
+// owned for this proof type (see context-state/create/pubkey-validity).
+type ContextStateVerifyPubkeyValidityRequest struct {
+	// ElgamalPubkey is the ElGamal public key the proof is about,
+	// base58-encoded (see tool/generate/elgamal-keypair).
+	ElgamalPubkey string `json:"elgamal_pubkey" example:""`
+
+	// PubkeyProof proves whoever built this request knows the secret key
+	// ElgamalPubkey was derived from, base58-encoded (see
+	// tool/prove/pubkey-validity).
+	PubkeyProof string `json:"pubkey_proof" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/pubkey-validity.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner -- the
+	// key context-state/close will later require a signature from to
+	// reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	elgamalPubkey []byte
+	pubkeyProof   []byte
+	csa           *types.PublicKey
+	owner         *types.PublicKey
+	fp            *types.PublicKey
+	rbh           *types.Hash
+	dna           *types.PublicKey
+}
+
+func (r *ContextStateVerifyPubkeyValidityRequest) ValidateRequest() error {
+	var err error
+
+	if r.elgamalPubkey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ElgamalPubkey), 32); err != nil {
+		return errors.New("elgamal_pubkey: " + err.Error())
+	}
+	if r.pubkeyProof, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.PubkeyProof), core.PubkeyValidityProofLen); err != nil {
+		return errors.New("pubkey_proof: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyPubkeyValidityRequest) ToElgamalPubkey() []byte { return r.elgamalPubkey }
+func (r *ContextStateVerifyPubkeyValidityRequest) ToPubkeyProof() []byte   { return r.pubkeyProof }
+func (r *ContextStateVerifyPubkeyValidityRequest) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyPubkeyValidityRequest) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyPubkeyValidityRequest) FeePayerKey() *types.PublicKey { return r.fp }
+func (r *ContextStateVerifyPubkeyValidityRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *ContextStateVerifyPubkeyValidityRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyPubkeyValidityResponse reports the built transaction.
+type ContextStateVerifyPubkeyValidityResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyPubkeyValidityResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyPubkeyValidityResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyPubkeyValidityResponse{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyCiphertextCommitmentEqualityRequest verifies a CiphertextCommitmentEquality proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyCiphertextCommitmentEquality, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/ciphertext-commitment-equality).
+type ContextStateVerifyCiphertextCommitmentEqualityRequest struct {
+	// ProofData is zkbridge.ProveCiphertextCommitmentEquality's own output (320 bytes),
+	// base58-encoded -- context then proof, packed exactly as the
+	// deployed program's VerifyCiphertextCommitmentEquality instruction expects.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/ciphertext-commitment-equality.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyCiphertextCommitmentEqualityRequest) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), zkbridge.CiphertextCommitmentEqualityProofDataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyCiphertextCommitmentEqualityRequest) ToProofData() []byte {
+	return r.proofData
+}
+func (r *ContextStateVerifyCiphertextCommitmentEqualityRequest) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyCiphertextCommitmentEqualityRequest) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyCiphertextCommitmentEqualityRequest) FeePayerKey() *types.PublicKey {
+	return r.fp
+}
+func (r *ContextStateVerifyCiphertextCommitmentEqualityRequest) Blockhash() *types.Hash { return r.rbh }
+func (r *ContextStateVerifyCiphertextCommitmentEqualityRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyCiphertextCommitmentEqualityResponse reports the built transaction.
+type ContextStateVerifyCiphertextCommitmentEqualityResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyCiphertextCommitmentEqualityResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyCiphertextCommitmentEqualityResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyCiphertextCommitmentEqualityResponse{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest verifies a BatchedGroupedCiphertext3HandlesValidity proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyBatchedGroupedCiphertext3HandlesValidity, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/batched-grouped-ciphertext-3-handles-validity).
+type ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest struct {
+	// ProofData is zkbridge.ProveBatchedGroupedCiphertext3HandlesValidity's own output (544 bytes),
+	// base58-encoded -- context then proof, packed exactly as the
+	// deployed program's VerifyBatchedGroupedCiphertext3HandlesValidity instruction expects.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/batched-grouped-ciphertext-3-handles-validity.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), zkbridge.BatchedGroupedCiphertext3HandlesValidityProofDataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest) ToProofData() []byte {
+	return r.proofData
+}
+func (r *ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest) FeePayerKey() *types.PublicKey {
+	return r.fp
+}
+func (r *ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+func (r *ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityResponse reports the built transaction.
+type ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyBatchedGroupedCiphertext3HandlesValidityResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityResponse{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyBatchedRangeProofU128Request verifies a BatchedRangeProofU128 proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyBatchedRangeProofU128, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/batched-range-proof-u128).
+type ContextStateVerifyBatchedRangeProofU128Request struct {
+	// ProofData is zkbridge.ProveBatchedRangeProofU128's own output (1000 bytes),
+	// base58-encoded -- context then proof, packed exactly as the
+	// deployed program's VerifyBatchedRangeProofU128 instruction expects.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/batched-range-proof-u128.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyBatchedRangeProofU128Request) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), zkbridge.BatchedRangeProofU128DataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyBatchedRangeProofU128Request) ToProofData() []byte { return r.proofData }
+func (r *ContextStateVerifyBatchedRangeProofU128Request) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyBatchedRangeProofU128Request) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyBatchedRangeProofU128Request) FeePayerKey() *types.PublicKey { return r.fp }
+func (r *ContextStateVerifyBatchedRangeProofU128Request) Blockhash() *types.Hash        { return r.rbh }
+func (r *ContextStateVerifyBatchedRangeProofU128Request) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyBatchedRangeProofU128Response reports the built transaction.
+type ContextStateVerifyBatchedRangeProofU128Response struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyBatchedRangeProofU128Response(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyBatchedRangeProofU128Response {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyBatchedRangeProofU128Response{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyZeroCiphertextRequest verifies a ZeroCiphertext proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyZeroCiphertext, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/zero-ciphertext).
+type ContextStateVerifyZeroCiphertextRequest struct {
+	// ProofData is the full ZeroCiphertextProofData wire bytes (context then
+	// proof), base58-encoded, packed by the caller exactly as the
+	// deployed program's VerifyZeroCiphertext instruction expects -- no from-scratch
+	// prover exists in this codebase for this proof type yet.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/zero-ciphertext.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyZeroCiphertextRequest) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), core.ZeroCiphertextProofDataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyZeroCiphertextRequest) ToProofData() []byte { return r.proofData }
+func (r *ContextStateVerifyZeroCiphertextRequest) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyZeroCiphertextRequest) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyZeroCiphertextRequest) FeePayerKey() *types.PublicKey { return r.fp }
+func (r *ContextStateVerifyZeroCiphertextRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *ContextStateVerifyZeroCiphertextRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyZeroCiphertextResponse reports the built transaction.
+type ContextStateVerifyZeroCiphertextResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyZeroCiphertextResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyZeroCiphertextResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyZeroCiphertextResponse{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyCiphertextCiphertextEqualityRequest verifies a CiphertextCiphertextEquality proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyCiphertextCiphertextEquality, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/ciphertext-ciphertext-equality).
+type ContextStateVerifyCiphertextCiphertextEqualityRequest struct {
+	// ProofData is the full CiphertextCiphertextEqualityProofData wire bytes (context then
+	// proof), base58-encoded, packed by the caller exactly as the
+	// deployed program's VerifyCiphertextCiphertextEquality instruction expects -- no from-scratch
+	// prover exists in this codebase for this proof type yet.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/ciphertext-ciphertext-equality.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyCiphertextCiphertextEqualityRequest) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), core.CiphertextCiphertextEqualityProofDataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyCiphertextCiphertextEqualityRequest) ToProofData() []byte {
+	return r.proofData
+}
+func (r *ContextStateVerifyCiphertextCiphertextEqualityRequest) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyCiphertextCiphertextEqualityRequest) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyCiphertextCiphertextEqualityRequest) FeePayerKey() *types.PublicKey {
+	return r.fp
+}
+func (r *ContextStateVerifyCiphertextCiphertextEqualityRequest) Blockhash() *types.Hash { return r.rbh }
+func (r *ContextStateVerifyCiphertextCiphertextEqualityRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyCiphertextCiphertextEqualityResponse reports the built transaction.
+type ContextStateVerifyCiphertextCiphertextEqualityResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyCiphertextCiphertextEqualityResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyCiphertextCiphertextEqualityResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyCiphertextCiphertextEqualityResponse{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyPercentageWithCapRequest verifies a PercentageWithCap proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyPercentageWithCap, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/percentage-with-cap).
+type ContextStateVerifyPercentageWithCapRequest struct {
+	// ProofData is the full PercentageWithCapProofData wire bytes (context then
+	// proof), base58-encoded, packed by the caller exactly as the
+	// deployed program's VerifyPercentageWithCap instruction expects -- no from-scratch
+	// prover exists in this codebase for this proof type yet.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/percentage-with-cap.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyPercentageWithCapRequest) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), core.PercentageWithCapProofDataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyPercentageWithCapRequest) ToProofData() []byte { return r.proofData }
+func (r *ContextStateVerifyPercentageWithCapRequest) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyPercentageWithCapRequest) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyPercentageWithCapRequest) FeePayerKey() *types.PublicKey { return r.fp }
+func (r *ContextStateVerifyPercentageWithCapRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *ContextStateVerifyPercentageWithCapRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyPercentageWithCapResponse reports the built transaction.
+type ContextStateVerifyPercentageWithCapResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyPercentageWithCapResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyPercentageWithCapResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyPercentageWithCapResponse{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyBatchedRangeProofU64Request verifies a BatchedRangeProofU64 proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyBatchedRangeProofU64, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/batched-range-proof-u64).
+type ContextStateVerifyBatchedRangeProofU64Request struct {
+	// ProofData is the full BatchedRangeProofU64ProofData wire bytes (context then
+	// proof), base58-encoded, packed by the caller exactly as the
+	// deployed program's VerifyBatchedRangeProofU64 instruction expects -- no from-scratch
+	// prover exists in this codebase for this proof type yet.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/batched-range-proof-u64.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyBatchedRangeProofU64Request) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), core.BatchedRangeProofU64ProofDataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyBatchedRangeProofU64Request) ToProofData() []byte { return r.proofData }
+func (r *ContextStateVerifyBatchedRangeProofU64Request) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyBatchedRangeProofU64Request) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyBatchedRangeProofU64Request) FeePayerKey() *types.PublicKey { return r.fp }
+func (r *ContextStateVerifyBatchedRangeProofU64Request) Blockhash() *types.Hash        { return r.rbh }
+func (r *ContextStateVerifyBatchedRangeProofU64Request) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyBatchedRangeProofU64Response reports the built transaction.
+type ContextStateVerifyBatchedRangeProofU64Response struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyBatchedRangeProofU64Response(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyBatchedRangeProofU64Response {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyBatchedRangeProofU64Response{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyBatchedRangeProofU256Request verifies a BatchedRangeProofU256 proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyBatchedRangeProofU256, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/batched-range-proof-u256).
+type ContextStateVerifyBatchedRangeProofU256Request struct {
+	// ProofData is the full BatchedRangeProofU256ProofData wire bytes (context then
+	// proof), base58-encoded, packed by the caller exactly as the
+	// deployed program's VerifyBatchedRangeProofU256 instruction expects -- no from-scratch
+	// prover exists in this codebase for this proof type yet.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/batched-range-proof-u256.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyBatchedRangeProofU256Request) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), core.BatchedRangeProofU256ProofDataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyBatchedRangeProofU256Request) ToProofData() []byte { return r.proofData }
+func (r *ContextStateVerifyBatchedRangeProofU256Request) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyBatchedRangeProofU256Request) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyBatchedRangeProofU256Request) FeePayerKey() *types.PublicKey { return r.fp }
+func (r *ContextStateVerifyBatchedRangeProofU256Request) Blockhash() *types.Hash        { return r.rbh }
+func (r *ContextStateVerifyBatchedRangeProofU256Request) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyBatchedRangeProofU256Response reports the built transaction.
+type ContextStateVerifyBatchedRangeProofU256Response struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyBatchedRangeProofU256Response(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyBatchedRangeProofU256Response {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyBatchedRangeProofU256Response{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyGroupedCiphertext2HandlesValidityRequest verifies a GroupedCiphertext2HandlesValidity proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyGroupedCiphertext2HandlesValidity, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/grouped-ciphertext-2-handles-validity).
+type ContextStateVerifyGroupedCiphertext2HandlesValidityRequest struct {
+	// ProofData is the full GroupedCiphertext2HandlesValidityProofData wire bytes (context then
+	// proof), base58-encoded, packed by the caller exactly as the
+	// deployed program's VerifyGroupedCiphertext2HandlesValidity instruction expects -- no from-scratch
+	// prover exists in this codebase for this proof type yet.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/grouped-ciphertext-2-handles-validity.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyGroupedCiphertext2HandlesValidityRequest) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), core.GroupedCiphertext2HandlesValidityProofDataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyGroupedCiphertext2HandlesValidityRequest) ToProofData() []byte {
+	return r.proofData
+}
+func (r *ContextStateVerifyGroupedCiphertext2HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyGroupedCiphertext2HandlesValidityRequest) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyGroupedCiphertext2HandlesValidityRequest) FeePayerKey() *types.PublicKey {
+	return r.fp
+}
+func (r *ContextStateVerifyGroupedCiphertext2HandlesValidityRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+func (r *ContextStateVerifyGroupedCiphertext2HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyGroupedCiphertext2HandlesValidityResponse reports the built transaction.
+type ContextStateVerifyGroupedCiphertext2HandlesValidityResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyGroupedCiphertext2HandlesValidityResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyGroupedCiphertext2HandlesValidityResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyGroupedCiphertext2HandlesValidityResponse{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest verifies a BatchedGroupedCiphertext2HandlesValidity proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyBatchedGroupedCiphertext2HandlesValidity, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/batched-grouped-ciphertext-2-handles-validity).
+type ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest struct {
+	// ProofData is the full BatchedGroupedCiphertext2HandlesValidityProofData wire bytes (context then
+	// proof), base58-encoded, packed by the caller exactly as the
+	// deployed program's VerifyBatchedGroupedCiphertext2HandlesValidity instruction expects -- no from-scratch
+	// prover exists in this codebase for this proof type yet.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/batched-grouped-ciphertext-2-handles-validity.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), core.BatchedGroupedCiphertext2HandlesValidityProofDataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest) ToProofData() []byte {
+	return r.proofData
+}
+func (r *ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest) FeePayerKey() *types.PublicKey {
+	return r.fp
+}
+func (r *ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+func (r *ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityResponse reports the built transaction.
+type ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyBatchedGroupedCiphertext2HandlesValidityResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityResponse{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}
+
+// ContextStateVerifyGroupedCiphertext3HandlesValidityRequest verifies a GroupedCiphertext3HandlesValidity proof and persists its
+// context into an existing context-state account -- ZkElgamalProof
+// opcode VerifyGroupedCiphertext3HandlesValidity, context-state form. contextStateAccount must
+// already exist, sized and owned for this proof type (see
+// context-state/create/grouped-ciphertext-3-handles-validity).
+type ContextStateVerifyGroupedCiphertext3HandlesValidityRequest struct {
+	// ProofData is the full GroupedCiphertext3HandlesValidityProofData wire bytes (context then
+	// proof), base58-encoded, packed by the caller exactly as the
+	// deployed program's VerifyGroupedCiphertext3HandlesValidity instruction expects -- no from-scratch
+	// prover exists in this codebase for this proof type yet.
+	ProofData string `json:"proof_data" example:""`
+
+	// ContextStateAccount already exists, created via
+	// context-state/create/grouped-ciphertext-3-handles-validity.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// ContextStateAccountOwner is recorded as the context's owner --
+	// the key context-state/close will later require a signature from
+	// to reclaim this account's rent. It does not sign here.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	proofData []byte
+	csa       *types.PublicKey
+	owner     *types.PublicKey
+	fp        *types.PublicKey
+	rbh       *types.Hash
+	dna       *types.PublicKey
+}
+
+func (r *ContextStateVerifyGroupedCiphertext3HandlesValidityRequest) ValidateRequest() error {
+	var err error
+
+	if r.proofData, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ProofData), core.GroupedCiphertext3HandlesValidityProofDataLen); err != nil {
+		return errors.New("proof_data: " + err.Error())
+	}
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateVerifyGroupedCiphertext3HandlesValidityRequest) ToProofData() []byte {
+	return r.proofData
+}
+func (r *ContextStateVerifyGroupedCiphertext3HandlesValidityRequest) ContextStateAccountKey() *types.PublicKey {
+	return r.csa
+}
+func (r *ContextStateVerifyGroupedCiphertext3HandlesValidityRequest) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateVerifyGroupedCiphertext3HandlesValidityRequest) FeePayerKey() *types.PublicKey {
+	return r.fp
+}
+func (r *ContextStateVerifyGroupedCiphertext3HandlesValidityRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+func (r *ContextStateVerifyGroupedCiphertext3HandlesValidityRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateVerifyGroupedCiphertext3HandlesValidityResponse reports the built transaction.
+type ContextStateVerifyGroupedCiphertext3HandlesValidityResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateVerifyGroupedCiphertext3HandlesValidityResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, contextStateAccountOwner *types.PublicKey,
+	nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ContextStateVerifyGroupedCiphertext3HandlesValidityResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateVerifyGroupedCiphertext3HandlesValidityResponse{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		Fee:                      newSystemPayer(feePayer, fee),
 	}
 }

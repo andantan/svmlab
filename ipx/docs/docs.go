@@ -7719,7 +7719,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/batched-grouped-ciphertext-2-handles-validity": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/batched-grouped-ciphertext-2-handles-validity": {
             "post": {
                 "description": "System CreateAccount only, sized (289 bytes) and owned (by the ZkElgamalProof program) for a BatchedGroupedCiphertext2HandlesValidity proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-batched-grouped-ciphertext-2-handles-validity instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-batched-grouped-ciphertext-2-handles-validity and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -7739,7 +7739,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest"
+                            "$ref": "#/definitions/v2.ContextStateCreateBatchedGroupedCiphertext2HandlesValidityRequest"
                         }
                     }
                 ],
@@ -7747,7 +7747,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityResponse"
+                            "$ref": "#/definitions/v2.ContextStateCreateBatchedGroupedCiphertext2HandlesValidityResponse"
                         }
                     },
                     "400": {
@@ -7771,7 +7771,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/batched-grouped-ciphertext-3-handles-validity": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/batched-grouped-ciphertext-3-handles-validity": {
             "post": {
                 "description": "System CreateAccount only, sized (385 bytes) and owned (by the ZkElgamalProof program) for a BatchedGroupedCiphertext3HandlesValidity proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-batched-grouped-ciphertext-3-handles-validity instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-batched-grouped-ciphertext-3-handles-validity and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -7791,7 +7791,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest"
+                            "$ref": "#/definitions/v2.ContextStateCreateBatchedGroupedCiphertext3HandlesValidityRequest"
                         }
                     }
                 ],
@@ -7799,7 +7799,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityResponse"
+                            "$ref": "#/definitions/v2.ContextStateCreateBatchedGroupedCiphertext3HandlesValidityResponse"
                         }
                     },
                     "400": {
@@ -7823,7 +7823,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/batched-range-proof-u128": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/batched-range-proof-u128": {
             "post": {
                 "description": "System CreateAccount only, sized (297 bytes) and owned (by the ZkElgamalProof program) for a BatchedRangeProofU128 proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-batched-range-proof-u128 instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-batched-range-proof-u128 and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -7843,7 +7843,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU128Request"
+                            "$ref": "#/definitions/v2.ContextStateCreateBatchedRangeProofU128Request"
                         }
                     }
                 ],
@@ -7851,7 +7851,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU128Response"
+                            "$ref": "#/definitions/v2.ContextStateCreateBatchedRangeProofU128Response"
                         }
                     },
                     "400": {
@@ -7875,7 +7875,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/batched-range-proof-u256": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/batched-range-proof-u256": {
             "post": {
                 "description": "System CreateAccount only, sized (297 bytes) and owned (by the ZkElgamalProof program) for a BatchedRangeProofU256 proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-batched-range-proof-u256 instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-batched-range-proof-u256 and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -7895,7 +7895,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU256Request"
+                            "$ref": "#/definitions/v2.ContextStateCreateBatchedRangeProofU256Request"
                         }
                     }
                 ],
@@ -7903,7 +7903,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU256Response"
+                            "$ref": "#/definitions/v2.ContextStateCreateBatchedRangeProofU256Response"
                         }
                     },
                     "400": {
@@ -7927,7 +7927,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/batched-range-proof-u64": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/batched-range-proof-u64": {
             "post": {
                 "description": "System CreateAccount only, sized (297 bytes) and owned (by the ZkElgamalProof program) for a BatchedRangeProofU64 proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-batched-range-proof-u64 instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-batched-range-proof-u64 and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -7947,7 +7947,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU64Request"
+                            "$ref": "#/definitions/v2.ContextStateCreateBatchedRangeProofU64Request"
                         }
                     }
                 ],
@@ -7955,7 +7955,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountBatchedRangeProofU64Response"
+                            "$ref": "#/definitions/v2.ContextStateCreateBatchedRangeProofU64Response"
                         }
                     },
                     "400": {
@@ -7979,7 +7979,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/ciphertext-ciphertext-equality": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/ciphertext-ciphertext-equality": {
             "post": {
                 "description": "System CreateAccount only, sized (225 bytes) and owned (by the ZkElgamalProof program) for a CiphertextCiphertextEquality proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-ciphertext-ciphertext-equality instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-ciphertext-ciphertext-equality and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -7999,7 +7999,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountCiphertextCiphertextEqualityRequest"
+                            "$ref": "#/definitions/v2.ContextStateCreateCiphertextCiphertextEqualityRequest"
                         }
                     }
                 ],
@@ -8007,7 +8007,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountCiphertextCiphertextEqualityResponse"
+                            "$ref": "#/definitions/v2.ContextStateCreateCiphertextCiphertextEqualityResponse"
                         }
                     },
                     "400": {
@@ -8031,7 +8031,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/ciphertext-commitment-equality": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/ciphertext-commitment-equality": {
             "post": {
                 "description": "System CreateAccount only, sized (161 bytes) and owned (by the ZkElgamalProof program) for a CiphertextCommitmentEquality proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-ciphertext-commitment-equality instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-ciphertext-commitment-equality and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -8051,7 +8051,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountCiphertextCommitmentEqualityRequest"
+                            "$ref": "#/definitions/v2.ContextStateCreateCiphertextCommitmentEqualityRequest"
                         }
                     }
                 ],
@@ -8059,7 +8059,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountCiphertextCommitmentEqualityResponse"
+                            "$ref": "#/definitions/v2.ContextStateCreateCiphertextCommitmentEqualityResponse"
                         }
                     },
                     "400": {
@@ -8083,7 +8083,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/grouped-ciphertext-2-handles-validity": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/grouped-ciphertext-2-handles-validity": {
             "post": {
                 "description": "System CreateAccount only, sized (193 bytes) and owned (by the ZkElgamalProof program) for a GroupedCiphertext2HandlesValidity proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-grouped-ciphertext-2-handles-validity instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-grouped-ciphertext-2-handles-validity and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -8103,7 +8103,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest"
+                            "$ref": "#/definitions/v2.ContextStateCreateGroupedCiphertext2HandlesValidityRequest"
                         }
                     }
                 ],
@@ -8111,7 +8111,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse"
+                            "$ref": "#/definitions/v2.ContextStateCreateGroupedCiphertext2HandlesValidityResponse"
                         }
                     },
                     "400": {
@@ -8135,7 +8135,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/grouped-ciphertext-3-handles-validity": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/grouped-ciphertext-3-handles-validity": {
             "post": {
                 "description": "System CreateAccount only, sized (257 bytes) and owned (by the ZkElgamalProof program) for a GroupedCiphertext3HandlesValidity proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-grouped-ciphertext-3-handles-validity instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-grouped-ciphertext-3-handles-validity and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -8155,7 +8155,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest"
+                            "$ref": "#/definitions/v2.ContextStateCreateGroupedCiphertext3HandlesValidityRequest"
                         }
                     }
                 ],
@@ -8163,7 +8163,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse"
+                            "$ref": "#/definitions/v2.ContextStateCreateGroupedCiphertext3HandlesValidityResponse"
                         }
                     },
                     "400": {
@@ -8187,7 +8187,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/percentage-with-cap": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/percentage-with-cap": {
             "post": {
                 "description": "System CreateAccount only, sized (137 bytes) and owned (by the ZkElgamalProof program) for a PercentageWithCap proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-percentage-with-cap instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-percentage-with-cap and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -8207,7 +8207,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountPercentageWithCapRequest"
+                            "$ref": "#/definitions/v2.ContextStateCreatePercentageWithCapRequest"
                         }
                     }
                 ],
@@ -8215,7 +8215,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountPercentageWithCapResponse"
+                            "$ref": "#/definitions/v2.ContextStateCreatePercentageWithCapResponse"
                         }
                     },
                     "400": {
@@ -8239,7 +8239,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/pubkey-validity": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/pubkey-validity": {
             "post": {
                 "description": "System CreateAccount only, sized (65 bytes) and owned (by the ZkElgamalProof program) for a PubkeyValidity proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-pubkey-validity instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-pubkey-validity and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -8259,7 +8259,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountPubkeyValidityRequest"
+                            "$ref": "#/definitions/v2.ContextStateCreatePubkeyValidityRequest"
                         }
                     }
                 ],
@@ -8267,7 +8267,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountPubkeyValidityResponse"
+                            "$ref": "#/definitions/v2.ContextStateCreatePubkeyValidityResponse"
                         }
                     },
                     "400": {
@@ -8291,7 +8291,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/svm/v2/transaction/zk-elgamal-proof/context-state/create-account/zero-ciphertext": {
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/create/zero-ciphertext": {
             "post": {
                 "description": "System CreateAccount only, sized (129 bytes) and owned (by the ZkElgamalProof program) for a ZeroCiphertext proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-zero-ciphertext instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-zero-ciphertext and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
@@ -8311,7 +8311,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountZeroCiphertextRequest"
+                            "$ref": "#/definitions/v2.ContextStateCreateZeroCiphertextRequest"
                         }
                     }
                 ],
@@ -8319,7 +8319,631 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/v2.ContextStateCreateAccountZeroCiphertextResponse"
+                            "$ref": "#/definitions/v2.ContextStateCreateZeroCiphertextResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/batched-grouped-ciphertext-2-handles-validity": {
+            "post": {
+                "description": "ZkElgamalProof VerifyBatchedGroupedCiphertext2HandlesValidity, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-grouped-ciphertext-2-handles-validity) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a BatchedGroupedCiphertext2HandlesValidity proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/batched-grouped-ciphertext-3-handles-validity": {
+            "post": {
+                "description": "ZkElgamalProof VerifyBatchedGroupedCiphertext3HandlesValidity, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-grouped-ciphertext-3-handles-validity) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a BatchedGroupedCiphertext3HandlesValidity proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/batched-range-proof-u128": {
+            "post": {
+                "description": "ZkElgamalProof VerifyBatchedRangeProofU128, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-range-proof-u128) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a BatchedRangeProofU128 proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyBatchedRangeProofU128Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyBatchedRangeProofU128Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/batched-range-proof-u256": {
+            "post": {
+                "description": "ZkElgamalProof VerifyBatchedRangeProofU256, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-range-proof-u256) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a BatchedRangeProofU256 proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyBatchedRangeProofU256Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyBatchedRangeProofU256Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/batched-range-proof-u64": {
+            "post": {
+                "description": "ZkElgamalProof VerifyBatchedRangeProofU64, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-range-proof-u64) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a BatchedRangeProofU64 proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyBatchedRangeProofU64Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyBatchedRangeProofU64Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/ciphertext-ciphertext-equality": {
+            "post": {
+                "description": "ZkElgamalProof VerifyCiphertextCiphertextEquality, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/ciphertext-ciphertext-equality) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a CiphertextCiphertextEquality proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyCiphertextCiphertextEqualityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyCiphertextCiphertextEqualityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/ciphertext-commitment-equality": {
+            "post": {
+                "description": "ZkElgamalProof VerifyCiphertextCommitmentEquality, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/ciphertext-commitment-equality) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a CiphertextCommitmentEquality proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyCiphertextCommitmentEqualityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyCiphertextCommitmentEqualityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/grouped-ciphertext-2-handles-validity": {
+            "post": {
+                "description": "ZkElgamalProof VerifyGroupedCiphertext2HandlesValidity, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/grouped-ciphertext-2-handles-validity) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a GroupedCiphertext2HandlesValidity proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyGroupedCiphertext2HandlesValidityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyGroupedCiphertext2HandlesValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/grouped-ciphertext-3-handles-validity": {
+            "post": {
+                "description": "ZkElgamalProof VerifyGroupedCiphertext3HandlesValidity, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/grouped-ciphertext-3-handles-validity) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a GroupedCiphertext3HandlesValidity proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyGroupedCiphertext3HandlesValidityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyGroupedCiphertext3HandlesValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/percentage-with-cap": {
+            "post": {
+                "description": "ZkElgamalProof VerifyPercentageWithCap, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/percentage-with-cap) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a PercentageWithCap proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyPercentageWithCapRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyPercentageWithCapResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/pubkey-validity": {
+            "post": {
+                "description": "ZkElgamalProof VerifyPubkeyValidity, context-state form: verifies pubkey_proof against elgamal_pubkey and, because context_state_account and context_state_account_owner are given, writes the proof's context (the ElGamal pubkey alone) into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/pubkey-validity) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a PubkeyValidity proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyPubkeyValidityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyPubkeyValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/zero-ciphertext": {
+            "post": {
+                "description": "ZkElgamalProof VerifyZeroCiphertext, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/zero-ciphertext) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a ZeroCiphertext proof and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyZeroCiphertextRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyZeroCiphertextResponse"
                         }
                     },
                     "400": {
@@ -11194,7 +11818,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityRequest": {
+        "v2.ContextStateCreateBatchedGroupedCiphertext2HandlesValidityRequest": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11224,7 +11848,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountBatchedGroupedCiphertext2HandlesValidityResponse": {
+        "v2.ContextStateCreateBatchedGroupedCiphertext2HandlesValidityResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11265,7 +11889,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityRequest": {
+        "v2.ContextStateCreateBatchedGroupedCiphertext3HandlesValidityRequest": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11295,7 +11919,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountBatchedGroupedCiphertext3HandlesValidityResponse": {
+        "v2.ContextStateCreateBatchedGroupedCiphertext3HandlesValidityResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11336,7 +11960,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountBatchedRangeProofU128Request": {
+        "v2.ContextStateCreateBatchedRangeProofU128Request": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11366,7 +11990,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountBatchedRangeProofU128Response": {
+        "v2.ContextStateCreateBatchedRangeProofU128Response": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11407,7 +12031,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountBatchedRangeProofU256Request": {
+        "v2.ContextStateCreateBatchedRangeProofU256Request": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11437,7 +12061,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountBatchedRangeProofU256Response": {
+        "v2.ContextStateCreateBatchedRangeProofU256Response": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11478,7 +12102,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountBatchedRangeProofU64Request": {
+        "v2.ContextStateCreateBatchedRangeProofU64Request": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11508,7 +12132,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountBatchedRangeProofU64Response": {
+        "v2.ContextStateCreateBatchedRangeProofU64Response": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11549,7 +12173,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountCiphertextCiphertextEqualityRequest": {
+        "v2.ContextStateCreateCiphertextCiphertextEqualityRequest": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11579,7 +12203,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountCiphertextCiphertextEqualityResponse": {
+        "v2.ContextStateCreateCiphertextCiphertextEqualityResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11620,7 +12244,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountCiphertextCommitmentEqualityRequest": {
+        "v2.ContextStateCreateCiphertextCommitmentEqualityRequest": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11650,7 +12274,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountCiphertextCommitmentEqualityResponse": {
+        "v2.ContextStateCreateCiphertextCommitmentEqualityResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11691,7 +12315,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountGroupedCiphertext2HandlesValidityRequest": {
+        "v2.ContextStateCreateGroupedCiphertext2HandlesValidityRequest": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11721,7 +12345,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountGroupedCiphertext2HandlesValidityResponse": {
+        "v2.ContextStateCreateGroupedCiphertext2HandlesValidityResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11762,7 +12386,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountGroupedCiphertext3HandlesValidityRequest": {
+        "v2.ContextStateCreateGroupedCiphertext3HandlesValidityRequest": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11792,7 +12416,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountGroupedCiphertext3HandlesValidityResponse": {
+        "v2.ContextStateCreateGroupedCiphertext3HandlesValidityResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11833,7 +12457,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountPercentageWithCapRequest": {
+        "v2.ContextStateCreatePercentageWithCapRequest": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11863,7 +12487,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountPercentageWithCapResponse": {
+        "v2.ContextStateCreatePercentageWithCapResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11904,7 +12528,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountPubkeyValidityRequest": {
+        "v2.ContextStateCreatePubkeyValidityRequest": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -11934,7 +12558,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountPubkeyValidityResponse": {
+        "v2.ContextStateCreatePubkeyValidityResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -11975,7 +12599,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountZeroCiphertextRequest": {
+        "v2.ContextStateCreateZeroCiphertextRequest": {
             "type": "object",
             "properties": {
                 "context_state_account": {
@@ -12005,7 +12629,7 @@ const docTemplate = `{
                 }
             }
         },
-        "v2.ContextStateCreateAccountZeroCiphertextResponse": {
+        "v2.ContextStateCreateZeroCiphertextResponse": {
             "type": "object",
             "properties": {
                 "account_keys": {
@@ -12040,6 +12664,887 @@ const docTemplate = `{
                 },
                 "space": {
                     "type": "integer"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityRequest": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/batched-grouped-ciphertext-2-handles-validity.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is the full BatchedGroupedCiphertext2HandlesValidityProofData wire bytes (context then\nproof), base58-encoded, packed by the caller exactly as the\ndeployed program's VerifyBatchedGroupedCiphertext2HandlesValidity instruction expects -- no from-scratch\nprover exists in this codebase for this proof type yet.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyBatchedGroupedCiphertext2HandlesValidityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityRequest": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/batched-grouped-ciphertext-3-handles-validity.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is zkbridge.ProveBatchedGroupedCiphertext3HandlesValidity's own output (544 bytes),\nbase58-encoded -- context then proof, packed exactly as the\ndeployed program's VerifyBatchedGroupedCiphertext3HandlesValidity instruction expects.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyBatchedGroupedCiphertext3HandlesValidityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyBatchedRangeProofU128Request": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/batched-range-proof-u128.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is zkbridge.ProveBatchedRangeProofU128's own output (1000 bytes),\nbase58-encoded -- context then proof, packed exactly as the\ndeployed program's VerifyBatchedRangeProofU128 instruction expects.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyBatchedRangeProofU128Response": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyBatchedRangeProofU256Request": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/batched-range-proof-u256.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is the full BatchedRangeProofU256ProofData wire bytes (context then\nproof), base58-encoded, packed by the caller exactly as the\ndeployed program's VerifyBatchedRangeProofU256 instruction expects -- no from-scratch\nprover exists in this codebase for this proof type yet.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyBatchedRangeProofU256Response": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyBatchedRangeProofU64Request": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/batched-range-proof-u64.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is the full BatchedRangeProofU64ProofData wire bytes (context then\nproof), base58-encoded, packed by the caller exactly as the\ndeployed program's VerifyBatchedRangeProofU64 instruction expects -- no from-scratch\nprover exists in this codebase for this proof type yet.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyBatchedRangeProofU64Response": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyCiphertextCiphertextEqualityRequest": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/ciphertext-ciphertext-equality.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is the full CiphertextCiphertextEqualityProofData wire bytes (context then\nproof), base58-encoded, packed by the caller exactly as the\ndeployed program's VerifyCiphertextCiphertextEquality instruction expects -- no from-scratch\nprover exists in this codebase for this proof type yet.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyCiphertextCiphertextEqualityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyCiphertextCommitmentEqualityRequest": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/ciphertext-commitment-equality.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is zkbridge.ProveCiphertextCommitmentEquality's own output (320 bytes),\nbase58-encoded -- context then proof, packed exactly as the\ndeployed program's VerifyCiphertextCommitmentEquality instruction expects.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyCiphertextCommitmentEqualityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyGroupedCiphertext2HandlesValidityRequest": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/grouped-ciphertext-2-handles-validity.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is the full GroupedCiphertext2HandlesValidityProofData wire bytes (context then\nproof), base58-encoded, packed by the caller exactly as the\ndeployed program's VerifyGroupedCiphertext2HandlesValidity instruction expects -- no from-scratch\nprover exists in this codebase for this proof type yet.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyGroupedCiphertext2HandlesValidityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyGroupedCiphertext3HandlesValidityRequest": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/grouped-ciphertext-3-handles-validity.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is the full GroupedCiphertext3HandlesValidityProofData wire bytes (context then\nproof), base58-encoded, packed by the caller exactly as the\ndeployed program's VerifyGroupedCiphertext3HandlesValidity instruction expects -- no from-scratch\nprover exists in this codebase for this proof type yet.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyGroupedCiphertext3HandlesValidityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyPercentageWithCapRequest": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/percentage-with-cap.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is the full PercentageWithCapProofData wire bytes (context then\nproof), base58-encoded, packed by the caller exactly as the\ndeployed program's VerifyPercentageWithCap instruction expects -- no from-scratch\nprover exists in this codebase for this proof type yet.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyPercentageWithCapResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyPubkeyValidityRequest": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/pubkey-validity.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the\nkey context-state/close will later require a signature from to\nreclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "elgamal_pubkey": {
+                    "description": "ElgamalPubkey is the ElGamal public key the proof is about,\nbase58-encoded (see tool/generate/elgamal-keypair).",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "pubkey_proof": {
+                    "description": "PubkeyProof proves whoever built this request knows the secret key\nElgamalPubkey was derived from, base58-encoded (see\ntool/prove/pubkey-validity).",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyPubkeyValidityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyZeroCiphertextRequest": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via\ncontext-state/create/zero-ciphertext.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner --\nthe key context-state/close will later require a signature from\nto reclaim this account's rent. It does not sign here.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_data": {
+                    "description": "ProofData is the full ZeroCiphertextProofData wire bytes (context then\nproof), base58-encoded, packed by the caller exactly as the\ndeployed program's VerifyZeroCiphertext instruction expects -- no from-scratch\nprover exists in this codebase for this proof type yet.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyZeroCiphertextResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "transaction": {
                     "type": "string"

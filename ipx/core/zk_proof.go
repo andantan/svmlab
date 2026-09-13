@@ -78,6 +78,45 @@ const (
 	GroupedCiphertext3HandlesValidityContextStateSpace = 257
 )
 
+// ProofData lengths below (context + proof, packed back to back) are
+// confirmed against the interface crate's own proof_data structs and
+// zk-sdk-pod's sigma_proofs.rs/range_proof.rs constants -- CIPHERTEXT_
+// CIPHERTEXT_EQUALITY_PROOF_LEN, RANGE_PROOF_U64_LEN, and so on -- the
+// same source CiphertextCommitmentEqualityProofDataLen and its two
+// zkbridge-side siblings were confirmed against, just read directly here
+// since no zkbridge prover exists yet for these eight.
+const (
+	// ZeroCiphertextProofDataLen is context 96 (pubkey 32 + ciphertext
+	// 64) + proof 96.
+	ZeroCiphertextProofDataLen = 192
+
+	// CiphertextCiphertextEqualityProofDataLen is context 192 (2 pubkeys
+	// 64 + 2 ciphertexts 128) + proof 224.
+	CiphertextCiphertextEqualityProofDataLen = 416
+
+	// PercentageWithCapProofDataLen is context 104 (3 commitments 96 +
+	// max_value u64 8) + proof 256.
+	PercentageWithCapProofDataLen = 360
+
+	// BatchedRangeProofU64ProofDataLen is context 264 + proof 672.
+	BatchedRangeProofU64ProofDataLen = 936
+
+	// BatchedRangeProofU256ProofDataLen is context 264 + proof 800.
+	BatchedRangeProofU256ProofDataLen = 1064
+
+	// GroupedCiphertext2HandlesValidityProofDataLen is context 160
+	// (2 pubkeys 64 + a 2-handle grouped ciphertext 96) + proof 160.
+	GroupedCiphertext2HandlesValidityProofDataLen = 320
+
+	// BatchedGroupedCiphertext2HandlesValidityProofDataLen is context 256
+	// (2 pubkeys 64 + grouped-lo 96 + grouped-hi 96) + proof 160.
+	BatchedGroupedCiphertext2HandlesValidityProofDataLen = 416
+
+	// GroupedCiphertext3HandlesValidityProofDataLen is context 224
+	// (3 pubkeys 96 + a 3-handle grouped ciphertext 128) + proof 192.
+	GroupedCiphertext3HandlesValidityProofDataLen = 416
+)
+
 // zkTranscriptDomain is the fixed outer label every zk-elgamal-proof
 // transcript is wrapped in, confirmed against zk-sdk's own lib.rs:
 //
@@ -540,4 +579,308 @@ func (z *zkElgamalProof) CloseContextState(contextStateAccount, destination, con
 		types.NewWritableAccount(destination),
 		types.NewReadonlySignerAccount(contextStateAccountOwner),
 	), data), nil
+}
+
+// VerifyZeroCiphertextInline builds a VerifyZeroCiphertext instruction carrying its proof data
+// inline -- opcode ZkElgamalProofInstructionVerifyZeroCiphertext. proofData is the full ZeroCiphertextProofData wire
+// bytes (context then proof, 192 bytes), packed by the caller exactly
+// as the deployed program expects; unlike VerifyPubkeyValidityInline this
+// package has no from-scratch prover for this proof type, so the caller
+// supplies the finished blob rather than component parts.
+func (z *zkElgamalProof) VerifyZeroCiphertextInline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != ZeroCiphertextProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify zero ciphertext: proof data is %d bytes, expected %d", len(proofData), ZeroCiphertextProofDataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyZeroCiphertext)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyZeroCiphertextContextState is VerifyZeroCiphertextInline's context-state counterpart.
+// contextStateAccount must already exist, created earlier in the same
+// transaction via System.CreateAccount with owner ZkElgamalProof.ID() and
+// space ZeroCiphertextContextStateSpace.
+func (z *zkElgamalProof) VerifyZeroCiphertextContextState(proofData []byte, contextStateAccount, contextStateAccountOwner *types.PublicKey) (*types.Instruction, error) {
+	if len(proofData) != ZeroCiphertextProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify zero ciphertext (context state): proof data is %d bytes, expected %d", len(proofData), ZeroCiphertextProofDataLen)
+	}
+	if contextStateAccount.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify zero ciphertext (context state): context state account is required")
+	}
+	if contextStateAccountOwner.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify zero ciphertext (context state): context state account owner is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyZeroCiphertext)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, contextStateAccounts(contextStateAccount, contextStateAccountOwner), data), nil
+}
+
+// VerifyCiphertextCiphertextEqualityInline builds a VerifyCiphertextCiphertextEquality instruction carrying its proof data
+// inline -- opcode ZkElgamalProofInstructionVerifyCiphertextCiphertextEquality. proofData is the full CiphertextCiphertextEqualityProofData wire
+// bytes (context then proof, 416 bytes), packed by the caller exactly
+// as the deployed program expects; unlike VerifyPubkeyValidityInline this
+// package has no from-scratch prover for this proof type, so the caller
+// supplies the finished blob rather than component parts.
+func (z *zkElgamalProof) VerifyCiphertextCiphertextEqualityInline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != CiphertextCiphertextEqualityProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify ciphertext ciphertext equality: proof data is %d bytes, expected %d", len(proofData), CiphertextCiphertextEqualityProofDataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyCiphertextCiphertextEquality)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyCiphertextCiphertextEqualityContextState is VerifyCiphertextCiphertextEqualityInline's context-state counterpart.
+// contextStateAccount must already exist, created earlier in the same
+// transaction via System.CreateAccount with owner ZkElgamalProof.ID() and
+// space CiphertextCiphertextEqualityContextStateSpace.
+func (z *zkElgamalProof) VerifyCiphertextCiphertextEqualityContextState(proofData []byte, contextStateAccount, contextStateAccountOwner *types.PublicKey) (*types.Instruction, error) {
+	if len(proofData) != CiphertextCiphertextEqualityProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify ciphertext ciphertext equality (context state): proof data is %d bytes, expected %d", len(proofData), CiphertextCiphertextEqualityProofDataLen)
+	}
+	if contextStateAccount.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify ciphertext ciphertext equality (context state): context state account is required")
+	}
+	if contextStateAccountOwner.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify ciphertext ciphertext equality (context state): context state account owner is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyCiphertextCiphertextEquality)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, contextStateAccounts(contextStateAccount, contextStateAccountOwner), data), nil
+}
+
+// VerifyPercentageWithCapInline builds a VerifyPercentageWithCap instruction carrying its proof data
+// inline -- opcode ZkElgamalProofInstructionVerifyPercentageWithCap. proofData is the full PercentageWithCapProofData wire
+// bytes (context then proof, 360 bytes), packed by the caller exactly
+// as the deployed program expects; unlike VerifyPubkeyValidityInline this
+// package has no from-scratch prover for this proof type, so the caller
+// supplies the finished blob rather than component parts.
+func (z *zkElgamalProof) VerifyPercentageWithCapInline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != PercentageWithCapProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify percentage with cap: proof data is %d bytes, expected %d", len(proofData), PercentageWithCapProofDataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyPercentageWithCap)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyPercentageWithCapContextState is VerifyPercentageWithCapInline's context-state counterpart.
+// contextStateAccount must already exist, created earlier in the same
+// transaction via System.CreateAccount with owner ZkElgamalProof.ID() and
+// space PercentageWithCapContextStateSpace.
+func (z *zkElgamalProof) VerifyPercentageWithCapContextState(proofData []byte, contextStateAccount, contextStateAccountOwner *types.PublicKey) (*types.Instruction, error) {
+	if len(proofData) != PercentageWithCapProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify percentage with cap (context state): proof data is %d bytes, expected %d", len(proofData), PercentageWithCapProofDataLen)
+	}
+	if contextStateAccount.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify percentage with cap (context state): context state account is required")
+	}
+	if contextStateAccountOwner.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify percentage with cap (context state): context state account owner is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyPercentageWithCap)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, contextStateAccounts(contextStateAccount, contextStateAccountOwner), data), nil
+}
+
+// VerifyBatchedRangeProofU64Inline builds a VerifyBatchedRangeProofU64 instruction carrying its proof data
+// inline -- opcode ZkElgamalProofInstructionVerifyBatchedRangeProofU64. proofData is the full BatchedRangeProofU64ProofData wire
+// bytes (context then proof, 936 bytes), packed by the caller exactly
+// as the deployed program expects; unlike VerifyPubkeyValidityInline this
+// package has no from-scratch prover for this proof type, so the caller
+// supplies the finished blob rather than component parts.
+func (z *zkElgamalProof) VerifyBatchedRangeProofU64Inline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != BatchedRangeProofU64ProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify batched range proof u64: proof data is %d bytes, expected %d", len(proofData), BatchedRangeProofU64ProofDataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyBatchedRangeProofU64)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyBatchedRangeProofU64ContextState is VerifyBatchedRangeProofU64Inline's context-state counterpart.
+// contextStateAccount must already exist, created earlier in the same
+// transaction via System.CreateAccount with owner ZkElgamalProof.ID() and
+// space BatchedRangeProofU64ContextStateSpace.
+func (z *zkElgamalProof) VerifyBatchedRangeProofU64ContextState(proofData []byte, contextStateAccount, contextStateAccountOwner *types.PublicKey) (*types.Instruction, error) {
+	if len(proofData) != BatchedRangeProofU64ProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify batched range proof u64 (context state): proof data is %d bytes, expected %d", len(proofData), BatchedRangeProofU64ProofDataLen)
+	}
+	if contextStateAccount.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify batched range proof u64 (context state): context state account is required")
+	}
+	if contextStateAccountOwner.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify batched range proof u64 (context state): context state account owner is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyBatchedRangeProofU64)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, contextStateAccounts(contextStateAccount, contextStateAccountOwner), data), nil
+}
+
+// VerifyBatchedRangeProofU256Inline builds a VerifyBatchedRangeProofU256 instruction carrying its proof data
+// inline -- opcode ZkElgamalProofInstructionVerifyBatchedRangeProofU256. proofData is the full BatchedRangeProofU256ProofData wire
+// bytes (context then proof, 1064 bytes), packed by the caller exactly
+// as the deployed program expects; unlike VerifyPubkeyValidityInline this
+// package has no from-scratch prover for this proof type, so the caller
+// supplies the finished blob rather than component parts.
+func (z *zkElgamalProof) VerifyBatchedRangeProofU256Inline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != BatchedRangeProofU256ProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify batched range proof u256: proof data is %d bytes, expected %d", len(proofData), BatchedRangeProofU256ProofDataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyBatchedRangeProofU256)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyBatchedRangeProofU256ContextState is VerifyBatchedRangeProofU256Inline's context-state counterpart.
+// contextStateAccount must already exist, created earlier in the same
+// transaction via System.CreateAccount with owner ZkElgamalProof.ID() and
+// space BatchedRangeProofU256ContextStateSpace.
+func (z *zkElgamalProof) VerifyBatchedRangeProofU256ContextState(proofData []byte, contextStateAccount, contextStateAccountOwner *types.PublicKey) (*types.Instruction, error) {
+	if len(proofData) != BatchedRangeProofU256ProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify batched range proof u256 (context state): proof data is %d bytes, expected %d", len(proofData), BatchedRangeProofU256ProofDataLen)
+	}
+	if contextStateAccount.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify batched range proof u256 (context state): context state account is required")
+	}
+	if contextStateAccountOwner.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify batched range proof u256 (context state): context state account owner is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyBatchedRangeProofU256)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, contextStateAccounts(contextStateAccount, contextStateAccountOwner), data), nil
+}
+
+// VerifyGroupedCiphertext2HandlesValidityInline builds a VerifyGroupedCiphertext2HandlesValidity instruction carrying its proof data
+// inline -- opcode ZkElgamalProofInstructionVerifyGroupedCiphertext2HandlesValidity. proofData is the full GroupedCiphertext2HandlesValidityProofData wire
+// bytes (context then proof, 320 bytes), packed by the caller exactly
+// as the deployed program expects; unlike VerifyPubkeyValidityInline this
+// package has no from-scratch prover for this proof type, so the caller
+// supplies the finished blob rather than component parts.
+func (z *zkElgamalProof) VerifyGroupedCiphertext2HandlesValidityInline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != GroupedCiphertext2HandlesValidityProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify grouped ciphertext2 handles validity: proof data is %d bytes, expected %d", len(proofData), GroupedCiphertext2HandlesValidityProofDataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyGroupedCiphertext2HandlesValidity)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyGroupedCiphertext2HandlesValidityContextState is VerifyGroupedCiphertext2HandlesValidityInline's context-state counterpart.
+// contextStateAccount must already exist, created earlier in the same
+// transaction via System.CreateAccount with owner ZkElgamalProof.ID() and
+// space GroupedCiphertext2HandlesValidityContextStateSpace.
+func (z *zkElgamalProof) VerifyGroupedCiphertext2HandlesValidityContextState(proofData []byte, contextStateAccount, contextStateAccountOwner *types.PublicKey) (*types.Instruction, error) {
+	if len(proofData) != GroupedCiphertext2HandlesValidityProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify grouped ciphertext2 handles validity (context state): proof data is %d bytes, expected %d", len(proofData), GroupedCiphertext2HandlesValidityProofDataLen)
+	}
+	if contextStateAccount.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify grouped ciphertext2 handles validity (context state): context state account is required")
+	}
+	if contextStateAccountOwner.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify grouped ciphertext2 handles validity (context state): context state account owner is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyGroupedCiphertext2HandlesValidity)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, contextStateAccounts(contextStateAccount, contextStateAccountOwner), data), nil
+}
+
+// VerifyBatchedGroupedCiphertext2HandlesValidityInline builds a VerifyBatchedGroupedCiphertext2HandlesValidity instruction carrying its proof data
+// inline -- opcode ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext2HandlesValidity. proofData is the full BatchedGroupedCiphertext2HandlesValidityProofData wire
+// bytes (context then proof, 416 bytes), packed by the caller exactly
+// as the deployed program expects; unlike VerifyPubkeyValidityInline this
+// package has no from-scratch prover for this proof type, so the caller
+// supplies the finished blob rather than component parts.
+func (z *zkElgamalProof) VerifyBatchedGroupedCiphertext2HandlesValidityInline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != BatchedGroupedCiphertext2HandlesValidityProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify batched grouped ciphertext2 handles validity: proof data is %d bytes, expected %d", len(proofData), BatchedGroupedCiphertext2HandlesValidityProofDataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext2HandlesValidity)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyBatchedGroupedCiphertext2HandlesValidityContextState is VerifyBatchedGroupedCiphertext2HandlesValidityInline's context-state counterpart.
+// contextStateAccount must already exist, created earlier in the same
+// transaction via System.CreateAccount with owner ZkElgamalProof.ID() and
+// space BatchedGroupedCiphertext2HandlesValidityContextStateSpace.
+func (z *zkElgamalProof) VerifyBatchedGroupedCiphertext2HandlesValidityContextState(proofData []byte, contextStateAccount, contextStateAccountOwner *types.PublicKey) (*types.Instruction, error) {
+	if len(proofData) != BatchedGroupedCiphertext2HandlesValidityProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify batched grouped ciphertext2 handles validity (context state): proof data is %d bytes, expected %d", len(proofData), BatchedGroupedCiphertext2HandlesValidityProofDataLen)
+	}
+	if contextStateAccount.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify batched grouped ciphertext2 handles validity (context state): context state account is required")
+	}
+	if contextStateAccountOwner.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify batched grouped ciphertext2 handles validity (context state): context state account owner is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext2HandlesValidity)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, contextStateAccounts(contextStateAccount, contextStateAccountOwner), data), nil
+}
+
+// VerifyGroupedCiphertext3HandlesValidityInline builds a VerifyGroupedCiphertext3HandlesValidity instruction carrying its proof data
+// inline -- opcode ZkElgamalProofInstructionVerifyGroupedCiphertext3HandlesValidity. proofData is the full GroupedCiphertext3HandlesValidityProofData wire
+// bytes (context then proof, 416 bytes), packed by the caller exactly
+// as the deployed program expects; unlike VerifyPubkeyValidityInline this
+// package has no from-scratch prover for this proof type, so the caller
+// supplies the finished blob rather than component parts.
+func (z *zkElgamalProof) VerifyGroupedCiphertext3HandlesValidityInline(proofData []byte) (*types.Instruction, error) {
+	if len(proofData) != GroupedCiphertext3HandlesValidityProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify grouped ciphertext3 handles validity: proof data is %d bytes, expected %d", len(proofData), GroupedCiphertext3HandlesValidityProofDataLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyGroupedCiphertext3HandlesValidity)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, types.NewAccounts(), data), nil
+}
+
+// VerifyGroupedCiphertext3HandlesValidityContextState is VerifyGroupedCiphertext3HandlesValidityInline's context-state counterpart.
+// contextStateAccount must already exist, created earlier in the same
+// transaction via System.CreateAccount with owner ZkElgamalProof.ID() and
+// space GroupedCiphertext3HandlesValidityContextStateSpace.
+func (z *zkElgamalProof) VerifyGroupedCiphertext3HandlesValidityContextState(proofData []byte, contextStateAccount, contextStateAccountOwner *types.PublicKey) (*types.Instruction, error) {
+	if len(proofData) != GroupedCiphertext3HandlesValidityProofDataLen {
+		return nil, fmt.Errorf("zk elgamal proof verify grouped ciphertext3 handles validity (context state): proof data is %d bytes, expected %d", len(proofData), GroupedCiphertext3HandlesValidityProofDataLen)
+	}
+	if contextStateAccount.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify grouped ciphertext3 handles validity (context state): context state account is required")
+	}
+	if contextStateAccountOwner.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify grouped ciphertext3 handles validity (context state): context state account owner is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, ZkElgamalProofInstructionVerifyGroupedCiphertext3HandlesValidity)
+	data = codec.Binary.AppendBytes(data, proofData)
+
+	return types.NewInstruction(z.id, contextStateAccounts(contextStateAccount, contextStateAccountOwner), data), nil
 }

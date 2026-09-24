@@ -1249,15 +1249,18 @@ func (t *token) ApplyPendingBalance(account, authority *types.PublicKey, signers
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
 }
 
-// ConfidentialTransfer moves amount confidentially from source to destination,
-// neither the amount nor either account's resulting balance ever
-// appearing in plaintext on chain. This is opcode 27 sub 7
-// (ConfidentialTransferInstructionTransfer), and unlike every other
-// sub-instruction this package builds, it depends on three separate
-// zero-knowledge proofs landing alongside it in the same transaction, in
-// a fixed order right after it: equality, then ciphertext validity, then
-// the range proof (BuildTransferProofs computes all three, along with
-// the two values this instruction's own data carries).
+// ConfidentialTransfer builds a ConfidentialTransfer extension's Transfer
+// instruction -- sub-instruction 7, moving an amount confidentially from
+// source to destination without either the amount or either balance ever
+// appearing in plaintext. Unlike every other sub-instruction this package
+// builds, it depends on three separate zero-knowledge proofs (equality,
+// ciphertext validity, and a batched range proof) that were each verified
+// beforehand into a context-state account of their own (see
+// zk-elgamal-proof/context-state/create and verify): this instruction only
+// names those three accounts, rather than carrying the proofs itself. The
+// proofs are far too large to ride along in the same transaction -- all
+// three inline plus this instruction came to 3232 bytes against the
+// 1232-byte transaction limit.
 //
 // newSourceDecryptableAvailableBalance, transferAmountAuditorCiphertextLo,
 // and transferAmountAuditorCiphertextHi are BuildTransferProofs's own
@@ -1267,15 +1270,16 @@ func (t *token) ApplyPendingBalance(account, authority *types.PublicKey, signers
 // concerns every other builder in this package keeps between "compute
 // the value" and "encode the instruction."
 //
-// Confirmed against the interface crate's own inner_transfer: accounts
-// are [source(writable), mint(readonly), destination(writable),
-// sysvar::instructions(readonly) -- always included, since this package
-// only ever builds the inline proof-offset form, never a context-state
-// account -- authority(+multisig)]. Every proof_instruction_offset is
-// fixed at 1: source's own equality proof comes first among the three
-// followups, but Transfer itself always leads, so all three offsets are
-// relative to the same instruction and share the same value.
-func (t *token) ConfidentialTransfer(source, mint, destination, authority *types.PublicKey, signers []*types.PublicKey, newSourceDecryptableAvailableBalance, transferAmountAuditorCiphertextLo, transferAmountAuditorCiphertextHi []byte) (*types.Instruction, error) {
+// Confirmed against the interface crate's own inner_transfer and
+// TransferInstructionData: every proof_instruction_offset is 0 (the
+// documented signal to read the proof from a context-state account
+// instead of a sibling instruction), and the accounts are [source
+// (writable), mint (readonly), destination (writable), equality context
+// state (readonly), ciphertext validity context state (readonly), range
+// proof context state (readonly), authority (+multisig)]. The
+// instructions sysvar is included only when at least one proof location
+// is an instruction offset, which never happens here.
+func (t *token) ConfidentialTransfer(source, mint, destination, equalityContext, validityContext, rangeContext, authority *types.PublicKey, signers []*types.PublicKey, newSourceDecryptableAvailableBalance, transferAmountAuditorCiphertextLo, transferAmountAuditorCiphertextHi []byte) (*types.Instruction, error) {
 	if source.IsNil() {
 		return nil, fmt.Errorf("token transfer: source is required")
 	}
@@ -1284,6 +1288,15 @@ func (t *token) ConfidentialTransfer(source, mint, destination, authority *types
 	}
 	if destination.IsNil() {
 		return nil, fmt.Errorf("token transfer: destination is required")
+	}
+	if equalityContext.IsNil() {
+		return nil, fmt.Errorf("token transfer: equality context state account is required")
+	}
+	if validityContext.IsNil() {
+		return nil, fmt.Errorf("token transfer: ciphertext validity context state account is required")
+	}
+	if rangeContext.IsNil() {
+		return nil, fmt.Errorf("token transfer: range proof context state account is required")
 	}
 	if err := validateAuthority("token transfer", authority, signers); err != nil {
 		return nil, err
@@ -1303,15 +1316,17 @@ func (t *token) ConfidentialTransfer(source, mint, destination, authority *types
 	data = codec.Binary.AppendBytes(data, newSourceDecryptableAvailableBalance)
 	data = codec.Binary.AppendBytes(data, transferAmountAuditorCiphertextLo)
 	data = codec.Binary.AppendBytes(data, transferAmountAuditorCiphertextHi)
-	data = codec.Binary.AppendU8(data, 1) // equality_proof_instruction_offset
-	data = codec.Binary.AppendU8(data, 1) // ciphertext_validity_proof_instruction_offset
-	data = codec.Binary.AppendU8(data, 1) // range_proof_instruction_offset
+	data = codec.Binary.AppendU8(data, 0) // equality_proof_instruction_offset: 0 = context state account
+	data = codec.Binary.AppendU8(data, 0) // ciphertext_validity_proof_instruction_offset
+	data = codec.Binary.AppendU8(data, 0) // range_proof_instruction_offset
 
 	accounts := types.NewAccounts(
 		types.NewWritableAccount(source),
 		types.NewReadonlyAccount(mint),
 		types.NewWritableAccount(destination),
-		types.NewReadonlyAccount(Sysvar.Instructions()),
+		types.NewReadonlyAccount(equalityContext),
+		types.NewReadonlyAccount(validityContext),
+		types.NewReadonlyAccount(rangeContext),
 	)
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil

@@ -1,6 +1,7 @@
 package v2
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -3804,5 +3805,163 @@ func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyGroupedCiphertext3H
 		req.FeePayerKey(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
 		nonceAuthority,
 		fee,
+	))
+}
+
+// ContextStateClose godoc
+// @Summary      Close a context-state account and reclaim its rent
+// @Description  ZkElgamalProof CloseContextState: closes context_state_account and sends its lamports to destination. One endpoint serves every proof type, since the instruction takes the same three accounts whatever proof the account holds. context_state_account_owner must be the authority recorded in the account when it was verified (see context-state/verify), and it signs. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateCloseRequest true "Context-state close request"
+// @Success      200 {object} ContextStateCloseResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/close [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateClose(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateCloseRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ContextStateAccountKey(),
+		req.DestinationKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	contextData, err := contextInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read context_state_account data: %s", err))
+		return
+	}
+	if len(contextData) < 32 || !bytes.Equal(contextData[:32], req.ContextStateAccountOwnerKey().Bytes()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account_owner: %s is not the authority recorded in %s", req.ContextStateAccountOwnerKey(), req.ContextStateAccountKey()))
+		return
+	}
+
+	closeIx, err := core.ZkElgamalProof.CloseContextState(req.ContextStateAccountKey(), req.DestinationKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := types.NewInstructions(closeIx)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateCloseResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), req.ContextStateAccountKey(), req.DestinationKey(), req.ContextStateAccountOwnerKey(), nonceAuthority,
+		contextInfo.Lamports, fee,
 	))
 }

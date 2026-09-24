@@ -3460,3 +3460,143 @@ func NewContextStateVerifyGroupedCiphertext3HandlesValidityResponse(
 		Fee:                      newSystemPayer(feePayer, fee),
 	}
 }
+
+// ContextStateCloseRequest closes a context-state account and reclaims its
+// rent -- ZkElgamalProof CloseContextState. One endpoint serves every proof
+// type: the instruction takes the same three accounts whatever proof the
+// account holds.
+type ContextStateCloseRequest struct {
+	// ContextStateAccount is closed. It must be owned by the ZkElgamalProof
+	// program and its recorded authority must be ContextStateAccountOwner.
+	ContextStateAccount string `json:"context_state_account" example:""`
+
+	// Destination receives the account's lamports.
+	Destination string `json:"destination" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// ContextStateAccountOwner is the authority recorded when the account
+	// was verified into (see context-state/verify). It signs.
+	ContextStateAccountOwner string `json:"context_state_account_owner" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	csa   *types.PublicKey
+	dest  *types.PublicKey
+	owner *types.PublicKey
+	fp    *types.PublicKey
+	rbh   *types.Hash
+	dna   *types.PublicKey
+}
+
+func (r *ContextStateCloseRequest) ValidateRequest() error {
+	var err error
+
+	if r.csa, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccount)); err != nil {
+		return errors.New("context_state_account: " + err.Error())
+	}
+	if r.dest, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Destination)); err != nil {
+		return errors.New("destination: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ContextStateAccountOwner)); err != nil {
+		return errors.New("context_state_account_owner: " + err.Error())
+	}
+	if r.fp, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	return nil
+}
+
+func (r *ContextStateCloseRequest) ContextStateAccountKey() *types.PublicKey { return r.csa }
+func (r *ContextStateCloseRequest) DestinationKey() *types.PublicKey         { return r.dest }
+func (r *ContextStateCloseRequest) ContextStateAccountOwnerKey() *types.PublicKey {
+	return r.owner
+}
+func (r *ContextStateCloseRequest) FeePayerKey() *types.PublicKey { return r.fp }
+func (r *ContextStateCloseRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *ContextStateCloseRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+// ContextStateCloseResponse reports the built transaction.
+type ContextStateCloseResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	ContextStateAccount      string `json:"context_state_account"`
+	Destination              string `json:"destination"`
+	ContextStateAccountOwner string `json:"context_state_account_owner"`
+	ReclaimedLamports        uint64 `json:"reclaimed_lamports"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewContextStateCloseResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, contextStateAccount, destination, contextStateAccountOwner, nonceAuthority *types.PublicKey,
+	reclaimedLamports, fee uint64,
+) *ContextStateCloseResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ContextStateCloseResponse{
+		Transaction:              codec.Base64.Encode(raw),
+		Message:                  codec.Base64.Encode(message),
+		RecentBlockhash:          tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:              keys,
+		Signers:                  signers,
+		NonceAuthority:           nonceAuth,
+		ContextStateAccount:      contextStateAccount.Base58(),
+		Destination:              destination.Base58(),
+		ContextStateAccountOwner: contextStateAccountOwner.Base58(),
+		ReclaimedLamports:        reclaimedLamports,
+		Fee:                      newSystemPayer(feePayer, fee),
+	}
+}

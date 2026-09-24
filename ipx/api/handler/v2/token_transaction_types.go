@@ -10602,25 +10602,26 @@ func NewApplyPendingBalanceResponse(
 	}
 }
 
-// ConfidentialTransferRequest moves Amount confidentially from Source to
-// Destination -- neither the amount nor either account's resulting
+// ConfidentialTransferRequest moves an amount confidentially from Source
+// to Destination -- neither the amount nor either account's resulting
 // balance ever appears in plaintext on chain. Both accounts must already
 // carry the ConfidentialTransferAccount extension (see configure-account
 // and, for Destination, approve-account if Mint requires it).
 //
-// This builds four instructions in one transaction: the Transfer
-// instruction itself, followed by the three zero-knowledge proofs it
-// depends on (equality, ciphertext validity, and the batched range
-// proof) -- all computed by core.BuildTransferProofs, which calls the
-// real solana-zk-sdk proof-generation code via core/zkbridge rather than
-// a from-scratch port (see that package's own doc comment for why).
+// This builds only the Transfer instruction itself. The three
+// zero-knowledge proofs it depends on (equality, ciphertext validity, and
+// the batched range proof) must already be verified into context-state
+// accounts of their own: build them with tool/prove/confidential-transfer,
+// create their accounts with zk-elgamal-proof/context-state/create, and
+// verify each with context-state/verify. Carrying them inline instead does
+// not fit -- all three plus this instruction came to 3232 bytes against
+// the 1232-byte transaction limit.
 //
-// CurrentAvailableBalanceCiphertext and
-// CurrentDecryptableAvailableBalance are Source's own current confidential
-// state, read off chain by the caller rather than fetched here -- this
-// endpoint has no Token-2022 extension TLV parser for
-// ConfidentialTransferAccount specifically, unlike the base account and
-// mint parsing every other endpoint in this API already does.
+// NewSourceDecryptableAvailableBalance, AuditorCiphertextLo, and
+// AuditorCiphertextHi are the values tool/prove/confidential-transfer
+// returned alongside those proofs, and must come from that same call: a
+// later call draws new randomness, so its values no longer match the
+// proofs already verified into the context-state accounts.
 type ConfidentialTransferRequest struct {
 	// Source is debited. It must already carry the
 	// ConfidentialTransferAccount extension.
@@ -10638,53 +10639,31 @@ type ConfidentialTransferRequest struct {
 	// account (see MultisigSigners).
 	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
 
-	// SourceElgamalSecretKey is Source's own ElGamal secret key,
-	// base58-encoded -- the same one configure-account registered the
-	// public half of. The public key is derived from it here rather than
-	// taken as a separate field, so the two can never be mismatched.
-	SourceElgamalSecretKey string `json:"source_elgamal_secret_key" example:""`
+	// EqualityContextStateAccount holds the verified
+	// CiphertextCommitmentEquality proof's context (see
+	// context-state/verify/ciphertext-commitment-equality).
+	EqualityContextStateAccount string `json:"equality_context_state_account" example:""`
 
-	// DestinationElgamalPubkey is Destination's ElGamal public key,
-	// base58-encoded -- the same value its own configure-account call
-	// registered.
-	DestinationElgamalPubkey string `json:"destination_elgamal_pubkey" example:""`
+	// CiphertextValidityContextStateAccount holds the verified
+	// BatchedGroupedCiphertext3HandlesValidity proof's context (see
+	// context-state/verify/batched-grouped-ciphertext-3-handles-validity).
+	CiphertextValidityContextStateAccount string `json:"ciphertext_validity_context_state_account" example:""`
 
-	// AuditorElgamalPubkey may be left empty for a mint with no auditor
-	// (see initialize on extensions/confidential-transfer-mint) --
-	// resolved to the identity key internally, the same convention that
-	// extension's own MaybeNull field uses. Given, it must be the exact
-	// value that mint's ConfidentialTransferMint.auditor_elgamal_pubkey
-	// holds.
-	AuditorElgamalPubkey string `json:"auditor_elgamal_pubkey" example:""`
+	// RangeProofContextStateAccount holds the verified BatchedRangeProofU128
+	// proof's context (see context-state/verify/batched-range-proof-u128).
+	RangeProofContextStateAccount string `json:"range_proof_context_state_account" example:""`
 
-	// CurrentAvailableBalanceCiphertext is Source's current available
-	// balance, base58-encoded -- the raw 64-byte ElGamal ciphertext its
-	// ConfidentialTransferAccount extension currently stores, read by the
-	// caller off chain.
-	CurrentAvailableBalanceCiphertext string `json:"current_available_balance_ciphertext" example:""`
+	// NewSourceDecryptableAvailableBalance is tool/prove/confidential-transfer's
+	// own field of the same name, base58-encoded (36 bytes).
+	NewSourceDecryptableAvailableBalance string `json:"new_source_decryptable_available_balance" example:""`
 
-	// CurrentDecryptableAvailableBalance is Source's current available
-	// balance, base58-encoded -- the raw 36-byte AE ciphertext its
-	// ConfidentialTransferAccount extension currently stores (the same
-	// wire value configure-account's own decryptable_zero_balance and
-	// apply-pending-balance's new_available_balance produce).
-	CurrentDecryptableAvailableBalance string `json:"current_decryptable_available_balance" example:""`
+	// AuditorCiphertextLo is tool/prove/confidential-transfer's own
+	// auditor_ciphertext_lo, base58-encoded (64 bytes).
+	AuditorCiphertextLo string `json:"auditor_ciphertext_lo" example:""`
 
-	// AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the
-	// new one this transfer leaves Source with, base58-encoded -- a raw
-	// 16-byte AES-128-GCM-SIV key, not a Solana address (see
-	// tool/derive/ae-key-seed-message and tool/derive/ae-key), the same
-	// key Source's own decryptable balance has always been kept under.
-	AeKey string `json:"ae_key" example:""`
-
-	// Amount is the raw base-unit count to move, not a UI decimal
-	// string. It cannot exceed 2^48 - 1 (a confidential transfer amount's
-	// lo/hi split covers 48 bits total, not the full 64 a balance can
-	// hold), and this endpoint rejects it here rather than leaving that
-	// to a range proof failure -- it also cannot exceed Source's own
-	// current available balance, decrypted from
-	// current_decryptable_available_balance to check.
-	Amount string `json:"amount" example:"250"`
+	// AuditorCiphertextHi is tool/prove/confidential-transfer's own
+	// auditor_ciphertext_hi, base58-encoded (64 bytes).
+	AuditorCiphertextHi string `json:"auditor_ciphertext_hi" example:""`
 
 	// FeePayer signs and pays the transaction fee.
 	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
@@ -10715,22 +10694,21 @@ type ConfidentialTransferRequest struct {
 	// than a choice.
 	DurableNonceAccount string `json:"durable_nonce_account" example:""`
 
-	source                             *types.PublicKey
-	mint                               *types.PublicKey
-	destination                        *types.PublicKey
-	owner                              *types.PublicKey
-	sourceSecretKey                    []byte
-	destinationElgamalPubkey           []byte
-	auditorElgamalPubkey               []byte
-	currentAvailableBalanceCiphertext  []byte
-	currentDecryptableAvailableBalance []byte
-	aeKey                              []byte
-	amount                             uint64
-	feePayer                           *types.PublicKey
-	rbh                                *types.Hash
-	dna                                *types.PublicKey
-	tokenProgramID                     *types.PublicKey
-	multisigSigners                    []*types.PublicKey
+	source                               *types.PublicKey
+	mint                                 *types.PublicKey
+	destination                          *types.PublicKey
+	owner                                *types.PublicKey
+	equalityContext                      *types.PublicKey
+	validityContext                      *types.PublicKey
+	rangeContext                         *types.PublicKey
+	newSourceDecryptableAvailableBalance []byte
+	auditorCiphertextLo                  []byte
+	auditorCiphertextHi                  []byte
+	feePayer                             *types.PublicKey
+	rbh                                  *types.Hash
+	dna                                  *types.PublicKey
+	tokenProgramID                       *types.PublicKey
+	multisigSigners                      []*types.PublicKey
 }
 
 func (r *ConfidentialTransferRequest) ValidateRequest() error {
@@ -10751,33 +10729,24 @@ func (r *ConfidentialTransferRequest) ValidateRequest() error {
 		return errors.New("owner: " + err.Error())
 	}
 
-	if r.sourceSecretKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.SourceElgamalSecretKey), 32); err != nil {
-		return errors.New("source_elgamal_secret_key: " + err.Error())
+	if r.equalityContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.EqualityContextStateAccount)); err != nil {
+		return errors.New("equality_context_state_account: " + err.Error())
 	}
-	if r.destinationElgamalPubkey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.DestinationElgamalPubkey), 32); err != nil {
-		return errors.New("destination_elgamal_pubkey: " + err.Error())
+	if r.validityContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.CiphertextValidityContextStateAccount)); err != nil {
+		return errors.New("ciphertext_validity_context_state_account: " + err.Error())
 	}
-	if a := strings.TrimSpace(r.AuditorElgamalPubkey); a != "" {
-		if r.auditorElgamalPubkey, err = codec.Base58.DecodeFixed(a, 32); err != nil {
-			return errors.New("auditor_elgamal_pubkey: " + err.Error())
-		}
-	}
-	if r.currentAvailableBalanceCiphertext, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.CurrentAvailableBalanceCiphertext), 64); err != nil {
-		return errors.New("current_available_balance_ciphertext: " + err.Error())
-	}
-	if r.currentDecryptableAvailableBalance, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.CurrentDecryptableAvailableBalance), core.AeCiphertextLen); err != nil {
-		return errors.New("current_decryptable_available_balance: " + err.Error())
-	}
-	if r.aeKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AeKey), core.AeKeyLen); err != nil {
-		return errors.New("ae_key: " + err.Error())
+	if r.rangeContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RangeProofContextStateAccount)); err != nil {
+		return errors.New("range_proof_context_state_account: " + err.Error())
 	}
 
-	amount := strings.TrimSpace(r.Amount)
-	if amount == "" {
-		return errors.New("amount is required")
+	if r.newSourceDecryptableAvailableBalance, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.NewSourceDecryptableAvailableBalance), core.AeCiphertextLen); err != nil {
+		return errors.New("new_source_decryptable_available_balance: " + err.Error())
 	}
-	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
-		return errors.New("amount: " + err.Error())
+	if r.auditorCiphertextLo, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AuditorCiphertextLo), 64); err != nil {
+		return errors.New("auditor_ciphertext_lo: " + err.Error())
+	}
+	if r.auditorCiphertextHi, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AuditorCiphertextHi), 64); err != nil {
+		return errors.New("auditor_ciphertext_hi: " + err.Error())
 	}
 
 	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
@@ -10823,19 +10792,18 @@ func (r *ConfidentialTransferRequest) SourceKey() *types.PublicKey      { return
 func (r *ConfidentialTransferRequest) MintKey() *types.PublicKey        { return r.mint }
 func (r *ConfidentialTransferRequest) DestinationKey() *types.PublicKey { return r.destination }
 func (r *ConfidentialTransferRequest) OwnerKey() *types.PublicKey       { return r.owner }
-func (r *ConfidentialTransferRequest) ToSourceSecretKey() []byte        { return r.sourceSecretKey }
-func (r *ConfidentialTransferRequest) ToDestinationElgamalPubkey() []byte {
-	return r.destinationElgamalPubkey
+func (r *ConfidentialTransferRequest) EqualityContextKey() *types.PublicKey {
+	return r.equalityContext
 }
-func (r *ConfidentialTransferRequest) ToAuditorElgamalPubkey() []byte { return r.auditorElgamalPubkey }
-func (r *ConfidentialTransferRequest) ToCurrentAvailableBalanceCiphertext() []byte {
-	return r.currentAvailableBalanceCiphertext
+func (r *ConfidentialTransferRequest) ValidityContextKey() *types.PublicKey {
+	return r.validityContext
 }
-func (r *ConfidentialTransferRequest) ToCurrentDecryptableAvailableBalance() []byte {
-	return r.currentDecryptableAvailableBalance
+func (r *ConfidentialTransferRequest) RangeContextKey() *types.PublicKey { return r.rangeContext }
+func (r *ConfidentialTransferRequest) ToNewSourceDecryptableAvailableBalance() []byte {
+	return r.newSourceDecryptableAvailableBalance
 }
-func (r *ConfidentialTransferRequest) ToAeKey() []byte               { return r.aeKey }
-func (r *ConfidentialTransferRequest) ToAmount() uint64              { return r.amount }
+func (r *ConfidentialTransferRequest) ToAuditorCiphertextLo() []byte { return r.auditorCiphertextLo }
+func (r *ConfidentialTransferRequest) ToAuditorCiphertextHi() []byte { return r.auditorCiphertextHi }
 func (r *ConfidentialTransferRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
 func (r *ConfidentialTransferRequest) Blockhash() *types.Hash        { return r.rbh }
 func (r *ConfidentialTransferRequest) DurableNonceAccountKey() *types.PublicKey {
@@ -10862,23 +10830,19 @@ type ConfidentialTransferResponse struct {
 	Mint        string `json:"mint"`
 	Destination string `json:"destination"`
 	Owner       string `json:"owner"`
-	Amount      string `json:"amount"`
 	Program     string `json:"program"`
 
-	// NewSourceAvailableBalance is what Source's available balance
-	// becomes once this transfer lands -- decrypted here from
-	// CurrentDecryptableAvailableBalance and Amount, not read back off
-	// chain, since nothing about the resulting state is chain-readable
-	// until this transaction actually lands.
-	NewSourceAvailableBalance string `json:"new_source_available_balance"`
+	EqualityContextStateAccount           string `json:"equality_context_state_account"`
+	CiphertextValidityContextStateAccount string `json:"ciphertext_validity_context_state_account"`
+	RangeProofContextStateAccount         string `json:"range_proof_context_state_account"`
 
 	Fee SystemPayer `json:"fee"`
 }
 
 func NewConfidentialTransferResponse(
 	tx *types.Transaction, raw, message []byte,
-	feePayer, source, mint, destination, owner, tokenProgram, nonceAuthority *types.PublicKey,
-	amount, newSourceAvailableBalance, fee uint64,
+	feePayer, source, mint, destination, owner, tokenProgram, equalityContext, validityContext, rangeContext, nonceAuthority *types.PublicKey,
+	fee uint64,
 ) *ConfidentialTransferResponse {
 	nonceAuth := ""
 	if !nonceAuthority.IsNil() {
@@ -10896,20 +10860,21 @@ func NewConfidentialTransferResponse(
 	}
 
 	return &ConfidentialTransferResponse{
-		Transaction:               codec.Base64.Encode(raw),
-		Message:                   codec.Base64.Encode(message),
-		RecentBlockhash:           tx.Message.RecentBlockhash.Base58(),
-		AccountKeys:               keys,
-		Signers:                   signers,
-		NonceAuthority:            nonceAuth,
-		Source:                    source.Base58(),
-		Mint:                      mint.Base58(),
-		Destination:               destination.Base58(),
-		Owner:                     owner.Base58(),
-		Amount:                    strconv.FormatUint(amount, 10),
-		Program:                   tokenProgram.Base58(),
-		NewSourceAvailableBalance: strconv.FormatUint(newSourceAvailableBalance, 10),
-		Fee:                       newSystemPayer(feePayer, fee),
+		Transaction:                           codec.Base64.Encode(raw),
+		Message:                               codec.Base64.Encode(message),
+		RecentBlockhash:                       tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                           keys,
+		Signers:                               signers,
+		NonceAuthority:                        nonceAuth,
+		Source:                                source.Base58(),
+		Mint:                                  mint.Base58(),
+		Destination:                           destination.Base58(),
+		Owner:                                 owner.Base58(),
+		Program:                               tokenProgram.Base58(),
+		EqualityContextStateAccount:           equalityContext.Base58(),
+		CiphertextValidityContextStateAccount: validityContext.Base58(),
+		RangeProofContextStateAccount:         rangeContext.Base58(),
+		Fee:                                   newSystemPayer(feePayer, fee),
 	}
 }
 

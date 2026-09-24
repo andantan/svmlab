@@ -311,6 +311,69 @@ definitions:
       health:
         type: string
     type: object
+  misc.ProveConfidentialTransferRequest:
+    properties:
+      ae_key:
+        description: |-
+          AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the
+          new one, base58-encoded raw 16-byte key.
+        example: ""
+        type: string
+      amount:
+        description: |-
+          Amount is the raw base-unit count to move. It cannot exceed 2^48 - 1
+          nor the source's current available balance.
+        example: "250"
+        type: string
+      auditor_elgamal_pubkey:
+        description: |-
+          AuditorElgamalPubkey may be left empty for a mint with no auditor.
+          Given, it must be the exact value that mint's
+          ConfidentialTransferMint.auditor_elgamal_pubkey holds.
+        example: ""
+        type: string
+      current_available_balance_ciphertext:
+        description: |-
+          CurrentAvailableBalanceCiphertext is the source's current available
+          balance, base58-encoded raw 64-byte ElGamal ciphertext.
+        example: ""
+        type: string
+      current_decryptable_available_balance:
+        description: |-
+          CurrentDecryptableAvailableBalance is the source's current available
+          balance, base58-encoded raw 36-byte AE ciphertext.
+        example: ""
+        type: string
+      destination_elgamal_pubkey:
+        description: |-
+          DestinationElgamalPubkey is the destination account's ElGamal public
+          key, base58-encoded.
+        example: ""
+        type: string
+      source_elgamal_secret_key:
+        description: |-
+          SourceElgamalSecretKey is the source account's own ElGamal secret
+          key, base58-encoded. The public key is derived from it here.
+        example: ""
+        type: string
+    type: object
+  misc.ProveConfidentialTransferResponse:
+    properties:
+      auditor_ciphertext_hi:
+        type: string
+      auditor_ciphertext_lo:
+        type: string
+      equality_proof_data:
+        type: string
+      new_source_decryptable_available_balance:
+        type: string
+      range_proof_data:
+        type: string
+      source_elgamal_pubkey:
+        type: string
+      validity_proof_data:
+        type: string
+    type: object
   misc.ProvePubkeyValidityRequest:
     properties:
       secret_key:
@@ -2166,64 +2229,29 @@ definitions:
     type: object
   v2.ConfidentialTransferRequest:
     properties:
-      ae_key:
+      auditor_ciphertext_hi:
         description: |-
-          AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the
-          new one this transfer leaves Source with, base58-encoded -- a raw
-          16-byte AES-128-GCM-SIV key, not a Solana address (see
-          tool/derive/ae-key-seed-message and tool/derive/ae-key), the same
-          key Source's own decryptable balance has always been kept under.
+          AuditorCiphertextHi is tool/prove/confidential-transfer's own
+          auditor_ciphertext_hi, base58-encoded (64 bytes).
         example: ""
         type: string
-      amount:
+      auditor_ciphertext_lo:
         description: |-
-          Amount is the raw base-unit count to move, not a UI decimal
-          string. It cannot exceed 2^48 - 1 (a confidential transfer amount's
-          lo/hi split covers 48 bits total, not the full 64 a balance can
-          hold), and this endpoint rejects it here rather than leaving that
-          to a range proof failure -- it also cannot exceed Source's own
-          current available balance, decrypted from
-          current_decryptable_available_balance to check.
-        example: "250"
-        type: string
-      auditor_elgamal_pubkey:
-        description: |-
-          AuditorElgamalPubkey may be left empty for a mint with no auditor
-          (see initialize on extensions/confidential-transfer-mint) --
-          resolved to the identity key internally, the same convention that
-          extension's own MaybeNull field uses. Given, it must be the exact
-          value that mint's ConfidentialTransferMint.auditor_elgamal_pubkey
-          holds.
+          AuditorCiphertextLo is tool/prove/confidential-transfer's own
+          auditor_ciphertext_lo, base58-encoded (64 bytes).
         example: ""
         type: string
-      current_available_balance_ciphertext:
+      ciphertext_validity_context_state_account:
         description: |-
-          CurrentAvailableBalanceCiphertext is Source's current available
-          balance, base58-encoded -- the raw 64-byte ElGamal ciphertext its
-          ConfidentialTransferAccount extension currently stores, read by the
-          caller off chain.
-        example: ""
-        type: string
-      current_decryptable_available_balance:
-        description: |-
-          CurrentDecryptableAvailableBalance is Source's current available
-          balance, base58-encoded -- the raw 36-byte AE ciphertext its
-          ConfidentialTransferAccount extension currently stores (the same
-          wire value configure-account's own decryptable_zero_balance and
-          apply-pending-balance's new_available_balance produce).
+          CiphertextValidityContextStateAccount holds the verified
+          BatchedGroupedCiphertext3HandlesValidity proof's context (see
+          context-state/verify/batched-grouped-ciphertext-3-handles-validity).
         example: ""
         type: string
       destination:
         description: |-
           Destination is credited. It must already carry the
           ConfidentialTransferAccount extension.
-        example: ""
-        type: string
-      destination_elgamal_pubkey:
-        description: |-
-          DestinationElgamalPubkey is Destination's ElGamal public key,
-          base58-encoded -- the same value its own configure-account call
-          registered.
         example: ""
         type: string
       durable_nonce_account:
@@ -2235,6 +2263,13 @@ definitions:
           is then used only to price the transaction. The authority is not a
           field: it is read from the account, since it is a fact about it rather
           than a choice.
+        example: ""
+        type: string
+      equality_context_state_account:
+        description: |-
+          EqualityContextStateAccount holds the verified
+          CiphertextCommitmentEquality proof's context (see
+          context-state/verify/ciphertext-commitment-equality).
         example: ""
         type: string
       fee_payer:
@@ -2254,6 +2289,12 @@ definitions:
         items:
           type: string
         type: array
+      new_source_decryptable_available_balance:
+        description: |-
+          NewSourceDecryptableAvailableBalance is tool/prove/confidential-transfer's
+          own field of the same name, base58-encoded (36 bytes).
+        example: ""
+        type: string
       owner:
         description: |-
           Owner is Source's owner, or its multisig for a multisig-owned
@@ -2265,6 +2306,12 @@ definitions:
           Program must be Token-2022. A classic Token account can never hold
           this extension.
         example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      range_proof_context_state_account:
+        description: |-
+          RangeProofContextStateAccount holds the verified BatchedRangeProofU128
+          proof's context (see context-state/verify/batched-range-proof-u128).
+        example: ""
         type: string
       recent_blockhash:
         description: |-
@@ -2283,14 +2330,6 @@ definitions:
           ConfidentialTransferAccount extension.
         example: ""
         type: string
-      source_elgamal_secret_key:
-        description: |-
-          SourceElgamalSecretKey is Source's own ElGamal secret key,
-          base58-encoded -- the same one configure-account registered the
-          public half of. The public key is derived from it here rather than
-          taken as a separate field, so the two can never be mismatched.
-        example: ""
-        type: string
     type: object
   v2.ConfidentialTransferResponse:
     properties:
@@ -2298,9 +2337,11 @@ definitions:
         items:
           type: string
         type: array
-      amount:
+      ciphertext_validity_context_state_account:
         type: string
       destination:
+        type: string
+      equality_context_state_account:
         type: string
       fee:
         $ref: '#/definitions/v2.SystemPayer'
@@ -2308,19 +2349,13 @@ definitions:
         type: string
       mint:
         type: string
-      new_source_available_balance:
-        description: |-
-          NewSourceAvailableBalance is what Source's available balance
-          becomes once this transfer lands -- decrypted here from
-          CurrentDecryptableAvailableBalance and Amount, not read back off
-          chain, since nothing about the resulting state is chain-readable
-          until this transaction actually lands.
-        type: string
       nonce_authority:
         type: string
       owner:
         type: string
       program:
+        type: string
+      range_proof_context_state_account:
         type: string
       recent_blockhash:
         type: string
@@ -2452,6 +2487,78 @@ definitions:
         type: string
       recent_blockhash:
         type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.ContextStateCloseRequest:
+    properties:
+      context_state_account:
+        description: |-
+          ContextStateAccount is closed. It must be owned by the ZkElgamalProof
+          program and its recorded authority must be ContextStateAccountOwner.
+        example: ""
+        type: string
+      context_state_account_owner:
+        description: |-
+          ContextStateAccountOwner is the authority recorded when the account
+          was verified into (see context-state/verify). It signs.
+        example: ""
+        type: string
+      destination:
+        description: Destination receives the account's lamports.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.ContextStateCloseResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      context_state_account:
+        type: string
+      context_state_account_owner:
+        type: string
+      destination:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      recent_blockhash:
+        type: string
+      reclaimed_lamports:
+        type: integer
       signers:
         items:
           type: string
@@ -12652,6 +12759,55 @@ paths:
       summary: Generate a ristretto255 ElGamal key pair
       tags:
       - tool
+  /svm/tool/prove/confidential-transfer:
+    post:
+      consumes:
+      - application/json
+      description: 'Builds the equality, ciphertext-validity, and range proofs a single
+        confidential transfer requires, in one call, because they are built from the
+        same fresh randomness and only agree with each other if drawn together. Each
+        proof_data blob goes to the matching zk-elgamal-proof/context-state/verify
+        endpoint (equality_proof_data to verify/ciphertext-commitment-equality, validity_proof_data
+        to verify/batched-grouped-ciphertext-3-handles-validity, range_proof_data
+        to verify/batched-range-proof-u128), and auditor_ciphertext_lo/hi and new_source_decryptable_available_balance
+        are what the transfer instruction itself carries. The response cannot be rebuilt:
+        a second call draws new randomness and produces proofs that no longer match
+        any context-state account already verified from the first. The source balance
+        must not change between building these proofs and the transfer landing, or
+        the transfer''s own checks against the stored balance fail.'
+      parameters:
+      - description: Transfer inputs
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ProveConfidentialTransferRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.ProveConfidentialTransferResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build the three proofs one ConfidentialTransfer needs
+      tags:
+      - tool
   /svm/tool/prove/pubkey-validity:
     post:
       consumes:
@@ -14943,19 +15099,19 @@ paths:
     post:
       consumes:
       - application/json
-      description: 'Moves amount confidentially from source to destination -- neither
+      description: 'Moves an amount confidentially from source to destination -- neither
         the amount nor either account''s resulting balance ever appears in plaintext
         on chain. Both accounts must already carry the ConfidentialTransferAccount
-        extension. Builds four instructions in one transaction: Transfer itself, followed
-        by the three zero-knowledge proofs it depends on (equality, ciphertext validity,
-        and a batched range proof), all computed by calling the real solana-zk-sdk
-        proof-generation code (compiled to wasm, run through wazero) rather than a
-        from-scratch Go port. current_available_balance_ciphertext and current_decryptable_available_balance
-        are source''s own current confidential state, read off chain by the caller
-        -- this endpoint has no ConfidentialTransferAccount TLV parser of its own.
-        amount is checked against the decrypted current balance and against the 48-bit
-        limit a confidential transfer amount''s lo/hi split can represent, both before
-        any proof is built. recent_blockhash is always required and is never fetched
+        extension. Builds only the Transfer instruction: the three zero-knowledge
+        proofs it depends on (equality, ciphertext validity, and a batched range proof)
+        must already be verified into context-state accounts, whose addresses are
+        named here -- build the proofs with tool/prove/confidential-transfer, create
+        the accounts with zk-elgamal-proof/context-state/create, and verify each with
+        context-state/verify. new_source_decryptable_available_balance, auditor_ciphertext_lo,
+        and auditor_ciphertext_hi must come from that same tool/prove/confidential-transfer
+        call, since a later call draws new randomness and no longer matches the verified
+        proofs. The source balance must not change between building the proofs and
+        this transfer landing. recent_blockhash is always required and is never fetched
         server-side. Left alone, it also builds the message and expires whenever the
         runtime says it does. Naming durable_nonce_account builds the message against
         the value that account stores instead, so the transaction never expires, and
@@ -17377,6 +17533,50 @@ paths:
         minimum
       tags:
       - v2-transaction-token-token-account
+  /svm/v2/transaction/zk-elgamal-proof/context-state/close:
+    post:
+      consumes:
+      - application/json
+      description: 'ZkElgamalProof CloseContextState: closes context_state_account
+        and sends its lamports to destination. One endpoint serves every proof type,
+        since the instruction takes the same three accounts whatever proof the account
+        holds. context_state_account_owner must be the authority recorded in the account
+        when it was verified (see context-state/verify), and it signs. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Context-state close request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ContextStateCloseRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ContextStateCloseResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Close a context-state account and reclaim its rent
+      tags:
+      - v2-transaction-zk-elgamal-proof-context-state
   /svm/v2/transaction/zk-elgamal-proof/context-state/create/batched-grouped-ciphertext-2-handles-validity:
     post:
       consumes:

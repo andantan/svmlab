@@ -12746,7 +12746,7 @@ func (h *TokenTransactionHandler) ApplyPendingBalance(w http.ResponseWriter, r *
 
 // ConfidentialTransfer godoc
 // @Summary      Move tokens confidentially between two accounts
-// @Description  Moves amount confidentially from source to destination -- neither the amount nor either account's resulting balance ever appears in plaintext on chain. Both accounts must already carry the ConfidentialTransferAccount extension. Builds four instructions in one transaction: Transfer itself, followed by the three zero-knowledge proofs it depends on (equality, ciphertext validity, and a batched range proof), all computed by calling the real solana-zk-sdk proof-generation code (compiled to wasm, run through wazero) rather than a from-scratch Go port. current_available_balance_ciphertext and current_decryptable_available_balance are source's own current confidential state, read off chain by the caller -- this endpoint has no ConfidentialTransferAccount TLV parser of its own. amount is checked against the decrypted current balance and against the 48-bit limit a confidential transfer amount's lo/hi split can represent, both before any proof is built. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Description  Moves an amount confidentially from source to destination -- neither the amount nor either account's resulting balance ever appears in plaintext on chain. Both accounts must already carry the ConfidentialTransferAccount extension. Builds only the Transfer instruction: the three zero-knowledge proofs it depends on (equality, ciphertext validity, and a batched range proof) must already be verified into context-state accounts, whose addresses are named here -- build the proofs with tool/prove/confidential-transfer, create the accounts with zk-elgamal-proof/context-state/create, and verify each with context-state/verify. new_source_decryptable_available_balance, auditor_ciphertext_lo, and auditor_ciphertext_hi must come from that same tool/prove/confidential-transfer call, since a later call draws new randomness and no longer matches the verified proofs. The source balance must not change between building the proofs and this transfer landing. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
 // @Tags         v2-transaction-token-extensions
 // @Accept       json
 // @Produce      json
@@ -12764,27 +12764,6 @@ func (h *TokenTransactionHandler) ConfidentialTransfer(w http.ResponseWriter, r 
 	}
 	if err := req.ValidateRequest(); err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-
-	sourcePublicKey, err := core.DeriveElGamalPublicKey(req.ToSourceSecretKey())
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source_elgamal_secret_key: %s", err))
-		return
-	}
-
-	proofs, err := core.BuildTransferProofs(
-		req.ToSourceSecretKey(), sourcePublicKey, req.ToDestinationElgamalPubkey(), req.ToAuditorElgamalPubkey(),
-		req.ToCurrentAvailableBalanceCiphertext(), req.ToCurrentDecryptableAvailableBalance(), req.ToAeKey(),
-		req.ToAmount(),
-	)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	newSourceAvailableBalance, err := core.DecryptAeAmount(req.ToAeKey(), proofs.NewSourceDecryptableAvailableBalance)
-	if err != nil {
-		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to read back new source balance: %s", err))
 		return
 	}
 
@@ -12810,6 +12789,9 @@ func (h *TokenTransactionHandler) ConfidentialTransfer(w http.ResponseWriter, r 
 		req.SourceKey(),
 		req.MintKey(),
 		req.DestinationKey(),
+		req.EqualityContextKey(),
+		req.ValidityContextKey(),
+		req.RangeContextKey(),
 		req.FeePayerKey(),
 	}
 	if !req.DurableNonceAccountKey().IsNil() {
@@ -12849,28 +12831,38 @@ func (h *TokenTransactionHandler) ConfidentialTransfer(w http.ResponseWriter, r 
 		return
 	}
 
-	transferIx, err := tokenProgram.ConfidentialTransfer(req.SourceKey(), req.MintKey(), req.DestinationKey(), req.OwnerKey(), req.ToMultisigSigners(),
-		proofs.NewSourceDecryptableAvailableBalance, proofs.AuditorCiphertextLo, proofs.AuditorCiphertextHi)
+	for _, c := range []struct {
+		name  string
+		key   *types.PublicKey
+		space uint64
+	}{
+		{"equality_context_state_account", req.EqualityContextKey(), core.CiphertextCommitmentEqualityContextStateSpace},
+		{"ciphertext_validity_context_state_account", req.ValidityContextKey(), core.BatchedGroupedCiphertext3HandlesValidityContextStateSpace},
+		{"range_proof_context_state_account", req.RangeContextKey(), core.BatchedRangeProofU128ContextStateSpace},
+	} {
+		info := accounts[c.key.Base58()]
+		if !info.Exists() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: %s does not exist -- create and verify it first via zk-elgamal-proof/context-state", c.name, c.key))
+			return
+		}
+		if info.Owner != core.ZkElgamalProof.ID().Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: %s is not owned by %s", c.name, c.key, core.ZkElgamalProof.ID()))
+			return
+		}
+		if info.Space != c.space {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("%s: %s is %d bytes, expected %d", c.name, c.key, info.Space, c.space))
+			return
+		}
+	}
+
+	transferIx, err := tokenProgram.ConfidentialTransfer(req.SourceKey(), req.MintKey(), req.DestinationKey(),
+		req.EqualityContextKey(), req.ValidityContextKey(), req.RangeContextKey(), req.OwnerKey(), req.ToMultisigSigners(),
+		req.ToNewSourceDecryptableAvailableBalance(), req.ToAuditorCiphertextLo(), req.ToAuditorCiphertextHi())
 	if err != nil {
 		handler.WriteError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	equalityIx, err := core.ZkElgamalProof.VerifyCiphertextCommitmentEqualityInline(proofs.EqualityProof)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	validityIx, err := core.ZkElgamalProof.VerifyBatchedGroupedCiphertext3HandlesValidityInline(proofs.ValidityProof)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	rangeIx, err := core.ZkElgamalProof.VerifyBatchedRangeProofU128Inline(proofs.RangeProof)
-	if err != nil {
-		handler.WriteError(w, http.StatusBadRequest, err.Error())
-		return
-	}
-	instructions := types.NewInstructions(transferIx, equalityIx, validityIx, rangeIx)
+	instructions := types.NewInstructions(transferIx)
 
 	var (
 		message        *types.Message
@@ -12952,8 +12944,9 @@ func (h *TokenTransactionHandler) ConfidentialTransfer(w http.ResponseWriter, r 
 	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
 	handler.WriteOK(w, NewConfidentialTransferResponse(
 		tx, txRaw, messageBytes,
-		req.FeePayerKey(), req.SourceKey(), req.MintKey(), req.DestinationKey(), req.OwnerKey(), req.TokenProgramID(), nonceAuthority,
-		req.ToAmount(), newSourceAvailableBalance, fee,
+		req.FeePayerKey(), req.SourceKey(), req.MintKey(), req.DestinationKey(), req.OwnerKey(), req.TokenProgramID(),
+		req.EqualityContextKey(), req.ValidityContextKey(), req.RangeContextKey(), nonceAuthority,
+		fee,
 	))
 }
 

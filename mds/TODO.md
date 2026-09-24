@@ -172,6 +172,85 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     `expectedPendingBalanceCreditCounter: 1` 확인. `Deposit`으로 넣은 10개가
     pending→available로 정상 이동(지갑 UI에서도 계좌 extensions 상태 변화
     확인됨)
+  **`Transfer`(opcode 27 sub 7) devnet 완주 — 민트 새로 만들어 처음부터
+  (mint→ATA 2개→configure→mint-to→deposit→apply→proof→컨텍스트 계정→
+  transfer→수신 apply) 전 과정 확인.** 트랜잭션 `4C4vc24m…`, `err: None`,
+  15246 CU, RPC parsed 로그의 세 proof offset이 전부 0(컨텍스트 계정 참조)
+  으로 찍힘. 송신 decryptable 10→0, 수신 pending 채워짐(credit counter 1)
+  후 수신 `apply-pending-balance`(`new_available_balance=20`) 뒤 decryptable
+  20·pending 0 확인. (ElGamal 암호문을 직접 복호화한 건 아니고 AE
+  decryptable 값과 pending 0 여부로 확인)
+  - **막혔던 원인/해결**: proof 3개(equality 320 + validity 544 + range
+    1000)를 inline으로 실으면 메시지 3232바이트로 1232 한도 초과
+    (`-32602 too large`). proof를 별도 트랜잭션에서 컨텍스트 계정에 미리
+    검증·저장하고 `Transfer`는 계정 주소만 참조하는 방식으로 전환.
+  - 기존 inline 빌더는 offset을 1,1,1로 박아뒀는데 실제로는 1,2,3이어야 했음
+    (어차피 크기 때문에 못 쓰는 경로라 제거). 컨텍스트 모드는 upstream
+    `inner_transfer`/`TransferInstructionData` 원문 확인: offset 0=컨텍스트
+    계정, 계좌 `[source, mint, dest, equality ctx, validity ctx, range ctx,
+    authority(+멀티시그)]`, 인스트럭션 sysvar는 offset 모드일 때만 포함
+  - `transfer` 엔드포인트 요청 바디 **변경**: secret key·ae_key·amount·
+    현재 잔액 암호문 필드 제거, `equality_context_state_account` /
+    `ciphertext_validity_context_state_account` /
+    `range_proof_context_state_account` /
+    `new_source_decryptable_available_balance` / `auditor_ciphertext_lo` /
+    `auditor_ciphertext_hi` 추가. 서버는 컨텍스트 계정 3개의 존재·owner·space만
+    확인. 응답에서 `amount`/`new_source_available_balance` 제거
+  - **신규 `POST /svm/tool/prove/confidential-transfer`**: 위 proof 3개 +
+    auditor ciphertext lo/hi + 새 decryptable 잔액을 한 번에 생성
+    (`core.BuildTransferProofs`). 3개가 같은 랜덤 opening을 공유하므로
+    따로 만들면 어긋남 — **응답은 재생성 불가**(다시 부르면 이미 검증한
+    컨텍스트 계정과 안 맞음). 소스 잔액이 proof 생성~transfer 사이에
+    바뀌면 실패
+  - 이번에 겪은 것: (1) auditor secret key를 송신 키로 잘못 넣어
+    `zkbridge: proof generation failed` — 서버 버그 아님, 도출한 pubkey로
+    확인. 민트에 auditor가 있으면 `auditor_elgamal_pubkey`를 반드시 같은
+    값으로 넣어야 함. (2) range proof verify 트랜잭션은 nonce 없이 약
+    1205바이트, `durable_nonce_account`를 붙이면 약 1311바이트로 한도 초과 —
+    이 트랜잭션만 nonce 없이 보낼 것, context_state_account_owner를
+    fee_payer와 같은 주소로 두면 계정 목록 32바이트 절약
+
+  **신규 최상위 그룹 `/svm/v2/transaction/zk-elgamal-proof/context-state/`**
+  (ZkElgamalProof는 Token-2022와 별개 프로그램이라 compute-budget처럼 자기
+  그룹). 1 instruction = 1 endpoint, 요청 바디에 proof_type을 받지 않고
+  라우트로 분리:
+  - [x] `create/<proof-type>` 12개 — System CreateAccount(owner=ZkElgamalProof,
+    space는 라우트마다 고정). 키페어 방식만 지원 (seed 방식은 owner가 주소
+    도출에 들어가므로 `CreateAccountWithSeed`를 owner=ZkElgamalProof로 한 번에
+    호출하는 별도 엔드포인트가 필요 — 미작성)
+  - [x] `verify/<proof-type>` 12개 — Verify* 컨텍스트 스테이트 형태
+    (accounts `[context(writable), owner(readonly)]`, 데이터는 inline과
+    동일). context 계정 존재·owner·space 확인 후 빌드. `pubkey-validity`만
+    `elgamal_pubkey`+`pubkey_proof`를 받아 로컬 사전검증, 나머지 11개는
+    `proof_data`(base58) 하나
+  - [x] `close` 1개(12개 아님 — 인스트럭션이 proof 타입과 무관하게
+    `[context, destination, owner(signer)]` 동일). 기록된 authority(데이터
+    앞 32바이트)와 owner 일치 사전확인. devnet-confirmed — equality/validity/
+    range 컨텍스트 계정 3개를 닫았고 `getAccountInfo`가 전부 `None`
+  - space = 32(authority) + 1(proof_type) + context. 12종 전부 인터페이스
+    크레이트 `proof_data/*.rs` 원문으로 확인: pubkey-validity 65,
+    ciphertext-commitment-equality 161, batched-grouped-3-handles 385,
+    batched-range-u128 297, zero-ciphertext 129, ciphertext-ciphertext-equality
+    225, percentage-with-cap 137, batched-range-u64/u256 297(세 range proof가
+    `BatchedRangeProofContext` 공유), grouped-2-handles 193,
+    batched-grouped-2-handles 289, grouped-3-handles 257
+  - ProofData 길이(context+proof): 나머지 8종은 `zk-sdk-pod`의
+    `*_PROOF_LEN` 상수로 확인 — zero-ciphertext 192,
+    ciphertext-ciphertext-equality 416, percentage-with-cap 360,
+    range-u64 936, range-u256 1064, grouped-2 320, batched-grouped-2 416,
+    grouped-3 416
+  - devnet: create 3종(equality/validity/range)+verify 3종 확인 —
+    `proof_type` 3/12/7, context 채워짐, authority=지갑0. `pubkey-validity`
+    계정(65바이트)·range 계정(297바이트)도 create까지 확인
+  - **한계**: `proof_data`를 만들어주는 tool은 `prove/pubkey-validity`와
+    `prove/confidential-transfer`(equality·validity·range 3종)뿐. 나머지 8종은
+    `zkbridge`에 Prove 함수가 없어 verify 엔드포인트만 있고 실제로 돌려볼
+    방법이 없음(wasm이 해당 export를 갖는지부터 확인 필요). create와 verify를
+    같은 트랜잭션에 합쳐주는 도구도 없어서, 인터페이스 문서가 경고한
+    "미초기화 계정 선점" 여지가 남음(지금은 두 트랜잭션으로 나눠 보냄)
+  - 코드 정리: `zk_elgamal_proof_program.go`→`zk_proof.go`,
+    `ae_encryption.go`→`crypto.go` 병합, space/len 상수는 const 블록 하나로
+
   ApplyPendingBalance 등)는 여전히 진행 중 — 각각 필요한 proof 종류가 다름
   (range proof, ciphertext equality proof 등), 하나씩 순서대로 계속.
   - `core.UpdateConfidentialTransferMint` (opcode 27 sub 1): `UpdateMintData`엔
@@ -335,8 +414,11 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     (InitializeGroup, UpdateGroupMaxSize, UpdateGroupAuthority, InitializeMember)
   - Metaplex Token Metadata — 완전히 다른 프로그램, Borsh 직렬화 새로 배워야 함,
     근데 지갑/익스플로러 실질 표준이라 결국 필요
-  - Confidential Transfer / Confidential Transfer Fee / Confidential Mint Burn —
-    ElGamal 암호화가 들어가는 가장 무거운 서브시스템 (각각 15/6/6개 instruction)
+  - Confidential Transfer(15개 중 InitializeMint/UpdateMint/ConfigureAccount/
+    ApproveAccount/Deposit/ApplyPendingBalance/Transfer 완료, 남은 건 Withdraw·
+    EmptyAccount·Enable/Disable credits·fee 변형 등) / Confidential Transfer
+    Fee / Confidential Mint Burn — ElGamal 암호화가 들어가는 가장 무거운
+    서브시스템 (각각 15/6/6개 instruction)
 
 - **작은 후속 작업 (나중에)**
   - `getRecentPrioritizationFees` RPC 래퍼 — `svm/cluster/...`에 읽기 전용으로 추가.

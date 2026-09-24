@@ -2,6 +2,7 @@ package misc
 
 import (
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/andantan/svmlab/core"
@@ -239,5 +240,134 @@ type ConvertBase64To58Response struct {
 func NewConvertBase64To58Response(base58 string) *ConvertBase64To58Response {
 	return &ConvertBase64To58Response{
 		Base58: base58,
+	}
+}
+
+// ProveConfidentialTransferRequest names everything the three proofs one
+// ConfidentialTransfer needs are built from. The three come out of one
+// request rather than three because they share their inputs: the same
+// fresh Pedersen openings and the same ciphertexts feed all of them, so
+// proofs built in separate calls would each draw different randomness and
+// no longer describe the same transfer.
+type ProveConfidentialTransferRequest struct {
+	// SourceElgamalSecretKey is the source account's own ElGamal secret
+	// key, base58-encoded. The public key is derived from it here.
+	SourceElgamalSecretKey string `json:"source_elgamal_secret_key" example:""`
+
+	// DestinationElgamalPubkey is the destination account's ElGamal public
+	// key, base58-encoded.
+	DestinationElgamalPubkey string `json:"destination_elgamal_pubkey" example:""`
+
+	// AuditorElgamalPubkey may be left empty for a mint with no auditor.
+	// Given, it must be the exact value that mint's
+	// ConfidentialTransferMint.auditor_elgamal_pubkey holds.
+	AuditorElgamalPubkey string `json:"auditor_elgamal_pubkey" example:""`
+
+	// CurrentAvailableBalanceCiphertext is the source's current available
+	// balance, base58-encoded raw 64-byte ElGamal ciphertext.
+	CurrentAvailableBalanceCiphertext string `json:"current_available_balance_ciphertext" example:""`
+
+	// CurrentDecryptableAvailableBalance is the source's current available
+	// balance, base58-encoded raw 36-byte AE ciphertext.
+	CurrentDecryptableAvailableBalance string `json:"current_decryptable_available_balance" example:""`
+
+	// AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the
+	// new one, base58-encoded raw 16-byte key.
+	AeKey string `json:"ae_key" example:""`
+
+	// Amount is the raw base-unit count to move. It cannot exceed 2^48 - 1
+	// nor the source's current available balance.
+	Amount string `json:"amount" example:"250"`
+
+	sourceSecretKey                    []byte
+	destinationElgamalPubkey           []byte
+	auditorElgamalPubkey               []byte
+	currentAvailableBalanceCiphertext  []byte
+	currentDecryptableAvailableBalance []byte
+	aeKey                              []byte
+	amount                             uint64
+}
+
+func (r *ProveConfidentialTransferRequest) ValidateRequest() error {
+	var err error
+
+	if r.sourceSecretKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.SourceElgamalSecretKey), 32); err != nil {
+		return errors.New("source_elgamal_secret_key: " + err.Error())
+	}
+	if r.destinationElgamalPubkey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.DestinationElgamalPubkey), 32); err != nil {
+		return errors.New("destination_elgamal_pubkey: " + err.Error())
+	}
+	if a := strings.TrimSpace(r.AuditorElgamalPubkey); a != "" {
+		if r.auditorElgamalPubkey, err = codec.Base58.DecodeFixed(a, 32); err != nil {
+			return errors.New("auditor_elgamal_pubkey: " + err.Error())
+		}
+	}
+	if r.currentAvailableBalanceCiphertext, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.CurrentAvailableBalanceCiphertext), 64); err != nil {
+		return errors.New("current_available_balance_ciphertext: " + err.Error())
+	}
+	if r.currentDecryptableAvailableBalance, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.CurrentDecryptableAvailableBalance), core.AeCiphertextLen); err != nil {
+		return errors.New("current_decryptable_available_balance: " + err.Error())
+	}
+	if r.aeKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AeKey), core.AeKeyLen); err != nil {
+		return errors.New("ae_key: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: " + err.Error())
+	}
+	if r.amount == 0 {
+		return errors.New("amount must be greater than zero")
+	}
+
+	return nil
+}
+
+func (r *ProveConfidentialTransferRequest) ToSourceSecretKey() []byte { return r.sourceSecretKey }
+func (r *ProveConfidentialTransferRequest) ToDestinationElgamalPubkey() []byte {
+	return r.destinationElgamalPubkey
+}
+func (r *ProveConfidentialTransferRequest) ToAuditorElgamalPubkey() []byte {
+	return r.auditorElgamalPubkey
+}
+func (r *ProveConfidentialTransferRequest) ToCurrentAvailableBalanceCiphertext() []byte {
+	return r.currentAvailableBalanceCiphertext
+}
+func (r *ProveConfidentialTransferRequest) ToCurrentDecryptableAvailableBalance() []byte {
+	return r.currentDecryptableAvailableBalance
+}
+func (r *ProveConfidentialTransferRequest) ToAeKey() []byte  { return r.aeKey }
+func (r *ProveConfidentialTransferRequest) ToAmount() uint64 { return r.amount }
+
+// ProveConfidentialTransferResponse carries the three proof-data blobs
+// (each the proof_data of its matching zk-elgamal-proof/context-state/
+// verify endpoint) and the three values ConfidentialTransfer's own
+// instruction data needs. Nothing here can be rebuilt later: a second call
+// draws new openings and produces proofs that no longer match any context
+// state account already verified from this response.
+type ProveConfidentialTransferResponse struct {
+	EqualityProofData string `json:"equality_proof_data"`
+	ValidityProofData string `json:"validity_proof_data"`
+	RangeProofData    string `json:"range_proof_data"`
+
+	AuditorCiphertextLo                  string `json:"auditor_ciphertext_lo"`
+	AuditorCiphertextHi                  string `json:"auditor_ciphertext_hi"`
+	NewSourceDecryptableAvailableBalance string `json:"new_source_decryptable_available_balance"`
+
+	SourceElgamalPubkey string `json:"source_elgamal_pubkey"`
+}
+
+func NewProveConfidentialTransferResponse(p *core.TransferProofs, sourcePublicKey []byte) *ProveConfidentialTransferResponse {
+	return &ProveConfidentialTransferResponse{
+		EqualityProofData:                    codec.Base58.Encode(p.EqualityProof),
+		ValidityProofData:                    codec.Base58.Encode(p.ValidityProof),
+		RangeProofData:                       codec.Base58.Encode(p.RangeProof),
+		AuditorCiphertextLo:                  codec.Base58.Encode(p.AuditorCiphertextLo),
+		AuditorCiphertextHi:                  codec.Base58.Encode(p.AuditorCiphertextHi),
+		NewSourceDecryptableAvailableBalance: codec.Base58.Encode(p.NewSourceDecryptableAvailableBalance),
+		SourceElgamalPubkey:                  codec.Base58.Encode(sourcePublicKey),
 	}
 }

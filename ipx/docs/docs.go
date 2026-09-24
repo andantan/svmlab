@@ -2418,6 +2418,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/tool/prove/confidential-transfer": {
+            "post": {
+                "description": "Builds the equality, ciphertext-validity, and range proofs a single confidential transfer requires, in one call, because they are built from the same fresh randomness and only agree with each other if drawn together. Each proof_data blob goes to the matching zk-elgamal-proof/context-state/verify endpoint (equality_proof_data to verify/ciphertext-commitment-equality, validity_proof_data to verify/batched-grouped-ciphertext-3-handles-validity, range_proof_data to verify/batched-range-proof-u128), and auditor_ciphertext_lo/hi and new_source_decryptable_available_balance are what the transfer instruction itself carries. The response cannot be rebuilt: a second call draws new randomness and produces proofs that no longer match any context-state account already verified from the first. The source balance must not change between building these proofs and the transfer landing, or the transfer's own checks against the stored balance fail.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool"
+                ],
+                "summary": "Build the three proofs one ConfidentialTransfer needs",
+                "parameters": [
+                    {
+                        "description": "Transfer inputs",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialTransferRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialTransferResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/tool/prove/pubkey-validity": {
             "post": {
                 "description": "Derives the public key secret_key determines and builds a sigma-protocol proof that whoever holds secret_key knows it -- what extensions/confidential-transfer-account/configure-account requires alongside the public key it names, since nothing else lets the deployed program tell a real ElGamal public key from 32 arbitrary bytes. The proof is zero-knowledge: public_key and proof in the response reveal nothing about secret_key beyond what configure-account already needs to see.",
@@ -4985,7 +5042,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/extensions/confidential-transfer-account/transfer": {
             "post": {
-                "description": "Moves amount confidentially from source to destination -- neither the amount nor either account's resulting balance ever appears in plaintext on chain. Both accounts must already carry the ConfidentialTransferAccount extension. Builds four instructions in one transaction: Transfer itself, followed by the three zero-knowledge proofs it depends on (equality, ciphertext validity, and a batched range proof), all computed by calling the real solana-zk-sdk proof-generation code (compiled to wasm, run through wazero) rather than a from-scratch Go port. current_available_balance_ciphertext and current_decryptable_available_balance are source's own current confidential state, read off chain by the caller -- this endpoint has no ConfidentialTransferAccount TLV parser of its own. amount is checked against the decrypted current balance and against the 48-bit limit a confidential transfer amount's lo/hi split can represent, both before any proof is built. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Moves an amount confidentially from source to destination -- neither the amount nor either account's resulting balance ever appears in plaintext on chain. Both accounts must already carry the ConfidentialTransferAccount extension. Builds only the Transfer instruction: the three zero-knowledge proofs it depends on (equality, ciphertext validity, and a batched range proof) must already be verified into context-state accounts, whose addresses are named here -- build the proofs with tool/prove/confidential-transfer, create the accounts with zk-elgamal-proof/context-state/create, and verify each with context-state/verify. new_source_decryptable_available_balance, auditor_ciphertext_lo, and auditor_ciphertext_hi must come from that same tool/prove/confidential-transfer call, since a later call draws new randomness and no longer matches the verified proofs. The source balance must not change between building the proofs and this transfer landing. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
                 "consumes": [
                     "application/json"
                 ],
@@ -7719,6 +7776,58 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/close": {
+            "post": {
+                "description": "ZkElgamalProof CloseContextState: closes context_state_account and sends its lamports to destination. One endpoint serves every proof type, since the instruction takes the same three accounts whatever proof the account holds. context_state_account_owner must be the authority recorded in the account when it was verified (see context-state/verify), and it signs. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Close a context-state account and reclaim its rent",
+                "parameters": [
+                    {
+                        "description": "Context-state close request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateCloseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateCloseResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/zk-elgamal-proof/context-state/create/batched-grouped-ciphertext-2-handles-validity": {
             "post": {
                 "description": "System CreateAccount only, sized (289 bytes) and owned (by the ZkElgamalProof program) for a BatchedGroupedCiphertext2HandlesValidity proof's context, but not yet written to. This is deliberately the low-level half: the account must be created in the same transaction as (and strictly before) the matching context-state/verify-batched-grouped-ciphertext-2-handles-validity instruction, or another party can claim it first -- build create+verify as two instructions in one transaction, calling this endpoint and context-state/verify-batched-grouped-ciphertext-2-handles-validity and merging their instructions yourself. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -9403,6 +9512,72 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "health": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.ProveConfidentialTransferRequest": {
+            "type": "object",
+            "properties": {
+                "ae_key": {
+                    "description": "AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the\nnew one, base58-encoded raw 16-byte key.",
+                    "type": "string",
+                    "example": ""
+                },
+                "amount": {
+                    "description": "Amount is the raw base-unit count to move. It cannot exceed 2^48 - 1\nnor the source's current available balance.",
+                    "type": "string",
+                    "example": "250"
+                },
+                "auditor_elgamal_pubkey": {
+                    "description": "AuditorElgamalPubkey may be left empty for a mint with no auditor.\nGiven, it must be the exact value that mint's\nConfidentialTransferMint.auditor_elgamal_pubkey holds.",
+                    "type": "string",
+                    "example": ""
+                },
+                "current_available_balance_ciphertext": {
+                    "description": "CurrentAvailableBalanceCiphertext is the source's current available\nbalance, base58-encoded raw 64-byte ElGamal ciphertext.",
+                    "type": "string",
+                    "example": ""
+                },
+                "current_decryptable_available_balance": {
+                    "description": "CurrentDecryptableAvailableBalance is the source's current available\nbalance, base58-encoded raw 36-byte AE ciphertext.",
+                    "type": "string",
+                    "example": ""
+                },
+                "destination_elgamal_pubkey": {
+                    "description": "DestinationElgamalPubkey is the destination account's ElGamal public\nkey, base58-encoded.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_elgamal_secret_key": {
+                    "description": "SourceElgamalSecretKey is the source account's own ElGamal secret\nkey, base58-encoded. The public key is derived from it here.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "misc.ProveConfidentialTransferResponse": {
+            "type": "object",
+            "properties": {
+                "auditor_ciphertext_hi": {
+                    "type": "string"
+                },
+                "auditor_ciphertext_lo": {
+                    "type": "string"
+                },
+                "equality_proof_data": {
+                    "type": "string"
+                },
+                "new_source_decryptable_available_balance": {
+                    "type": "string"
+                },
+                "range_proof_data": {
+                    "type": "string"
+                },
+                "source_elgamal_pubkey": {
+                    "type": "string"
+                },
+                "validity_proof_data": {
                     "type": "string"
                 }
             }
@@ -11563,28 +11738,18 @@ const docTemplate = `{
         "v2.ConfidentialTransferRequest": {
             "type": "object",
             "properties": {
-                "ae_key": {
-                    "description": "AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the\nnew one this transfer leaves Source with, base58-encoded -- a raw\n16-byte AES-128-GCM-SIV key, not a Solana address (see\ntool/derive/ae-key-seed-message and tool/derive/ae-key), the same\nkey Source's own decryptable balance has always been kept under.",
+                "auditor_ciphertext_hi": {
+                    "description": "AuditorCiphertextHi is tool/prove/confidential-transfer's own\nauditor_ciphertext_hi, base58-encoded (64 bytes).",
                     "type": "string",
                     "example": ""
                 },
-                "amount": {
-                    "description": "Amount is the raw base-unit count to move, not a UI decimal\nstring. It cannot exceed 2^48 - 1 (a confidential transfer amount's\nlo/hi split covers 48 bits total, not the full 64 a balance can\nhold), and this endpoint rejects it here rather than leaving that\nto a range proof failure -- it also cannot exceed Source's own\ncurrent available balance, decrypted from\ncurrent_decryptable_available_balance to check.",
-                    "type": "string",
-                    "example": "250"
-                },
-                "auditor_elgamal_pubkey": {
-                    "description": "AuditorElgamalPubkey may be left empty for a mint with no auditor\n(see initialize on extensions/confidential-transfer-mint) --\nresolved to the identity key internally, the same convention that\nextension's own MaybeNull field uses. Given, it must be the exact\nvalue that mint's ConfidentialTransferMint.auditor_elgamal_pubkey\nholds.",
+                "auditor_ciphertext_lo": {
+                    "description": "AuditorCiphertextLo is tool/prove/confidential-transfer's own\nauditor_ciphertext_lo, base58-encoded (64 bytes).",
                     "type": "string",
                     "example": ""
                 },
-                "current_available_balance_ciphertext": {
-                    "description": "CurrentAvailableBalanceCiphertext is Source's current available\nbalance, base58-encoded -- the raw 64-byte ElGamal ciphertext its\nConfidentialTransferAccount extension currently stores, read by the\ncaller off chain.",
-                    "type": "string",
-                    "example": ""
-                },
-                "current_decryptable_available_balance": {
-                    "description": "CurrentDecryptableAvailableBalance is Source's current available\nbalance, base58-encoded -- the raw 36-byte AE ciphertext its\nConfidentialTransferAccount extension currently stores (the same\nwire value configure-account's own decryptable_zero_balance and\napply-pending-balance's new_available_balance produce).",
+                "ciphertext_validity_context_state_account": {
+                    "description": "CiphertextValidityContextStateAccount holds the verified\nBatchedGroupedCiphertext3HandlesValidity proof's context (see\ncontext-state/verify/batched-grouped-ciphertext-3-handles-validity).",
                     "type": "string",
                     "example": ""
                 },
@@ -11593,13 +11758,13 @@ const docTemplate = `{
                     "type": "string",
                     "example": ""
                 },
-                "destination_elgamal_pubkey": {
-                    "description": "DestinationElgamalPubkey is Destination's ElGamal public key,\nbase58-encoded -- the same value its own configure-account call\nregistered.",
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
                     "type": "string",
                     "example": ""
                 },
-                "durable_nonce_account": {
-                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                "equality_context_state_account": {
+                    "description": "EqualityContextStateAccount holds the verified\nCiphertextCommitmentEquality proof's context (see\ncontext-state/verify/ciphertext-commitment-equality).",
                     "type": "string",
                     "example": ""
                 },
@@ -11620,6 +11785,11 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "new_source_decryptable_available_balance": {
+                    "description": "NewSourceDecryptableAvailableBalance is tool/prove/confidential-transfer's\nown field of the same name, base58-encoded (36 bytes).",
+                    "type": "string",
+                    "example": ""
+                },
                 "owner": {
                     "description": "Owner is Source's owner, or its multisig for a multisig-owned\naccount (see MultisigSigners).",
                     "type": "string",
@@ -11630,6 +11800,11 @@ const docTemplate = `{
                     "type": "string",
                     "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
                 },
+                "range_proof_context_state_account": {
+                    "description": "RangeProofContextStateAccount holds the verified BatchedRangeProofU128\nproof's context (see context-state/verify/batched-range-proof-u128).",
+                    "type": "string",
+                    "example": ""
+                },
                 "recent_blockhash": {
                     "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
                     "type": "string",
@@ -11637,11 +11812,6 @@ const docTemplate = `{
                 },
                 "source": {
                     "description": "Source is debited. It must already carry the\nConfidentialTransferAccount extension.",
-                    "type": "string",
-                    "example": ""
-                },
-                "source_elgamal_secret_key": {
-                    "description": "SourceElgamalSecretKey is Source's own ElGamal secret key,\nbase58-encoded -- the same one configure-account registered the\npublic half of. The public key is derived from it here rather than\ntaken as a separate field, so the two can never be mismatched.",
                     "type": "string",
                     "example": ""
                 }
@@ -11656,10 +11826,13 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
-                "amount": {
+                "ciphertext_validity_context_state_account": {
                     "type": "string"
                 },
                 "destination": {
+                    "type": "string"
+                },
+                "equality_context_state_account": {
                     "type": "string"
                 },
                 "fee": {
@@ -11671,10 +11844,6 @@ const docTemplate = `{
                 "mint": {
                     "type": "string"
                 },
-                "new_source_available_balance": {
-                    "description": "NewSourceAvailableBalance is what Source's available balance\nbecomes once this transfer lands -- decrypted here from\nCurrentDecryptableAvailableBalance and Amount, not read back off\nchain, since nothing about the resulting state is chain-readable\nuntil this transaction actually lands.",
-                    "type": "string"
-                },
                 "nonce_authority": {
                     "type": "string"
                 },
@@ -11682,6 +11851,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "program": {
+                    "type": "string"
+                },
+                "range_proof_context_state_account": {
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -11806,6 +11978,85 @@ const docTemplate = `{
                 },
                 "recent_blockhash": {
                     "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateCloseRequest": {
+            "type": "object",
+            "properties": {
+                "context_state_account": {
+                    "description": "ContextStateAccount is closed. It must be owned by the ZkElgamalProof\nprogram and its recorded authority must be ContextStateAccountOwner.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is the authority recorded when the account\nwas verified into (see context-state/verify). It signs.",
+                    "type": "string",
+                    "example": ""
+                },
+                "destination": {
+                    "description": "Destination receives the account's lamports.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateCloseResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "reclaimed_lamports": {
+                    "type": "integer"
                 },
                 "signers": {
                     "type": "array",

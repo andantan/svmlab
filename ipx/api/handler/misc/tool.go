@@ -221,3 +221,45 @@ func (h *ToolHandler) ConvertBase64To58(w http.ResponseWriter, r *http.Request) 
 
 	handler.WriteOK(w, NewConvertBase64To58Response(base58))
 }
+
+// ProveConfidentialTransfer godoc
+// @Summary      Build the three proofs one ConfidentialTransfer needs
+// @Description  Builds the equality, ciphertext-validity, and range proofs a single confidential transfer requires, in one call, because they are built from the same fresh randomness and only agree with each other if drawn together. Each proof_data blob goes to the matching zk-elgamal-proof/context-state/verify endpoint (equality_proof_data to verify/ciphertext-commitment-equality, validity_proof_data to verify/batched-grouped-ciphertext-3-handles-validity, range_proof_data to verify/batched-range-proof-u128), and auditor_ciphertext_lo/hi and new_source_decryptable_available_balance are what the transfer instruction itself carries. The response cannot be rebuilt: a second call draws new randomness and produces proofs that no longer match any context-state account already verified from the first. The source balance must not change between building these proofs and the transfer landing, or the transfer's own checks against the stored balance fail.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ProveConfidentialTransferRequest  true  "Transfer inputs"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ProveConfidentialTransferResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/tool/prove/confidential-transfer [post]
+func (h *ToolHandler) ProveConfidentialTransfer(w http.ResponseWriter, r *http.Request) {
+	req := new(ProveConfidentialTransferRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	sourcePublicKey, err := core.DeriveElGamalPublicKey(req.ToSourceSecretKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source_elgamal_secret_key: %s", err))
+		return
+	}
+
+	proofs, err := core.BuildTransferProofs(
+		req.ToSourceSecretKey(), sourcePublicKey, req.ToDestinationElgamalPubkey(), req.ToAuditorElgamalPubkey(),
+		req.ToCurrentAvailableBalanceCiphertext(), req.ToCurrentDecryptableAvailableBalance(), req.ToAeKey(),
+		req.ToAmount(),
+	)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewProveConfidentialTransferResponse(proofs, sourcePublicKey))
+}

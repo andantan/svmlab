@@ -2149,3 +2149,148 @@ func (t *token) ConfidentialRotateSupplyElGamalPubkey(mint, equalityContext, aut
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
 }
+
+// InitializeNonTransferableMint marks mint as non-transferable -- tokens of it
+// can be minted and burned but never moved between accounts. TokenInstruction
+// InitializeNonTransferableMint (opcode 32), no data beyond the discriminant;
+// accounts are [mint(writable)]. Every token account of such a mint gets the
+// NonTransferableAccount extension automatically and, per the program, needs
+// ImmutableOwner.
+//
+// Like every mint extension, this can only run after the mint account has been
+// allocated (sized to include this extension) and before initialize-mint2
+// commits it; there is no path back into an already-initialized mint, and no
+// instruction ever makes a non-transferable mint transferable again.
+func (t *token) InitializeNonTransferableMint(mint *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize non transferable mint: mint is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInitializeNonTransferableMint)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(mint),
+	), data), nil
+}
+
+// InitializePermanentDelegate names a permanent delegate for mint -- an
+// authority that can transfer or burn any holder's tokens of this mint,
+// without approval and for as long as the mint exists. TokenInstruction
+// InitializePermanentDelegate (opcode 35): data is the delegate address (32
+// bytes, a plain Pubkey, not an option), accounts are [mint(writable)].
+//
+// The delegate cannot be omitted here; a mint that should not have one simply
+// does not carry this extension. It can be replaced or cleared later with
+// SetAuthority (AuthorityType::PermanentDelegate), which is not built yet.
+// Like every mint extension, this can only run before initialize-mint2.
+func (t *token) InitializePermanentDelegate(mint, delegate *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize permanent delegate: mint is required")
+	}
+	if delegate.IsNil() {
+		return nil, fmt.Errorf("token initialize permanent delegate: delegate is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInitializePermanentDelegate)
+	data = codec.Binary.AppendBytes(data, delegate.Bytes())
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(mint),
+	), data), nil
+}
+
+// EnableRequiredMemoTransfers builds a MemoTransfer extension's Enable instruction --
+// sub-instruction 0 under opcode 30. Authorized by the token account's
+// owner. Sets require_incoming_transfer_memos, so every transfer into the account must be preceded by a Memo instruction. No proof, and no data beyond the two discriminants.
+//
+// Confirmed against the interface crate's own instruction docs: accounts are
+// [account(writable), owner (+multisig signers)]. If the account does not
+// carry the extension yet, the instruction adds it -- which needs room for it
+// already in the account (see the extension's reallocate).
+func (t *token) EnableRequiredMemoTransfers(account, owner *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token enable required memo transfers: account is required")
+	}
+	if err := validateAuthority("token enable required memo transfers", owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionMemoTransferExtension)
+	data = codec.Binary.AppendU8(data, MemoTransferInstructionEnable)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(account))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}
+
+// DisableRequiredMemoTransfers builds a MemoTransfer extension's Disable instruction --
+// sub-instruction 1 under opcode 30. Authorized by the token account's
+// owner. Clears require_incoming_transfer_memos, so transfers into the account no longer need a Memo. No proof, and no data beyond the two discriminants.
+//
+// Confirmed against the interface crate's own instruction docs: accounts are
+// [account(writable), owner (+multisig signers)]. If the account does not
+// carry the extension yet, the instruction adds it -- which needs room for it
+// already in the account (see the extension's reallocate).
+func (t *token) DisableRequiredMemoTransfers(account, owner *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token disable required memo transfers: account is required")
+	}
+	if err := validateAuthority("token disable required memo transfers", owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionMemoTransferExtension)
+	data = codec.Binary.AppendU8(data, MemoTransferInstructionDisable)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(account))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}
+
+// EnableCpiGuard builds a CpiGuard extension's Enable instruction --
+// sub-instruction 0 under opcode 34. Authorized by the token account's
+// owner. Sets lock_cpi: within a cross-program invocation, Transfer and Burn must go through a delegate, CloseAccount can only return lamports to the owner, SetAuthority can only remove a close authority, and Approve is disallowed. It cannot itself be enabled or disabled via CPI. No proof, and no data beyond the two discriminants.
+//
+// Confirmed against the interface crate's own instruction docs: accounts are
+// [account(writable), owner (+multisig signers)]. If the account does not
+// carry the extension yet, the instruction adds it -- which needs room for it
+// already in the account (see the extension's reallocate).
+func (t *token) EnableCpiGuard(account, owner *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token enable cpi guard: account is required")
+	}
+	if err := validateAuthority("token enable cpi guard", owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionCpiGuardExtension)
+	data = codec.Binary.AppendU8(data, CpiGuardInstructionEnable)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(account))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}
+
+// DisableCpiGuard builds a CpiGuard extension's Disable instruction --
+// sub-instruction 1 under opcode 34. Authorized by the token account's
+// owner. Clears lock_cpi, so all token operations may happen via CPI as normal. No proof, and no data beyond the two discriminants.
+//
+// Confirmed against the interface crate's own instruction docs: accounts are
+// [account(writable), owner (+multisig signers)]. If the account does not
+// carry the extension yet, the instruction adds it -- which needs room for it
+// already in the account (see the extension's reallocate).
+func (t *token) DisableCpiGuard(account, owner *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token disable cpi guard: account is required")
+	}
+	if err := validateAuthority("token disable cpi guard", owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionCpiGuardExtension)
+	data = codec.Binary.AppendU8(data, CpiGuardInstructionDisable)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(account))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}

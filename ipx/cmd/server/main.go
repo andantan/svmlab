@@ -202,6 +202,7 @@ func run() error {
 			r.Post("/create-multisig", tk.CreateMultisig)
 			r.Post("/initialize-immutable-owner", tk.InitializeImmutableOwner)
 			r.Post("/create-kta", tk.CreateKTA)
+			r.Post("/create-native-mint", tk.CreateNativeMint)
 			r.Post("/transfer", tk.Transfer)
 			r.Post("/transfer/max", tk.TransferMax)
 			r.Post("/approve", tk.Approve)
@@ -256,6 +257,22 @@ func run() error {
 				r.Post("/reallocate", tk.ReallocateConfidentialTransferMint)
 				r.Post("/initialize", tk.InitializeConfidentialTransferMint)
 				r.Post("/update", tk.UpdateConfidentialTransferMint)
+			})
+			r.Route("/extensions/memo-transfer", func(r chi.Router) {
+				r.Post("/reallocate", tk.ReallocateMemoTransfer)
+				r.Post("/enable", tk.EnableRequiredMemoTransfers)
+				r.Post("/disable", tk.DisableRequiredMemoTransfers)
+			})
+			r.Route("/extensions/cpi-guard", func(r chi.Router) {
+				r.Post("/reallocate", tk.ReallocateCpiGuard)
+				r.Post("/enable", tk.EnableCpiGuard)
+				r.Post("/disable", tk.DisableCpiGuard)
+			})
+			r.Route("/extensions/non-transferable", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializeNonTransferableMint)
+			})
+			r.Route("/extensions/permanent-delegate", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializePermanentDelegate)
 			})
 			r.Route("/extensions/confidential-mint-burn", func(r chi.Router) {
 				r.Post("/initialize", tk.InitializeConfidentialMintBurn)

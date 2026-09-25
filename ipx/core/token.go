@@ -1696,3 +1696,34 @@ func (t *token) CreateAccount(payer, account *types.PublicKey, lamports uint64) 
 func (t *token) CreateMultisig(payer, multisig *types.PublicKey, lamports uint64) (*types.Instruction, error) {
 	return System.CreateAccount(payer, multisig, t.id, lamports, MultisigSpace)
 }
+
+// CreateNativeMint creates and initializes Token-2022's own native mint -- the
+// mint that stands in for wrapped SOL under that program, at the address
+// NativeMint derives. TokenInstruction CreateNativeMint (opcode 31): no data
+// beyond the discriminant; accounts are [funding(writable, signer),
+// native mint(writable), system program(readonly)]. The program creates the
+// account itself and takes the rent from funding.
+//
+// It exists only on Token-2022 (classic Token's native mint is created at
+// genesis), and it fails if the account already exists, which is the case on
+// every public cluster -- so this is only ever useful on a fresh one.
+func (t *token) CreateNativeMint(funding *types.PublicKey) (*types.Instruction, error) {
+	if funding.IsNil() {
+		return nil, fmt.Errorf("token create native mint: funding account is required")
+	}
+	if t.id.Equal(TokenProgramID) {
+		return nil, fmt.Errorf("token create native mint: classic Token has no CreateNativeMint; its native mint is created at genesis")
+	}
+	mint, err := t.NativeMint()
+	if err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionCreateNativeMint)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableSignerAccount(funding),
+		types.NewWritableAccount(mint),
+		types.NewReadonlyAccount(SystemProgramID),
+	), data), nil
+}

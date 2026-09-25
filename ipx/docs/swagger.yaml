@@ -7563,6 +7563,72 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.CreateNativeMintRequest:
+    properties:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: Program must be Token-2022. Classic Token has no CreateNativeMint.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer signs and pays the native mint's rent, which the program takes
+          from it.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.CreateNativeMintResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      rent_payer:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.DepositRequest:
     properties:
       account:
@@ -7749,6 +7815,88 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.DisableCpiGuardRequest:
+    properties:
+      account:
+        description: |-
+          Account is a Token-2022 token account. If it does not carry the
+          CpiGuard extension yet, the instruction adds it, which needs room for it
+          already in the account (see cpi-guard/reallocate).
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.DisableCpiGuardResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.DisableHarvestToMintRequest:
     properties:
       authority:
@@ -7887,6 +8035,88 @@ definitions:
         type: string
     type: object
   v2.DisableNonConfidentialCreditsResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.DisableRequiredMemoTransfersRequest:
+    properties:
+      account:
+        description: |-
+          Account is a Token-2022 token account. If it does not carry the
+          MemoTransfer extension yet, the instruction adds it, which needs room for it
+          already in the account (see memo-transfer/reallocate).
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.DisableRequiredMemoTransfersResponse:
     properties:
       account:
         type: string
@@ -8143,6 +8373,88 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.EnableCpiGuardRequest:
+    properties:
+      account:
+        description: |-
+          Account is a Token-2022 token account. If it does not carry the
+          CpiGuard extension yet, the instruction adds it, which needs room for it
+          already in the account (see cpi-guard/reallocate).
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.EnableCpiGuardResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.EnableHarvestToMintRequest:
     properties:
       authority:
@@ -8281,6 +8593,88 @@ definitions:
         type: string
     type: object
   v2.EnableNonConfidentialCreditsResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.EnableRequiredMemoTransfersRequest:
+    properties:
+      account:
+        description: |-
+          Account is a Token-2022 token account. If it does not carry the
+          MemoTransfer extension yet, the instruction adds it, which needs room for it
+          already in the account (see memo-transfer/reallocate).
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.EnableRequiredMemoTransfersResponse:
     properties:
       account:
         type: string
@@ -9432,6 +9826,147 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.InitializeNonTransferableMintRequest:
+    properties:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint is the account this attaches to. It must already exist (see
+          create-mint) and not yet be initialized -- initialize-mint2 has to
+          run after this, never before.
+        example: ""
+        type: string
+      program:
+        description: Program must be Token-2022. A classic Token mint can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.InitializeNonTransferableMintResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.InitializePermanentDelegateRequest:
+    properties:
+      delegate:
+        description: |-
+          Delegate may transfer or burn any holder's tokens of Mint, with no approval,
+          for as long as the mint exists. Required: there is no such thing as a
+          permanent delegate that is nobody.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint is the account this attaches to. It must already exist (see
+          create-mint) and not yet be initialized -- initialize-mint2 has to
+          run after this, never before.
+        example: ""
+        type: string
+      program:
+        description: Program must be Token-2022. A classic Token mint can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.InitializePermanentDelegateResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      delegate:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.InitializeTransferFeeConfigRequest:
     properties:
       durable_nonce_account:
@@ -10039,6 +10574,214 @@ definitions:
           TargetSize is the total account size GetAccountDataSize reported for
           Account's existing extensions plus ConfidentialTransferMint, asked of
           the deployed program rather than recomputed here.
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.ReallocateCpiGuardRequest:
+    properties:
+      account:
+        description: |-
+          Account is the token account to check and, if needed, grow. It must
+          already exist and be owned by Program.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. Unlike every other Token endpoint, this
+          is not the usual either-program field: a classic Token account's
+          layout is fixed at 165 bytes forever, with no TLV region to grow
+          into, so classic Token is rejected here rather than left to fail on
+          chain.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds whatever the resize costs, a distinct role from
+          Owner: Owner authorizes the account being touched, RentPayer covers
+          what that costs, and they need not be the same key.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ReallocateCpiGuardResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      rent:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Rent reports what funds the resize: the shortfall between
+          TargetSize's rent-exemption minimum and Account's actual current
+          lamports, zero when Account already holds enough.
+      signers:
+        items:
+          type: string
+        type: array
+      target_size:
+        description: |-
+          TargetSize is the total account size GetAccountDataSize reported for
+          Account's existing extensions plus CpiGuard, asked of the
+          deployed program rather than recomputed here.
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.ReallocateMemoTransferRequest:
+    properties:
+      account:
+        description: |-
+          Account is the token account to check and, if needed, grow. It must
+          already exist and be owned by Program.
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. Unlike every other Token endpoint, this
+          is not the usual either-program field: a classic Token account's
+          layout is fixed at 165 bytes forever, with no TLV region to grow
+          into, so classic Token is rejected here rather than left to fail on
+          chain.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      rent_payer:
+        description: |-
+          RentPayer funds whatever the resize costs, a distinct role from
+          Owner: Owner authorizes the account being touched, RentPayer covers
+          what that costs, and they need not be the same key.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+    type: object
+  v2.ReallocateMemoTransferResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      rent:
+        allOf:
+        - $ref: '#/definitions/v2.SystemPayer'
+        description: |-
+          Rent reports what funds the resize: the shortfall between
+          TargetSize's rent-exemption minimum and Account's actual current
+          lamports, zero when Account already holds enough.
+      signers:
+        items:
+          type: string
+        type: array
+      target_size:
+        description: |-
+          TargetSize is the total account size GetAccountDataSize reported for
+          Account's existing extensions plus MemoTransfer, asked of the
+          deployed program rather than recomputed here.
         type: string
       transaction:
         type: string
@@ -19747,6 +20490,54 @@ paths:
       summary: Fund a new account, sized and owned for a Token multisig
       tags:
       - v2-transaction-token-multisig
+  /svm/v2/transaction/token/create-native-mint:
+    post:
+      consumes:
+      - application/json
+      description: Creates and initializes Token-2022's own native mint -- the mint
+        that stands in for wrapped SOL under that program -- at the address the program
+        derives (returned in the response). rent_payer signs and pays the rent. It
+        fails if the account already exists, which is the case on every public cluster,
+        so this is only useful on a fresh one; this endpoint checks that first. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.CreateNativeMintRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.CreateNativeMintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Create Token-2022's native mint
+      tags:
+      - v2-transaction-token-extensions
   /svm/v2/transaction/token/extensions/confidential-mint-burn/apply-pending-burn:
     post:
       consumes:
@@ -21291,6 +22082,303 @@ paths:
       summary: Change the ConfidentialTransferMint configuration on a mint
       tags:
       - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/cpi-guard/disable:
+    post:
+      consumes:
+      - application/json
+      description: Clears the account's CpiGuard.lock_cpi flag, so all token operations
+        may happen via CPI as normal. Authorized by the account's owner. If the account
+        does not carry the extension yet, the instruction adds it (unlocked), which
+        needs room for it already in the account (see cpi-guard/reallocate). recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, owner, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.DisableCpiGuardRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.DisableCpiGuardResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Turn the CPI guard off for a token account
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/cpi-guard/enable:
+    post:
+      consumes:
+      - application/json
+      description: Sets the account's CpiGuard.lock_cpi flag. Within a cross-program
+        invocation, Transfer and Burn must then go through a delegate, CloseAccount
+        can only return lamports to the owner, SetAuthority can only remove a close
+        authority, and Approve is disallowed. It cannot itself be enabled or disabled
+        via CPI. Authorized by the account's owner. If the account does not carry
+        the extension yet, the instruction adds it, which needs room for it already
+        in the account (see cpi-guard/reallocate). recent_blockhash is always required
+        and is never fetched server-side. Left alone, it also builds the message and
+        expires whenever the runtime says it does. Naming durable_nonce_account builds
+        the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, owner, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.EnableCpiGuardRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.EnableCpiGuardResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Turn the CPI guard on for a token account
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/cpi-guard/reallocate:
+    post:
+      consumes:
+      - application/json
+      description: 'Checks whether account already holds enough space for its existing
+        extensions plus CpiGuard, and grows it if not -- the account-side extension
+        cpi-guard/enable and /disable need room for when the account does not carry
+        it yet. The instruction itself only ever needs the one new extension: Reallocate
+        reads account''s own existing extensions on chain and unions them with what
+        this sends, so a caller never resends what is already there. Getting the resize''s
+        rent right is this endpoint''s own job: it reads account''s current extensions
+        and actual lamports, asks GetAccountDataSize for the full target size once
+        CpiGuard is unioned in, and only then knows rent_payer''s shortfall. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, rent payer, owner, fee payer, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ReallocateCpiGuardRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ReallocateCpiGuardResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Grow a token account to hold room for CpiGuard
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/memo-transfer/disable:
+    post:
+      consumes:
+      - application/json
+      description: Clears the account's MemoTransfer.require_incoming_transfer_memos
+        flag, so transfers into it no longer need a Memo. Authorized by the account's
+        owner. If the account does not carry the extension yet, the instruction adds
+        it (disabled), which needs room for it already in the account (see memo-transfer/reallocate).
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        account stores instead, so the transaction never expires, and prepends the
+        advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, owner, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.DisableRequiredMemoTransfersRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.DisableRequiredMemoTransfersResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Stop requiring a memo on transfers into a token account
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/memo-transfer/enable:
+    post:
+      consumes:
+      - application/json
+      description: Sets the account's MemoTransfer.require_incoming_transfer_memos
+        flag, so every transfer into it must be preceded by a Memo instruction in
+        the same transaction. Authorized by the account's owner. If the account does
+        not carry the extension yet, the instruction adds it, which needs room for
+        it already in the account (see memo-transfer/reallocate). No zero-knowledge
+        proof is needed, and the instruction carries no data beyond its discriminants.
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        account stores instead, so the transaction never expires, and prepends the
+        advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, owner, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.EnableRequiredMemoTransfersRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.EnableRequiredMemoTransfersResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Require a memo on transfers into a token account
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/memo-transfer/reallocate:
+    post:
+      consumes:
+      - application/json
+      description: 'Checks whether account already holds enough space for its existing
+        extensions plus MemoTransfer, and grows it if not -- the account-side extension
+        memo-transfer/enable and /disable need room for when the account does not
+        carry it yet. The instruction itself only ever needs the one new extension:
+        Reallocate reads account''s own existing extensions on chain and unions them
+        with what this sends, so a caller never resends what is already there. Getting
+        the resize''s rent right is this endpoint''s own job: it reads account''s
+        current extensions and actual lamports, asks GetAccountDataSize for the full
+        target size once MemoTransfer is unioned in, and only then knows rent_payer''s
+        shortfall. recent_blockhash is always required and is never fetched server-side.
+        Left alone, it also builds the message and expires whenever the runtime says
+        it does. Naming durable_nonce_account builds the message against the value
+        that account stores instead, so the transaction never expires, and prepends
+        the advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, rent payer, owner, fee payer, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ReallocateMemoTransferRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ReallocateMemoTransferResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Grow a token account to hold room for MemoTransfer
+      tags:
+      - v2-transaction-token-extensions
   /svm/v2/transaction/token/extensions/mint-close-authority/clear:
     post:
       consumes:
@@ -21549,6 +22637,107 @@ paths:
               type: string
             type: object
       summary: Replace a mint's MintCloseAuthority close authority
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/non-transferable/initialize:
+    post:
+      consumes:
+      - application/json
+      description: 'Marks the mint as non-transferable: its tokens can be minted and
+        burned but never moved between accounts, and no instruction ever makes the
+        mint transferable again. Every token account of such a mint gets the NonTransferableAccount
+        extension automatically and needs ImmutableOwner. This can only ever run in
+        the narrow window every mint extension shares: after the mint account has
+        been allocated with room for this extension (see extensions/mint/data-size)
+        and before initialize-mint2 locks the extension list forever. No signer beyond
+        the fee payer, and no data beyond the instruction''s own discriminant. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializeNonTransferableMintRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializeNonTransferableMintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Make a mint non-transferable
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/permanent-delegate/initialize:
+    post:
+      consumes:
+      - application/json
+      description: 'Names a permanent delegate for the mint -- an authority that can
+        transfer or burn any holder''s tokens of this mint, without approval and for
+        as long as the mint exists. Required: a mint that should not have one does
+        not carry this extension. This can only ever run in the narrow window every
+        mint extension shares: after the mint account has been allocated with room
+        for this extension (see extensions/mint/data-size) and before initialize-mint2
+        locks the extension list forever. recent_blockhash is always required and
+        is never fetched server-side. Left alone, it also builds the message and expires
+        whenever the runtime says it does. Naming durable_nonce_account builds the
+        message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializePermanentDelegateRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializePermanentDelegateResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Attach the PermanentDelegate extension to a mint
       tags:
       - v2-transaction-token-extensions
   /svm/v2/transaction/token/extensions/transfer-fee-amount/reallocate:

@@ -443,6 +443,57 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     있고 빌더 없음), 멀티시그 authority 경로(모든 빌더가 받지만 devnet 미실행), 확장이
     붙은 민트/계정의 close, 동결/CpiGuard/일시정지 등 조합
 
+  **2026-09-26 남은 확장 전수 재조사** — 업스트림 `ExtensionType` enum(실제 확장 16개
+  남음) + 확장별 명령 enum + `AuthorityType` 0~17과 우리 라우트를 대조한 결과:
+  - 완료: transfer-fee(config/amount), mint-close-authority, confidential-transfer 계열
+    3개(27/37/42), immutable-owner, 그리고 아래 이번에 만든 것들
+  - **남은 것(명령)**: default-account-state 2, interest-bearing 2, scaled-ui-amount 2,
+    pausable 3, transfer-hook 2, metadata-pointer 2, group-pointer 2,
+    group-member-pointer 2, permissioned-burn 4(Initialize/Burn/BurnChecked/
+    ConfidentialBurn), token-metadata 5(Initialize/UpdateField/RemoveKey/UpdateAuthority/
+    Emit), token-group 4(InitializeGroup/UpdateGroupMaxSize/UpdateGroupAuthority/
+    InitializeMember)
+  - TokenMetadata/TokenGroup/TokenGroupMember도 **확장이 맞다**(타입 19/21/23) —
+    "별도 서브시스템"으로 분류한 건 해시 discriminator·가변 길이라 만드는 방식이 달라서일
+    뿐. **Token-2022 전용**: 기존 SPL Token의 이름·이미지는 Metaplex Token Metadata
+    (PDA `["metadata", metaplex, mint]`, 소유 `metaqbxx…`)가 담당 — EURC 민트(82B,
+    Tokenkeg)로 온체인 확인(이름/심볼/uri 모두 Metaplex 계정 679B에 있음)
+  - **SetAuthority의 확장 권한 타입 13종 미구현**: 4 TransferFeeConfig, 5 WithheldWithdraw,
+    7 InterestRate, 8 PermanentDelegate, 9 ConfidentialTransferMint, 10 TransferHookProgramId,
+    11 ConfidentialTransferFeeConfig, 12~17(포인터 3종/ScaledUiAmount/Pause/PermissionedBurn).
+    `core/token.go`의 "4·5는 InitializeTransferFeeConfig가 다루므로 SetAuthority로 안 다룬다"는
+    주석은 **틀렸음**(초기화 때 정한 authority를 나중에 바꾸는 유일한 길이 SetAuthority).
+    각 확장을 만들 때 그 확장의 타입을 함께 만들 것
+  - reallocate 27개 계획은 mint 전용 타입이 항상 `ExtensionTypeMismatch`라 가치가 낮음 —
+    계정 쪽 타입만 남기는 방향으로 재논의 필요
+
+  **단독 명령 3개 + memo-transfer/cpi-guard — devnet 확인.**
+  - 공용 생성기 `gen_init.py`(스크래치패드): mint 전용 Initialize 엔드포인트(types+handler)를
+    `InitializeMintCloseAuthority` 모양으로 찍어냄. 이후 확장에서 재사용
+  - `extensions/non-transferable/initialize`(opcode 32, 데이터 없음),
+    `extensions/permanent-delegate/initialize`(35, delegate 32B 필수),
+    `token/create-native-mint`(31, Token-2022 전용, `rent_payer`). 크기 206B(NT 4B+PD 36B)
+    - 확장 붙은 ATA에 ImmutableOwner(7)/NonTransferableAccount(13)이 **자동**으로 붙음
+    - NonTransferable 전송은 프로그램이 `Custom(37)` "Transfer is disabled for this mint"
+    - **영구 위임자가 승인 없이 남의 계정에서 소각** 성공(10→7) — 단 우리 `token/burn`은
+      "owner 또는 승인된 delegate만" 사전검사로 거절 → 직접 만든 트랜잭션으로 확인
+    - create-native-mint: `9pan9bMn…`이 이미 있어 성공 검증 불가(사전검사 메시지까지만)
+  - 필드명 정리: `fee_payer`(수수료) / `rent_payer`(새 계정·리사이즈 보증금) /
+    `funding_payer`(System Transfer 출금 전용). create-native-mint을 처음
+    `funding_account`로 지어 `rent_payer`로 정정
+  - `extensions/memo-transfer/{reallocate,enable,disable}`(opcode 30, sub 0/1),
+    `extensions/cpi-guard/{reallocate,enable,disable}`(34, sub 0/1): 계정 쪽 확장(타입 8/11,
+    각 1B). enable/disable 둘 다 확장이 없으면 **스스로 붙임**(자리는 reallocate가 만듦)
+    - memo: 170→175B, 메모 없는 전송 `Custom(36)` "No memo in previous instruction required",
+      Memo 명령을 앞에 붙이면 통과(로그 `"hello memo"`), disable 후 메모 없이 통과
+    - cpi-guard: 값 00/01 토글 확인. **CPI 안에서의 실제 차단은 미확인**(CPI 호출
+      프로그램을 만들 수 없음)
+  - **기존 엔드포인트 보완 패스(확장 다 만든 뒤 일괄)**: ① transfer/burn 등 사전검사 14곳이
+    영구 위임자를 authority로 못 받음, ② NonTransferable 민트 전송을 미리 거절, ③ memo 필수
+    계정으로의 전송에 선택 필드 `memo`로 Memo 명령을 앞에 붙이는 기능(우리 API엔 Memo
+    명령을 붙일 방법이 없음), ④ 이후 transfer-hook 추가 계정/pausable 정지 등 조건 추가
+
+
   ApplyPendingBalance 등)는 여전히 진행 중 — 각각 필요한 proof 종류가 다름
   (range proof, ciphertext equality proof 등), 하나씩 순서대로 계속.
   - `core.UpdateConfidentialTransferMint` (opcode 27 sub 1): `UpdateMintData`엔

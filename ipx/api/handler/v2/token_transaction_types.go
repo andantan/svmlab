@@ -13262,3 +13262,655 @@ func NewWithdrawWithheldTokensFromAccountsResponse(
 		Fee:                       newSystemPayer(feePayer, fee),
 	}
 }
+
+// DisableNonConfidentialCreditsRequest makes Account reject any ordinary
+// (non-confidential) transfer into it -- clears its
+// ConfidentialTransferAccount.allow_non_confidential_credits flag. Paired
+// with the account still accepting confidential credits (the default),
+// this makes it a confidential-only receiver. No zero-knowledge proof is
+// needed, and the instruction carries no data beyond its discriminant.
+type DisableNonConfidentialCreditsRequest struct {
+	// Account must already carry the ConfidentialTransferAccount extension
+	// (see configure-account).
+	Account string `json:"account" example:""`
+
+	// Owner is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+	// itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account         *types.PublicKey
+	owner           *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *DisableNonConfidentialCreditsRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *DisableNonConfidentialCreditsRequest) AccountKey() *types.PublicKey  { return r.account }
+func (r *DisableNonConfidentialCreditsRequest) OwnerKey() *types.PublicKey    { return r.owner }
+func (r *DisableNonConfidentialCreditsRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *DisableNonConfidentialCreditsRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *DisableNonConfidentialCreditsRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *DisableNonConfidentialCreditsRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *DisableNonConfidentialCreditsRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// DisableNonConfidentialCreditsResponse reports the built transaction.
+type DisableNonConfidentialCreditsResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account string `json:"account"`
+	Owner   string `json:"owner"`
+	Program string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewDisableNonConfidentialCreditsResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *DisableNonConfidentialCreditsResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &DisableNonConfidentialCreditsResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Owner:           owner.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// EnableConfidentialCreditsRequest makes Account accept incoming confidential transfers -- sets its
+// ConfidentialTransferAccount.allow_confidential_credits flag. No zero-knowledge proof is
+// needed, and the instruction carries no data beyond its discriminant.
+type EnableConfidentialCreditsRequest struct {
+	// Account must already carry the ConfidentialTransferAccount extension
+	// (see configure-account).
+	Account string `json:"account" example:""`
+
+	// Owner is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+	// itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account         *types.PublicKey
+	owner           *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *EnableConfidentialCreditsRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *EnableConfidentialCreditsRequest) AccountKey() *types.PublicKey  { return r.account }
+func (r *EnableConfidentialCreditsRequest) OwnerKey() *types.PublicKey    { return r.owner }
+func (r *EnableConfidentialCreditsRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *EnableConfidentialCreditsRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *EnableConfidentialCreditsRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *EnableConfidentialCreditsRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *EnableConfidentialCreditsRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// EnableConfidentialCreditsResponse reports the built transaction.
+type EnableConfidentialCreditsResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account string `json:"account"`
+	Owner   string `json:"owner"`
+	Program string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewEnableConfidentialCreditsResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *EnableConfidentialCreditsResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &EnableConfidentialCreditsResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Owner:           owner.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// DisableConfidentialCreditsRequest makes Account reject any incoming confidential transfer -- clears its
+// ConfidentialTransferAccount.allow_confidential_credits flag. Ordinary
+// transfers are still governed by allow_non_confidential_credits. No zero-knowledge proof is
+// needed, and the instruction carries no data beyond its discriminant.
+type DisableConfidentialCreditsRequest struct {
+	// Account must already carry the ConfidentialTransferAccount extension
+	// (see configure-account).
+	Account string `json:"account" example:""`
+
+	// Owner is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+	// itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account         *types.PublicKey
+	owner           *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *DisableConfidentialCreditsRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *DisableConfidentialCreditsRequest) AccountKey() *types.PublicKey  { return r.account }
+func (r *DisableConfidentialCreditsRequest) OwnerKey() *types.PublicKey    { return r.owner }
+func (r *DisableConfidentialCreditsRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *DisableConfidentialCreditsRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *DisableConfidentialCreditsRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *DisableConfidentialCreditsRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *DisableConfidentialCreditsRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// DisableConfidentialCreditsResponse reports the built transaction.
+type DisableConfidentialCreditsResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account string `json:"account"`
+	Owner   string `json:"owner"`
+	Program string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewDisableConfidentialCreditsResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *DisableConfidentialCreditsResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &DisableConfidentialCreditsResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Owner:           owner.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// EnableNonConfidentialCreditsRequest makes Account accept ordinary (non-confidential) transfers -- sets its
+// ConfidentialTransferAccount.allow_non_confidential_credits flag. No zero-knowledge proof is
+// needed, and the instruction carries no data beyond its discriminant.
+type EnableNonConfidentialCreditsRequest struct {
+	// Account must already carry the ConfidentialTransferAccount extension
+	// (see configure-account).
+	Account string `json:"account" example:""`
+
+	// Owner is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+	// itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account         *types.PublicKey
+	owner           *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *EnableNonConfidentialCreditsRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *EnableNonConfidentialCreditsRequest) AccountKey() *types.PublicKey  { return r.account }
+func (r *EnableNonConfidentialCreditsRequest) OwnerKey() *types.PublicKey    { return r.owner }
+func (r *EnableNonConfidentialCreditsRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *EnableNonConfidentialCreditsRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *EnableNonConfidentialCreditsRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *EnableNonConfidentialCreditsRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *EnableNonConfidentialCreditsRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// EnableNonConfidentialCreditsResponse reports the built transaction.
+type EnableNonConfidentialCreditsResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account string `json:"account"`
+	Owner   string `json:"owner"`
+	Program string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewEnableNonConfidentialCreditsResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, owner, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *EnableNonConfidentialCreditsResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &EnableNonConfidentialCreditsResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Owner:           owner.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}

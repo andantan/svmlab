@@ -1331,3 +1331,110 @@ func (t *token) ConfidentialTransfer(source, mint, destination, equalityContext,
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
 }
+
+// DisableNonConfidentialCredits builds a ConfidentialTransfer extension's
+// DisableNonConfidentialCredits instruction -- sub-instruction 12, which
+// clears account's allow_non_confidential_credits flag so it rejects any
+// ordinary (non-confidential) transfer into it. Combined with the account
+// already accepting confidential credits, this makes it a confidential-only
+// receiver. No proof, and the instruction carries no data beyond its own
+// discriminant.
+//
+// Confirmed against the interface crate's own instruction docs: accounts
+// are [token_account(writable), owner(+multisig)], with no mint account.
+func (t *token) DisableNonConfidentialCredits(account, owner *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token disable non-confidential credits: account is required")
+	}
+	if err := validateAuthority("token disable non-confidential credits", owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionDisableNonConfidentialCredits)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}
+
+// EnableConfidentialCredits builds a ConfidentialTransfer extension's
+// EnableConfidentialCredits instruction -- sub-instruction 9, which
+// sets account's allow_confidential_credits flag, so it accepts
+// incoming confidential transfers. No proof, and the instruction carries no data beyond its own
+// discriminant.
+//
+// Confirmed against the interface crate's own instruction docs: accounts
+// are [token_account(writable), owner(+multisig)], with no mint account.
+func (t *token) EnableConfidentialCredits(account, owner *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token enable confidential credits: account is required")
+	}
+	if err := validateAuthority("token enable confidential credits", owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionEnableConfidentialCredits)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}
+
+// DisableConfidentialCredits builds a ConfidentialTransfer extension's
+// DisableConfidentialCredits instruction -- sub-instruction 10, which
+// clears account's allow_confidential_credits flag, so it rejects
+// any incoming confidential transfer (ordinary transfers are still
+// governed by allow_non_confidential_credits). No proof, and the instruction carries no data beyond its own
+// discriminant.
+//
+// Confirmed against the interface crate's own instruction docs: accounts
+// are [token_account(writable), owner(+multisig)], with no mint account.
+func (t *token) DisableConfidentialCredits(account, owner *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token disable confidential credits: account is required")
+	}
+	if err := validateAuthority("token disable confidential credits", owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionDisableConfidentialCredits)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}
+
+// EnableNonConfidentialCredits builds a ConfidentialTransfer extension's
+// EnableNonConfidentialCredits instruction -- sub-instruction 11, which
+// sets account's allow_non_confidential_credits flag, so it
+// accepts ordinary (non-confidential) transfers again. No proof, and the instruction carries no data beyond its own
+// discriminant.
+//
+// Confirmed against the interface crate's own instruction docs: accounts
+// are [token_account(writable), owner(+multisig)], with no mint account.
+func (t *token) EnableNonConfidentialCredits(account, owner *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token enable non confidential credits: account is required")
+	}
+	if err := validateAuthority("token enable non confidential credits", owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionEnableNonConfidentialCredits)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}

@@ -4832,6 +4832,330 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.DisableConfidentialCreditsRequest:
+    properties:
+      account:
+        description: |-
+          Account must already carry the ConfidentialTransferAccount extension
+          (see configure-account).
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.DisableConfidentialCreditsResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.DisableNonConfidentialCreditsRequest:
+    properties:
+      account:
+        description: |-
+          Account must already carry the ConfidentialTransferAccount extension
+          (see configure-account).
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.DisableNonConfidentialCreditsResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.EnableConfidentialCreditsRequest:
+    properties:
+      account:
+        description: |-
+          Account must already carry the ConfidentialTransferAccount extension
+          (see configure-account).
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.EnableConfidentialCreditsResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.EnableNonConfidentialCreditsRequest:
+    properties:
+      account:
+        description: |-
+          Account must already carry the ConfidentialTransferAccount extension
+          (see configure-account).
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+          itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      owner:
+        description: |-
+          Owner is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.EnableNonConfidentialCreditsResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      nonce_authority:
+        type: string
+      owner:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.FreezeAccountRequest:
     properties:
       durable_nonce_account:
@@ -15035,6 +15359,194 @@ paths:
               type: string
             type: object
       summary: Move an account's public balance into its confidential pending balance
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-transfer-account/disable-confidential-credits:
+    post:
+      consumes:
+      - application/json
+      description: Clears account's allow_confidential_credits flag, so it rejects
+        any incoming confidential transfer (ordinary transfers are still governed
+        by allow_non_confidential_credits). Authorized by account's owner. No zero-knowledge
+        proof is needed, and the instruction carries no data beyond its own discriminant.
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        account stores instead, so the transaction never expires, and prepends the
+        advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, owner, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.DisableConfidentialCreditsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.DisableConfidentialCreditsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Make a token account reject confidential transfers
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-transfer-account/disable-non-confidential-credits:
+    post:
+      consumes:
+      - application/json
+      description: Clears account's ConfidentialTransferAccount.allow_non_confidential_credits
+        flag, so it rejects any ordinary (non-confidential) transfer into it -- paired
+        with the account still accepting confidential credits (the default), it becomes
+        a confidential-only receiver. Authorized by account's owner. No zero-knowledge
+        proof is needed, and the instruction carries no data beyond its own discriminant.
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        account stores instead, so the transaction never expires, and prepends the
+        advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, owner, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.DisableNonConfidentialCreditsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.DisableNonConfidentialCreditsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Make a token account reject non-confidential transfers
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-transfer-account/enable-confidential-credits:
+    post:
+      consumes:
+      - application/json
+      description: Sets account's allow_confidential_credits flag, so it accepts incoming
+        confidential transfers. Authorized by account's owner. No zero-knowledge proof
+        is needed, and the instruction carries no data beyond its own discriminant.
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        account stores instead, so the transaction never expires, and prepends the
+        advance that consumes it; recent_blockhash then only prices the transaction.
+        The response reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, owner, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.EnableConfidentialCreditsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.EnableConfidentialCreditsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Make a token account accept confidential transfers
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-transfer-account/enable-non-confidential-credits:
+    post:
+      consumes:
+      - application/json
+      description: Sets account's allow_non_confidential_credits flag, so it accepts
+        ordinary (non-confidential) transfers again. Authorized by account's owner.
+        No zero-knowledge proof is needed, and the instruction carries no data beyond
+        its own discriminant. recent_blockhash is always required and is never fetched
+        server-side. Left alone, it also builds the message and expires whenever the
+        runtime says it does. Naming durable_nonce_account builds the message against
+        the value that account stores instead, so the transaction never expires, and
+        prepends the advance that consumes it; recent_blockhash then only prices the
+        transaction. The response reports nonce_authority in that case, which has
+        to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, owner, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.EnableNonConfidentialCreditsRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.EnableNonConfidentialCreditsResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Make a token account accept non-confidential transfers
       tags:
       - v2-transaction-token-extensions
   /svm/v2/transaction/token/extensions/confidential-transfer-account/reallocate:

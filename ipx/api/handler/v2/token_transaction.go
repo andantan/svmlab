@@ -14752,3 +14752,623 @@ func (h *TokenTransactionHandler) WithdrawWithheldTokensFromAccounts(w http.Resp
 		sourceStrings, fee,
 	))
 }
+
+// DisableNonConfidentialCredits godoc
+// @Summary      Make a token account reject non-confidential transfers
+// @Description  Clears account's ConfidentialTransferAccount.allow_non_confidential_credits flag, so it rejects any ordinary (non-confidential) transfer into it -- paired with the account still accepting confidential credits (the default), it becomes a confidential-only receiver. Authorized by account's owner. No zero-knowledge proof is needed, and the instruction carries no data beyond its own discriminant. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-extensions
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                    true  "Cluster name"
+// @Param        X-Chain-Network  header    string                    true  "Cluster network"
+// @Param        body             body      DisableNonConfidentialCreditsRequest    true  "Account, owner, and program"
+// @Success      200              {object}  DisableNonConfidentialCreditsResponse
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/extensions/confidential-transfer-account/disable-non-confidential-credits [post]
+func (h *TokenTransactionHandler) DisableNonConfidentialCredits(w http.ResponseWriter, r *http.Request) {
+	req := new(DisableNonConfidentialCreditsRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.AccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	accountInfo := accounts[req.AccountKey().Base58()]
+	if !accountInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s does not exist", req.AccountKey()))
+		return
+	}
+	if accountInfo.Owner != req.TokenProgramID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s is not owned by %s", req.AccountKey(), req.TokenProgramID()))
+		return
+	}
+	instruction, err := tokenProgram.DisableNonConfidentialCredits(req.AccountKey(), req.OwnerKey(), req.ToMultisigSigners())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := types.NewInstructions(instruction)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewDisableNonConfidentialCreditsResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), req.AccountKey(), req.OwnerKey(), req.TokenProgramID(), nonceAuthority,
+		fee,
+	))
+}
+
+// EnableConfidentialCredits godoc
+// @Summary      Make a token account accept confidential transfers
+// @Description  Sets account's allow_confidential_credits flag, so it accepts incoming confidential transfers. Authorized by account's owner. No zero-knowledge proof is needed, and the instruction carries no data beyond its own discriminant. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-extensions
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                    true  "Cluster name"
+// @Param        X-Chain-Network  header    string                    true  "Cluster network"
+// @Param        body             body      EnableConfidentialCreditsRequest    true  "Account, owner, and program"
+// @Success      200              {object}  EnableConfidentialCreditsResponse
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/extensions/confidential-transfer-account/enable-confidential-credits [post]
+func (h *TokenTransactionHandler) EnableConfidentialCredits(w http.ResponseWriter, r *http.Request) {
+	req := new(EnableConfidentialCreditsRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.AccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	accountInfo := accounts[req.AccountKey().Base58()]
+	if !accountInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s does not exist", req.AccountKey()))
+		return
+	}
+	if accountInfo.Owner != req.TokenProgramID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s is not owned by %s", req.AccountKey(), req.TokenProgramID()))
+		return
+	}
+	instruction, err := tokenProgram.EnableConfidentialCredits(req.AccountKey(), req.OwnerKey(), req.ToMultisigSigners())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := types.NewInstructions(instruction)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewEnableConfidentialCreditsResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), req.AccountKey(), req.OwnerKey(), req.TokenProgramID(), nonceAuthority,
+		fee,
+	))
+}
+
+// DisableConfidentialCredits godoc
+// @Summary      Make a token account reject confidential transfers
+// @Description  Clears account's allow_confidential_credits flag, so it rejects any incoming confidential transfer (ordinary transfers are still governed by allow_non_confidential_credits). Authorized by account's owner. No zero-knowledge proof is needed, and the instruction carries no data beyond its own discriminant. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-extensions
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                    true  "Cluster name"
+// @Param        X-Chain-Network  header    string                    true  "Cluster network"
+// @Param        body             body      DisableConfidentialCreditsRequest    true  "Account, owner, and program"
+// @Success      200              {object}  DisableConfidentialCreditsResponse
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/extensions/confidential-transfer-account/disable-confidential-credits [post]
+func (h *TokenTransactionHandler) DisableConfidentialCredits(w http.ResponseWriter, r *http.Request) {
+	req := new(DisableConfidentialCreditsRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.AccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	accountInfo := accounts[req.AccountKey().Base58()]
+	if !accountInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s does not exist", req.AccountKey()))
+		return
+	}
+	if accountInfo.Owner != req.TokenProgramID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s is not owned by %s", req.AccountKey(), req.TokenProgramID()))
+		return
+	}
+	instruction, err := tokenProgram.DisableConfidentialCredits(req.AccountKey(), req.OwnerKey(), req.ToMultisigSigners())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := types.NewInstructions(instruction)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewDisableConfidentialCreditsResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), req.AccountKey(), req.OwnerKey(), req.TokenProgramID(), nonceAuthority,
+		fee,
+	))
+}
+
+// EnableNonConfidentialCredits godoc
+// @Summary      Make a token account accept non-confidential transfers
+// @Description  Sets account's allow_non_confidential_credits flag, so it accepts ordinary (non-confidential) transfers again. Authorized by account's owner. No zero-knowledge proof is needed, and the instruction carries no data beyond its own discriminant. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-extensions
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                    true  "Cluster name"
+// @Param        X-Chain-Network  header    string                    true  "Cluster network"
+// @Param        body             body      EnableNonConfidentialCreditsRequest    true  "Account, owner, and program"
+// @Success      200              {object}  EnableNonConfidentialCreditsResponse
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/extensions/confidential-transfer-account/enable-non-confidential-credits [post]
+func (h *TokenTransactionHandler) EnableNonConfidentialCredits(w http.ResponseWriter, r *http.Request) {
+	req := new(EnableNonConfidentialCreditsRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.AccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	accountInfo := accounts[req.AccountKey().Base58()]
+	if !accountInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s does not exist", req.AccountKey()))
+		return
+	}
+	if accountInfo.Owner != req.TokenProgramID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s is not owned by %s", req.AccountKey(), req.TokenProgramID()))
+		return
+	}
+	instruction, err := tokenProgram.EnableNonConfidentialCredits(req.AccountKey(), req.OwnerKey(), req.ToMultisigSigners())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := types.NewInstructions(instruction)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewEnableNonConfidentialCreditsResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), req.AccountKey(), req.OwnerKey(), req.TokenProgramID(), nonceAuthority,
+		fee,
+	))
+}

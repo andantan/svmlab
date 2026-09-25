@@ -255,6 +255,10 @@ func run() error {
 				r.Post("/deposit", tk.Deposit)
 				r.Post("/apply-pending-balance", tk.ApplyPendingBalance)
 				r.Post("/transfer", tk.ConfidentialTransfer)
+				r.Post("/enable-confidential-credits", tk.EnableConfidentialCredits)
+				r.Post("/disable-confidential-credits", tk.DisableConfidentialCredits)
+				r.Post("/enable-non-confidential-credits", tk.EnableNonConfidentialCredits)
+				r.Post("/disable-non-confidential-credits", tk.DisableNonConfidentialCredits)
 			})
 		})
 

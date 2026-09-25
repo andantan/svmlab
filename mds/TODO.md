@@ -210,6 +210,30 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     이 트랜잭션만 nonce 없이 보낼 것, context_state_account_owner를
     fee_payer와 같은 주소로 두면 계정 목록 32바이트 절약
 
+  **크레딧 토글 4개(opcode 27 sub 9~12) 완료 — proof·데이터 없음, discriminant
+  하나뿐, 계좌 `[account(writable), owner(+멀티시그)]`(mint 계좌 없음).**
+  계좌의 `allow_confidential_credits`/`allow_non_confidential_credits`
+  플래그(확장 값 안 offset 261/262)를 켜고 끄는 스위치. 라우트는
+  `confidential-transfer-account/` 아래 인스트럭션 이름 그대로 평평하게
+  `enable-confidential-credits`(9), `disable-confidential-credits`(10),
+  `enable-non-confidential-credits`(11), `disable-non-confidential-credits`(12).
+  요청 필드는 `account`/`owner`(멀티시그면 `multisig_signers`)/`fee_payer`/
+  `program`/`recent_blockhash`/`durable_nonce_account`, 타입은 인스트럭션마다
+  따로(복사 후 통합)
+  - devnet: `disable-non-confidential-credits` 시그니처로 플래그 1→0
+    (기밀 수신은 1 유지, 1196 CU, RPC parsed
+    `disableConfidentialTransferNonConfidentialCredits`), 이어
+    `disable-confidential-credits`로 기밀 플래그도 0(parsed
+    `disableConfidentialTransferConfidentialCredits`). 두 enable은 시그니처를
+    직접 보진 않았고 둘 다 0이던 계좌가 최종적으로 1,1로 돌아온 걸 온체인에서
+    읽어 확인. 꺼진 상태에서 실제 전송이 거부되는지는 시도 안 함
+  - 남은 ConfidentialTransfer: `EmptyAccount`(4, `VerifyZeroCiphertext`),
+    `Withdraw`(6, equality + `BatchedRangeProofU64`) — wasm에
+    `proof_zero_ciphertext`/`proof_batched_range_u64` export 있음, 브릿지
+    Prove 함수만 새로 필요. `TransferWithFee`(13, 민트에
+    `ConfidentialTransferFeeConfig` 필요, proof 5종), `ConfigureAccountWithRegistry`
+    (14, ElGamal registry 프로그램 필요)
+
   **신규 최상위 그룹 `/svm/v2/transaction/zk-elgamal-proof/context-state/`**
   (ZkElgamalProof는 Token-2022와 별개 프로그램이라 compute-budget처럼 자기
   그룹). 1 instruction = 1 endpoint, 요청 바디에 proof_type을 받지 않고
@@ -414,9 +438,10 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     (InitializeGroup, UpdateGroupMaxSize, UpdateGroupAuthority, InitializeMember)
   - Metaplex Token Metadata — 완전히 다른 프로그램, Borsh 직렬화 새로 배워야 함,
     근데 지갑/익스플로러 실질 표준이라 결국 필요
-  - Confidential Transfer(15개 중 InitializeMint/UpdateMint/ConfigureAccount/
-    ApproveAccount/Deposit/ApplyPendingBalance/Transfer 완료, 남은 건 Withdraw·
-    EmptyAccount·Enable/Disable credits·fee 변형 등) / Confidential Transfer
+  - Confidential Transfer(15개 중 11개 완료: InitializeMint/UpdateMint/
+    ConfigureAccount/ApproveAccount/Deposit/ApplyPendingBalance/Transfer/
+    크레딧 토글 4개. 남은 건 Withdraw·EmptyAccount·TransferWithFee·
+    ConfigureAccountWithRegistry) / Confidential Transfer
     Fee / Confidential Mint Burn — ElGamal 암호화가 들어가는 가장 무거운
     서브시스템 (각각 15/6/6개 instruction)
 

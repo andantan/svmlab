@@ -1,6 +1,9 @@
 package zkbridge
 
-import "fmt"
+import (
+	"encoding/binary"
+	"fmt"
+)
 
 // ElGamalPubkeyLen is 32 bytes; ElGamalCiphertextLen is 64 -- a Pedersen
 // commitment (32) followed by a decrypt handle (32), confirmed against
@@ -93,4 +96,59 @@ func ElGamalSubtractAmount(ciphertext []byte, amount uint64) ([]byte, error) {
 		return nil, fmt.Errorf("zkbridge: elgamal_sub_amount returned %d bytes, want %d", len(out), ElGamalCiphertextLen)
 	}
 	return out, nil
+}
+
+// ElGamalEncryptWith encrypts amount under publicKey with the given
+// Pedersen opening, rather than a random one -- the ciphertext is then
+// reproducible, and a proof can name the opening it was built with.
+func ElGamalEncryptWith(publicKey []byte, amount uint64, opening []byte) ([]byte, error) {
+	if len(publicKey) != ElGamalPubkeyLen {
+		return nil, fmt.Errorf("zkbridge: elgamal encrypt with: public key is %d bytes, want %d", len(publicKey), ElGamalPubkeyLen)
+	}
+	if len(opening) != PedersenOpeningLen {
+		return nil, fmt.Errorf("zkbridge: elgamal encrypt with: opening is %d bytes, want %d", len(opening), PedersenOpeningLen)
+	}
+
+	out, err := invoke("elgamal_encrypt_with", Bytes(publicKey), Scalar(amount), Bytes(opening))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) != ElGamalCiphertextLen {
+		return nil, fmt.Errorf("zkbridge: elgamal_encrypt_with returned %d bytes, want %d", len(out), ElGamalCiphertextLen)
+	}
+	return out, nil
+}
+
+// ElGamalDecryptU32 decrypts a ciphertext whose plaintext is known to fit
+// in 32 bits, with the ElGamal secret key it was encrypted for. A
+// ciphertext that does not decrypt to a 32-bit value under this key -- the
+// wrong key, or a larger amount -- comes back as an error, not a wrong
+// number.
+func ElGamalDecryptU32(secretKey, ciphertext []byte) (uint64, error) {
+	if len(secretKey) != 32 {
+		return 0, fmt.Errorf("zkbridge: elgamal decrypt u32: secret key is %d bytes, want 32", len(secretKey))
+	}
+	if len(ciphertext) != ElGamalCiphertextLen {
+		return 0, fmt.Errorf("zkbridge: elgamal decrypt u32: ciphertext is %d bytes, want %d", len(ciphertext), ElGamalCiphertextLen)
+	}
+
+	out, err := invoke("elgamal_decrypt_u32", Bytes(secretKey), Bytes(ciphertext))
+	if err != nil {
+		return 0, err
+	}
+	if len(out) != 8 {
+		return 0, fmt.Errorf("zkbridge: elgamal_decrypt_u32 returned %d bytes, want 8", len(out))
+	}
+	return binary.LittleEndian.Uint64(out), nil
+}
+
+// ElGamalAddCiphertexts returns a + b. The wasm exports only subtraction, so
+// this is a - (0 - b), with the all-zero ciphertext (the identity point in
+// both halves) standing in for zero.
+func ElGamalAddCiphertexts(a, b []byte) ([]byte, error) {
+	negB, err := ElGamalSubtractCiphertexts(make([]byte, ElGamalCiphertextLen), b)
+	if err != nil {
+		return nil, err
+	}
+	return ElGamalSubtractCiphertexts(a, negB)
 }

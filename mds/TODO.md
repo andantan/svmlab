@@ -227,9 +227,8 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     `disableConfidentialTransferConfidentialCredits`). 두 enable은 시그니처를
     직접 보진 않았고 둘 다 0이던 계좌가 최종적으로 1,1로 돌아온 걸 온체인에서
     읽어 확인. 꺼진 상태에서 실제 전송이 거부되는지는 시도 안 함
-  - 남은 ConfidentialTransfer: `TransferWithFee`(13, 민트에
-    `ConfidentialTransferFeeConfig` 필요, proof 5종), `ConfigureAccountWithRegistry`
-    (14, ElGamal registry 프로그램 필요)
+  - 남은 ConfidentialTransfer: `ConfigureAccountWithRegistry`(14, ElGamal registry
+    프로그램 필요) — TransferWithFee(13)는 아래에서 완료
 
   **`Withdraw`(opcode 27 sub 6) devnet 완주 — 기밀 available → 공개 잔액.**
   트랜잭션 `2ikz2Je…`, `err: None`, 6221 CU, RPC parsed
@@ -334,6 +333,48 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     "미초기화 계정 선점" 여지가 남음(지금은 두 트랜잭션으로 나눠 보냄)
   - 코드 정리: `zk_elgamal_proof_program.go`→`zk_proof.go`,
     `ae_encryption.go`→`crypto.go` 병합, space/len 상수는 const 블록 하나로
+
+
+  **ZkElgamalProof/Record 확장 + TransferWithFee + ConfidentialTransferFee 전체 —
+  devnet 완주 (수수료 민트 `Gy3ef61p…`, 500bp/최대 10000).**
+  - `verify-from-account/<proof-type>` 12개: 데이터가 정확히 5바이트
+    `[opcode, u32 offset]`, 첫 계정이 proof 계정(소유 프로그램 무관). 큰 proof는
+    고정 CU가 커서(range64 111000/128 200000/256 368000) 바디에 `compute_unit_limit`
+    (ComputeBudget SetComputeUnitLimit 선행). `ComputationalBudgetExceeded`로 확인.
+    inline `verify/*`엔 아직 없음
+  - **Record 그룹** `/svm/v2/transaction/record/{create-account,initialize,write,
+    set-authority,close,reallocate}` — u256 range proof(1064B)는 인라인 verify가
+    1269B로 1232 초과(nonce 없이도)라 SPL Record(`recr1L3P…`, 헤더 33B) 계정에
+    write한 뒤 verify-from-account(`proof_offset=33`). write 한 번 ≤~1015B(기본
+    900), `POST /svm/tool/split/record-chunks`가 청크 분할. nonce 붙이면 u128
+    이상은 트랜잭션이 커서 blockhash로 보내야 함
+  - **`TransferWithFee`(sub 13)** `confidential-transfer-account/transfer-with-fee`
+    + `tool/prove/confidential-transfer-with-fee`(민트를 읽어 수수료율/auditor/
+    withdraw 키를 채움, proof 5종 한 번에: equality·transfer-amount validity·
+    percentage-with-cap·fee validity·u256 range). 수수료 민트는 일반 Transfer 거부.
+    수수료 파라미터는 현재 epoch 값이어야 함. 1000 전송 → 수수료 50, 44718 CU
+  - 수수료 민트에서 `configure-account`는 ConfidentialTransferFeeAmount도 함께
+    초기화 → 계정에 182+299+68=549B 필요, `reallocate`에 bool
+    `include_confidential_transfer_fee_amount` 추가(두 타입은 한 Reallocate에)
+  - **opcode 37 ConfidentialTransferFee 6개 전부 완료**
+    (`confidential-transfer-fee-config/…`): `initialize`(0), `withdraw-withheld-
+    tokens-from-mint`(1), `withdraw-withheld-tokens-from-accounts`(2),
+    `harvest-withheld-tokens-to-mint`(3, 무서명, 소스 계정 여러 개, 1232 검사),
+    `enable-harvest-to-mint`(4)/`disable-harvest-to-mint`(5)
+  - 수수료 인출은 `ciphertext-ciphertext-equality` proof(416B, context 225B) 필요:
+    `tool/prove/confidential-withdraw-withheld-from-mint`·`…-from-accounts`가
+    withheld ciphertext(계정들은 합산 — wasm에 add가 없어 `0 - b` 후 sub로 구현)를
+    출금 authority ElGamal 비밀키로 복호화(`elgamal_decrypt_u32`)→목적지 키로
+    재암호화→proof + 목적지 new_decryptable 반환. 32비트 초과 금액은 불가
+  - 온체인 검증: harvest 후 민트 withheld 100 → from-mint로 송신 계정 8000→8100,
+    민트 withheld 0. 이어 1000 전송으로 수신 계정 withheld 50 → from-accounts로
+    송신 계정 7100→7150, 수신 withheld 0
+  - 목적지가 source와 같은 계정이면 borrow 충돌 가능성(미시도) — 다른 계정 사용
+  - 남은 것: `ConfigureAccountWithRegistry`(14), inline verify의
+    `compute_unit_limit`, 나머지 proof 종류의 prove tool, 이번 실행의 context/
+    record 계정 close(6개+record 1개), authority 미기록으로 회수 불가한 계정
+    (`FGEDoT6w…` 등 verify 안 한 것). SIMD-0296(4096B tx)/0385(v1 포맷)는 조사만,
+    활성화 여부 미확인, 보류
 
   ApplyPendingBalance 등)는 여전히 진행 중 — 각각 필요한 proof 종류가 다름
   (range proof, ciphertext equality proof 등), 하나씩 순서대로 계속.
@@ -498,12 +539,9 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     (InitializeGroup, UpdateGroupMaxSize, UpdateGroupAuthority, InitializeMember)
   - Metaplex Token Metadata — 완전히 다른 프로그램, Borsh 직렬화 새로 배워야 함,
     근데 지갑/익스플로러 실질 표준이라 결국 필요
-  - Confidential Transfer(15개 중 13개 완료: InitializeMint/UpdateMint/
-    ConfigureAccount/ApproveAccount/EmptyAccount/Deposit/ApplyPendingBalance/
-    Transfer/Withdraw/크레딧 토글 4개. 남은 건 TransferWithFee·
-    ConfigureAccountWithRegistry) / Confidential Transfer
-    Fee / Confidential Mint Burn — ElGamal 암호화가 들어가는 가장 무거운
-    서브시스템 (각각 15/6/6개 instruction)
+  - Confidential Transfer(15개 중 14개 완료, 남은 건
+    ConfigureAccountWithRegistry) / Confidential Transfer Fee(6개 전부 완료) / Confidential Mint Burn — ElGamal 암호화가 들어가는 가장 무거운
+    서브시스템 (MintBurn 6개 instruction)
 
 - **작은 후속 작업 (나중에)**
   - `getRecentPrioritizationFees` RPC 래퍼 — `svm/cluster/...`에 읽기 전용으로 추가.

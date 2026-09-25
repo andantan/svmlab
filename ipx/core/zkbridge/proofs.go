@@ -180,3 +180,124 @@ func ProveZeroCiphertext(secretKey, publicKey, ciphertext []byte) ([]byte, error
 	}
 	return out, nil
 }
+
+// BatchedRangeProofU256DataLen is context 264 + proof 800 = 1064,
+// confirmed against zk-sdk-pod's RANGE_PROOF_U256_LEN.
+const BatchedRangeProofU256DataLen = 1064
+
+// ProveBatchedRangeProofU256 is ProveBatchedRangeProofU128's 256-bit
+// counterpart: the bit lengths must sum to exactly 256. TransferWithFee
+// batches eight commitments into one (balance, amount lo/hi, fee delta and
+// its complement, fee lo/hi, net amount).
+func ProveBatchedRangeProofU256(commitments [][]byte, amounts []uint64, bitLengths []uint8, openings [][]byte) ([]byte, error) {
+	return proveBatchedRange("proof_batched_range_u256", 256, BatchedRangeProofU256DataLen, commitments, amounts, bitLengths, openings)
+}
+
+// PercentageWithCapProofDataLen is context 104 (three commitments 96 +
+// max_value u64 8) + proof 256 = 360.
+const PercentageWithCapProofDataLen = 360
+
+// ProvePercentageWithCap proves that a fee commitment equals the transfer
+// amount times a rate, rounded up, unless that exceeds maxValue, in which
+// case it equals maxValue. Each (commitment, opening, amount) triple
+// describes one committed value: the fee ("percentage"), the rounding
+// delta, and the delta actually claimed. Returns the full ProofData bytes
+// (context || proof).
+func ProvePercentageWithCap(
+	percentageCommitment, percentageOpening []byte, percentageAmount uint64,
+	deltaCommitment, deltaOpening []byte, deltaAmount uint64,
+	claimedCommitment, claimedOpening []byte, maxValue uint64,
+) ([]byte, error) {
+	for name, v := range map[string][]byte{"percentage commitment": percentageCommitment, "delta commitment": deltaCommitment, "claimed commitment": claimedCommitment} {
+		if len(v) != PedersenCommitmentLen {
+			return nil, fmt.Errorf("zkbridge: prove percentage with cap: %s is %d bytes, want %d", name, len(v), PedersenCommitmentLen)
+		}
+	}
+	for name, v := range map[string][]byte{"percentage opening": percentageOpening, "delta opening": deltaOpening, "claimed opening": claimedOpening} {
+		if len(v) != PedersenOpeningLen {
+			return nil, fmt.Errorf("zkbridge: prove percentage with cap: %s is %d bytes, want %d", name, len(v), PedersenOpeningLen)
+		}
+	}
+
+	out, err := invoke("proof_percentage_with_cap",
+		Bytes(percentageCommitment), Bytes(percentageOpening), Scalar(percentageAmount),
+		Bytes(deltaCommitment), Bytes(deltaOpening), Scalar(deltaAmount),
+		Bytes(claimedCommitment), Bytes(claimedOpening), Scalar(maxValue))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) != PercentageWithCapProofDataLen {
+		return nil, fmt.Errorf("zkbridge: proof_percentage_with_cap returned %d bytes, want %d", len(out), PercentageWithCapProofDataLen)
+	}
+	return out, nil
+}
+
+// BatchedGroupedCiphertext2HandlesValidityProofDataLen is context 256
+// (2 pubkeys 64 + grouped-lo 96 + grouped-hi 96) + proof 160 = 416.
+const BatchedGroupedCiphertext2HandlesValidityProofDataLen = 416
+
+// ProveBatchedGroupedCiphertext2HandlesValidity is
+// ProveBatchedGroupedCiphertext3HandlesValidity's two-key counterpart: it
+// proves groupedLo and groupedHi are each valid encryptions of amountLo
+// and amountHi under both public keys (for TransferWithFee's fee:
+// destination, then withdraw withheld authority), with the given
+// openings. Returns the full ProofData bytes (context || proof).
+func ProveBatchedGroupedCiphertext2HandlesValidity(pubkeys, groupedLo, groupedHi []byte, amountLo, amountHi uint64, openingLo, openingHi []byte) ([]byte, error) {
+	if len(pubkeys) != 2*ElGamalPubkeyLen {
+		return nil, fmt.Errorf("zkbridge: prove batched grouped ciphertext 2 handles validity: pubkeys is %d bytes, want %d", len(pubkeys), 2*ElGamalPubkeyLen)
+	}
+	if len(groupedLo) != GroupedElGamalCiphertext2Len || len(groupedHi) != GroupedElGamalCiphertext2Len {
+		return nil, fmt.Errorf("zkbridge: prove batched grouped ciphertext 2 handles validity: grouped lo/hi are %d/%d bytes, want %d each", len(groupedLo), len(groupedHi), GroupedElGamalCiphertext2Len)
+	}
+	if len(openingLo) != PedersenOpeningLen || len(openingHi) != PedersenOpeningLen {
+		return nil, fmt.Errorf("zkbridge: prove batched grouped ciphertext 2 handles validity: openings lo/hi are %d/%d bytes, want %d each", len(openingLo), len(openingHi), PedersenOpeningLen)
+	}
+
+	out, err := invoke("proof_batched_grouped_ciphertext_2_handles_validity",
+		Bytes(pubkeys), Bytes(groupedLo), Bytes(groupedHi), Scalar(amountLo), Scalar(amountHi), Bytes(openingLo), Bytes(openingHi))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) != BatchedGroupedCiphertext2HandlesValidityProofDataLen {
+		return nil, fmt.Errorf("zkbridge: proof_batched_grouped_ciphertext_2_handles_validity returned %d bytes, want %d", len(out), BatchedGroupedCiphertext2HandlesValidityProofDataLen)
+	}
+	return out, nil
+}
+
+// CiphertextCiphertextEqualityProofDataLen is context 192 (two pubkeys 64
+// + two ciphertexts 128) + proof 224 = 416, confirmed against zk-sdk-pod's
+// CIPHERTEXT_CIPHERTEXT_EQUALITY_PROOF_LEN.
+const CiphertextCiphertextEqualityProofDataLen = 416
+
+// ProveCiphertextCiphertextEquality proves that firstCiphertext (under the
+// first keypair) and secondCiphertext (under secondPubkey, built with
+// secondOpening) encrypt the same amount. Returns the full ProofData bytes
+// (context || proof), ready to embed in a VerifyCiphertextCiphertextEquality
+// instruction. Withdrawing withheld confidential fees uses it: the first
+// side is the fee ciphertext under the withdraw authority's key, the
+// second is the same amount re-encrypted for the destination account.
+func ProveCiphertextCiphertextEquality(firstSecretKey, firstPublicKey, secondPubkey, firstCiphertext, secondCiphertext, secondOpening []byte, amount uint64) ([]byte, error) {
+	kp, err := marshalElGamalKeypair(firstSecretKey, firstPublicKey)
+	if err != nil {
+		return nil, err
+	}
+	if len(secondPubkey) != ElGamalPubkeyLen {
+		return nil, fmt.Errorf("zkbridge: prove ciphertext ciphertext equality: second pubkey is %d bytes, want %d", len(secondPubkey), ElGamalPubkeyLen)
+	}
+	if len(firstCiphertext) != ElGamalCiphertextLen || len(secondCiphertext) != ElGamalCiphertextLen {
+		return nil, fmt.Errorf("zkbridge: prove ciphertext ciphertext equality: ciphertexts are %d/%d bytes, want %d each", len(firstCiphertext), len(secondCiphertext), ElGamalCiphertextLen)
+	}
+	if len(secondOpening) != PedersenOpeningLen {
+		return nil, fmt.Errorf("zkbridge: prove ciphertext ciphertext equality: second opening is %d bytes, want %d", len(secondOpening), PedersenOpeningLen)
+	}
+
+	out, err := invoke("proof_ciphertext_ciphertext_equality",
+		Bytes(kp), Bytes(secondPubkey), Bytes(firstCiphertext), Bytes(secondCiphertext), Bytes(secondOpening), Scalar(amount))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) != CiphertextCiphertextEqualityProofDataLen {
+		return nil, fmt.Errorf("zkbridge: proof_ciphertext_ciphertext_equality returned %d bytes, want %d", len(out), CiphertextCiphertextEqualityProofDataLen)
+	}
+	return out, nil
+}

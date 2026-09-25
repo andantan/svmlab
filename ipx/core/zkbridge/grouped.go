@@ -52,3 +52,52 @@ func GroupedCiphertext3ToElGamal(grouped []byte, handleIndex int) ([]byte, error
 	}
 	return out, nil
 }
+
+// GroupedElGamalCiphertext2Len is 96 bytes: one shared Pedersen commitment
+// (32) plus two per-key decrypt handles (32 each), the two-key counterpart
+// of GroupedElGamalCiphertext3Len.
+const GroupedElGamalCiphertext2Len = 96
+
+// GroupedElGamalEncrypt2 encrypts amount under both public keys (in order)
+// with the given Pedersen opening. TransferWithFee uses it for the fee,
+// encrypted for [destination, withdraw withheld authority].
+//
+// pubkeys must be two 32-byte ElGamal public keys concatenated in order.
+func GroupedElGamalEncrypt2(pubkeys []byte, amount uint64, opening []byte) ([]byte, error) {
+	if len(pubkeys) != 2*ElGamalPubkeyLen {
+		return nil, fmt.Errorf("zkbridge: grouped_elgamal_2_encrypt_with: pubkeys is %d bytes, want %d", len(pubkeys), 2*ElGamalPubkeyLen)
+	}
+	if len(opening) != PedersenOpeningLen {
+		return nil, fmt.Errorf("zkbridge: grouped_elgamal_2_encrypt_with: opening is %d bytes, want %d", len(opening), PedersenOpeningLen)
+	}
+
+	out, err := invoke("grouped_elgamal_2_encrypt_with", Bytes(pubkeys), Scalar(amount), Bytes(opening))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) != GroupedElGamalCiphertext2Len {
+		return nil, fmt.Errorf("zkbridge: grouped_elgamal_2_encrypt_with returned %d bytes, want %d", len(out), GroupedElGamalCiphertext2Len)
+	}
+	return out, nil
+}
+
+// GroupedCiphertext2ToElGamal extracts the single-key ElGamal ciphertext
+// for the key at handleIndex (its position at encryption time, 0-1) from a
+// grouped 2-handle ciphertext.
+func GroupedCiphertext2ToElGamal(grouped []byte, handleIndex int) ([]byte, error) {
+	if len(grouped) != GroupedElGamalCiphertext2Len {
+		return nil, fmt.Errorf("zkbridge: grouped_ciphertext_2_to_elgamal: grouped ciphertext is %d bytes, want %d", len(grouped), GroupedElGamalCiphertext2Len)
+	}
+	if handleIndex < 0 || handleIndex > 1 {
+		return nil, fmt.Errorf("zkbridge: grouped_ciphertext_2_to_elgamal: handle index %d out of range [0, 1]", handleIndex)
+	}
+
+	out, err := invoke("grouped_ciphertext_2_to_elgamal", Bytes(grouped), Scalar(handleIndex))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) != ElGamalCiphertextLen {
+		return nil, fmt.Errorf("zkbridge: grouped_ciphertext_2_to_elgamal returned %d bytes, want %d", len(out), ElGamalCiphertextLen)
+	}
+	return out, nil
+}

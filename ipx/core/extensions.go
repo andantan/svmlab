@@ -1534,3 +1534,317 @@ func (t *token) EmptyAccount(account, zeroCiphertextContext, owner *types.Public
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
 }
+
+// InitializeConfidentialTransferFeeConfig attaches the
+// ConfidentialTransferFeeConfig extension to mint, naming who may later
+// change it (authority) and the ElGamal public key withheld confidential
+// transfer fees are encrypted under (withdrawWithheldAuthorityElGamalPubkey)
+// -- whoever holds that key's secret can decrypt every withheld fee. This
+// is what lets a mint that already charges an ordinary transfer fee
+// (TransferFeeConfig) take confidential transfers at all: once a mint
+// carries TransferFeeConfig, the plain confidential Transfer is refused and
+// only TransferWithFee is accepted.
+//
+// This is opcode 37 sub 0
+// (ConfidentialTransferFeeInstructionInitializeConfidentialTransferFeeConfig)
+// and needs no proof. Confirmed against the interface crate's
+// InitializeConfidentialTransferFeeConfigData: authority is a fixed 32-byte
+// MaybeNull (all zero for none), the ElGamal key is a required plain 32
+// bytes (not MaybeNull, unlike ConfidentialTransferMint's optional
+// auditor), and accounts are just [mint(writable)]. The program sets
+// harvest_to_mint_enabled to true and zeroes withheld_amount itself.
+//
+// Like every mint extension, this can only run after create-mint has
+// allocated the account and before initialize-mint2 commits it.
+func (t *token) InitializeConfidentialTransferFeeConfig(mint, authority *types.PublicKey, withdrawWithheldAuthorityElGamalPubkey []byte) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize confidential transfer fee config: mint is required")
+	}
+	if len(withdrawWithheldAuthorityElGamalPubkey) != 32 {
+		return nil, fmt.Errorf("token initialize confidential transfer fee config: withdraw withheld authority elgamal pubkey is %d bytes, expected 32", len(withdrawWithheldAuthorityElGamalPubkey))
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferFeeExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferFeeInstructionInitializeConfidentialTransferFeeConfig)
+	data = appendMaybeNullAddress(data, authority)
+	data = codec.Binary.AppendBytes(data, withdrawWithheldAuthorityElGamalPubkey)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(mint),
+	), data), nil
+}
+
+// ConfidentialTransferWithFee builds a ConfidentialTransfer extension's
+// TransferWithFee instruction -- sub-instruction 13, the confidential
+// transfer a mint carrying an ordinary transfer fee (TransferFeeConfig)
+// requires: once a mint has that extension the plain Transfer is refused,
+// since the program then demands the fee proofs Transfer's instruction
+// data has no room for. It is Transfer plus a fee, so it depends on five
+// proofs verified beforehand into context-state accounts: equality, the
+// transfer amount's ciphertext validity, the fee's percentage-with-cap,
+// the fee's ciphertext validity, and a 256-bit range proof.
+//
+// newSourceDecryptableAvailableBalance, transferAmountAuditorCiphertextLo,
+// and transferAmountAuditorCiphertextHi are BuildTransferWithFeeProofs's
+// own fields of those names, packed here rather than recomputed.
+//
+// Confirmed against the interface crate's own inner_transfer_with_fee and
+// TransferWithFeeInstructionData: data is the new decryptable balance (36)
+// + the two auditor ciphertexts (64 each) + five proof offsets, all 0 (a
+// context state account); accounts are [source(writable), mint(readonly),
+// destination(writable), equality ctx, transfer amount validity ctx, fee
+// sigma ctx, fee validity ctx, range ctx (all readonly), authority
+// (+multisig)], in exactly that order, with no instructions sysvar since no
+// proof location is an instruction offset.
+func (t *token) ConfidentialTransferWithFee(source, mint, destination, equalityContext, transferValidityContext, feeSigmaContext, feeValidityContext, rangeContext, authority *types.PublicKey, signers []*types.PublicKey, newSourceDecryptableAvailableBalance, transferAmountAuditorCiphertextLo, transferAmountAuditorCiphertextHi []byte) (*types.Instruction, error) {
+	if source.IsNil() {
+		return nil, fmt.Errorf("token transfer with fee: source is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token transfer with fee: mint is required")
+	}
+	if destination.IsNil() {
+		return nil, fmt.Errorf("token transfer with fee: destination is required")
+	}
+	for name, k := range map[string]*types.PublicKey{
+		"equality context state account":                 equalityContext,
+		"transfer amount validity context state account": transferValidityContext,
+		"fee sigma context state account":                feeSigmaContext,
+		"fee validity context state account":             feeValidityContext,
+		"range proof context state account":              rangeContext,
+	} {
+		if k.IsNil() {
+			return nil, fmt.Errorf("token transfer with fee: %s is required", name)
+		}
+	}
+	if err := validateAuthority("token transfer with fee", authority, signers); err != nil {
+		return nil, err
+	}
+	if len(newSourceDecryptableAvailableBalance) != AeCiphertextLen {
+		return nil, fmt.Errorf("token transfer with fee: new source decryptable available balance is %d bytes, expected %d", len(newSourceDecryptableAvailableBalance), AeCiphertextLen)
+	}
+	if len(transferAmountAuditorCiphertextLo) != 64 || len(transferAmountAuditorCiphertextHi) != 64 {
+		return nil, fmt.Errorf("token transfer with fee: transfer amount auditor ciphertext lo/hi are %d/%d bytes, expected 64 each", len(transferAmountAuditorCiphertextLo), len(transferAmountAuditorCiphertextHi))
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionTransferWithFee)
+	data = codec.Binary.AppendBytes(data, newSourceDecryptableAvailableBalance)
+	data = codec.Binary.AppendBytes(data, transferAmountAuditorCiphertextLo)
+	data = codec.Binary.AppendBytes(data, transferAmountAuditorCiphertextHi)
+	for i := 0; i < 5; i++ {
+		data = codec.Binary.AppendU8(data, 0) // every proof offset: 0 = context state account
+	}
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(source),
+		types.NewReadonlyAccount(mint),
+		types.NewWritableAccount(destination),
+		types.NewReadonlyAccount(equalityContext),
+		types.NewReadonlyAccount(transferValidityContext),
+		types.NewReadonlyAccount(feeSigmaContext),
+		types.NewReadonlyAccount(feeValidityContext),
+		types.NewReadonlyAccount(rangeContext),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// EnableHarvestToMint builds a ConfidentialTransferFee extension's EnableHarvestToMint
+// instruction -- sub-instruction 4 under opcode 37, which sets harvest_to_mint_enabled, so the mint accepts confidential fees harvested from token accounts. No
+// proof, and the instruction carries no data beyond its own discriminant.
+//
+// Confirmed against the interface crate's own instruction docs: accounts
+// are [mint(writable), authority(+multisig)], where authority is the
+// ConfidentialTransferFeeConfig's own authority, not the TransferFeeConfig's
+// withdraw withheld authority.
+func (t *token) EnableHarvestToMint(mint, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token enable harvest to mint: mint is required")
+	}
+	if err := validateAuthority("token enable harvest to mint", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferFeeExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferFeeInstructionEnableHarvestToMint)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(mint),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// DisableHarvestToMint builds a ConfidentialTransferFee extension's DisableHarvestToMint
+// instruction -- sub-instruction 5 under opcode 37, which clears harvest_to_mint_enabled, so the mint rejects confidential fees harvested from token accounts. No
+// proof, and the instruction carries no data beyond its own discriminant.
+//
+// Confirmed against the interface crate's own instruction docs: accounts
+// are [mint(writable), authority(+multisig)], where authority is the
+// ConfidentialTransferFeeConfig's own authority, not the TransferFeeConfig's
+// withdraw withheld authority.
+func (t *token) DisableHarvestToMint(mint, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token disable harvest to mint: mint is required")
+	}
+	if err := validateAuthority("token disable harvest to mint", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferFeeExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferFeeInstructionDisableHarvestToMint)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(mint),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// ConfidentialHarvestWithheldTokensToMint builds a ConfidentialTransferFee extension's
+// ConfidentialHarvestWithheldTokensToMint instruction -- sub-instruction 3 under opcode
+// 37, which moves the confidential fees withheld on each source token
+// account into the mint's own withheld amount, where the withdraw
+// authority can then collect them all at once. It is permissionless: no
+// account signs, so anyone with a fee payer can run it. No proof, and the
+// instruction carries no data beyond its own discriminant.
+//
+// Confirmed against the interface crate's own instruction docs: accounts
+// are [mint(writable), source accounts(writable)...]. A source account that
+// does not carry both TransferFeeAmount and ConfidentialTransferAccount is
+// skipped by the program rather than rejected, so the caller has to check
+// that itself to know what actually moved.
+func (t *token) ConfidentialHarvestWithheldTokensToMint(mint *types.PublicKey, sources []*types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token harvest withheld tokens to mint: mint is required")
+	}
+	if len(sources) == 0 {
+		return nil, fmt.Errorf("token harvest withheld tokens to mint: at least one source account is required")
+	}
+	for i, src := range sources {
+		if src.IsNil() {
+			return nil, fmt.Errorf("token harvest withheld tokens to mint: source account %d is required", i)
+		}
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferFeeExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferFeeInstructionHarvestWithheldTokensToMint)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(mint))
+	for _, src := range sources {
+		accounts = append(accounts, types.NewWritableAccount(src))
+	}
+
+	return types.NewInstruction(t.id, accounts, data), nil
+}
+
+// ConfidentialWithdrawWithheldTokensFromMint builds a ConfidentialTransferFee
+// extension's WithdrawWithheldTokensFromMint instruction -- sub-instruction
+// 1 under opcode 37, which moves the confidential fees withheld on the mint
+// itself (gathered there by harvest) into destination's available balance,
+// and zeroes the mint's withheld amount. The move happens without ever
+// revealing the amount: a CiphertextCiphertextEquality proof, already
+// verified into equalityContext, ties the mint's withheld ciphertext (under
+// the withdraw authority's ElGamal key) to the same amount re-encrypted for
+// destination.
+//
+// Confirmed against the interface crate's own doc comment and
+// WithdrawWithheldTokensFromMintData: data is the proof offset as an i8 (0
+// signals a context state account) + the destination's new decryptable
+// available balance (36); accounts are [mint(writable), destination(writable),
+// equality context state(readonly), authority(+multisig)], where authority
+// is the TransferFeeConfig's withdraw withheld authority. This is not the
+// plain opcode-26 WithdrawWithheldTokensFromMint, which moves unencrypted
+// fees.
+func (t *token) ConfidentialWithdrawWithheldTokensFromMint(mint, destination, equalityContext, authority *types.PublicKey, signers []*types.PublicKey, newDecryptableAvailableBalance []byte) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token withdraw withheld tokens from mint: mint is required")
+	}
+	if destination.IsNil() {
+		return nil, fmt.Errorf("token withdraw withheld tokens from mint: destination is required")
+	}
+	if equalityContext.IsNil() {
+		return nil, fmt.Errorf("token withdraw withheld tokens from mint: equality context state account is required")
+	}
+	if err := validateAuthority("token withdraw withheld tokens from mint", authority, signers); err != nil {
+		return nil, err
+	}
+	if len(newDecryptableAvailableBalance) != AeCiphertextLen {
+		return nil, fmt.Errorf("token withdraw withheld tokens from mint: new decryptable available balance is %d bytes, expected %d", len(newDecryptableAvailableBalance), AeCiphertextLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferFeeExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferFeeInstructionWithdrawWithheldTokensFromMint)
+	data = codec.Binary.AppendU8(data, 0) // proof_instruction_offset: 0 = context state account
+	data = codec.Binary.AppendBytes(data, newDecryptableAvailableBalance)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(mint),
+		types.NewWritableAccount(destination),
+		types.NewReadonlyAccount(equalityContext),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// ConfidentialWithdrawWithheldTokensFromAccounts builds a ConfidentialTransferFee
+// extension's WithdrawWithheldTokensFromAccounts instruction -- sub-instruction
+// 2 under opcode 37, the account-side counterpart of
+// ConfidentialWithdrawWithheldTokensFromMint: it moves the confidential
+// fees withheld on each source token account into destination's available
+// balance in one step and zeroes them, proven by a
+// CiphertextCiphertextEquality context state whose first ciphertext is the
+// sum of the sources' withheld amounts.
+//
+// Confirmed against the interface crate's own doc comment and
+// WithdrawWithheldTokensFromAccountsData: data is num_token_accounts(u8) +
+// proof offset(i8, 0 = context state account) + the destination's new
+// decryptable balance (36); accounts are [mint(readonly),
+// destination(writable), equality context state(readonly), authority
+// (+multisig signers), sources(writable)...] -- the sources follow the
+// authority and signers, unlike the mint variant.
+func (t *token) ConfidentialWithdrawWithheldTokensFromAccounts(mint, destination, equalityContext, authority *types.PublicKey, signers, sources []*types.PublicKey, newDecryptableAvailableBalance []byte) (*types.Instruction, error) {
+	const name = "token withdraw withheld tokens from accounts"
+	if mint.IsNil() {
+		return nil, fmt.Errorf("%s: mint is required", name)
+	}
+	if destination.IsNil() {
+		return nil, fmt.Errorf("%s: destination is required", name)
+	}
+	if equalityContext.IsNil() {
+		return nil, fmt.Errorf("%s: equality context state account is required", name)
+	}
+	if err := validateAuthority(name, authority, signers); err != nil {
+		return nil, err
+	}
+	if len(sources) == 0 || len(sources) > 255 {
+		return nil, fmt.Errorf("%s: %d source accounts, expected 1 to 255", name, len(sources))
+	}
+	for i, src := range sources {
+		if src.IsNil() {
+			return nil, fmt.Errorf("%s: source account %d is required", name, i)
+		}
+	}
+	if len(newDecryptableAvailableBalance) != AeCiphertextLen {
+		return nil, fmt.Errorf("%s: new decryptable available balance is %d bytes, expected %d", name, len(newDecryptableAvailableBalance), AeCiphertextLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferFeeExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferFeeInstructionWithdrawWithheldTokensFromAccounts)
+	data = codec.Binary.AppendU8(data, uint8(len(sources)))
+	data = codec.Binary.AppendU8(data, 0) // proof_instruction_offset: 0 = context state account
+	data = codec.Binary.AppendBytes(data, newDecryptableAvailableBalance)
+
+	accounts := types.NewAccounts(
+		types.NewReadonlyAccount(mint),
+		types.NewWritableAccount(destination),
+		types.NewReadonlyAccount(equalityContext),
+	)
+	accounts = appendAuthority(accounts, authority, signers)
+	for _, src := range sources {
+		accounts = append(accounts, types.NewWritableAccount(src))
+	}
+
+	return types.NewInstruction(t.id, accounts, data), nil
+}

@@ -9,6 +9,7 @@ import (
 	"github.com/andantan/svmlab/api/handler"
 	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/core/types"
+	"github.com/andantan/svmlab/core/zkbridge"
 	"github.com/andantan/svmlab/internal/config"
 	"github.com/andantan/svmlab/internal/rpc"
 )
@@ -3963,5 +3964,2081 @@ func (h *ZkElgamalProofTransactionHandler) ContextStateClose(w http.ResponseWrit
 		tx, txRaw, messageBytes,
 		req.FeePayerKey(), req.ContextStateAccountKey(), req.DestinationKey(), req.ContextStateAccountOwnerKey(), nonceAuthority,
 		contextInfo.Lamports, fee,
+	))
+}
+
+// ContextStateVerifyFromAccountPubkeyValidity godoc
+// @Summary      Verify a PubkeyValidity proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyPubkeyValidity, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/pubkey-validity). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountPubkeyValidityRequest true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountPubkeyValidityResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/pubkey-validity [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountPubkeyValidity(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountPubkeyValidityRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(32+core.PubkeyValidityProofLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte PubkeyValidity proof at offset %d", req.ProofAccountKey(), proofInfo.Space, 32+core.PubkeyValidityProofLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/pubkey-validity", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.PubkeyValidityContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a PubkeyValidity context", req.ContextStateAccountKey(), contextInfo.Space, core.PubkeyValidityContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyPubkeyValidity, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyPubkeyValidity)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountPubkeyValidityResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountCiphertextCommitmentEquality godoc
+// @Summary      Verify a CiphertextCommitmentEquality proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyCiphertextCommitmentEquality, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/ciphertext-commitment-equality). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountCiphertextCommitmentEqualityRequest true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountCiphertextCommitmentEqualityResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/ciphertext-commitment-equality [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountCiphertextCommitmentEquality(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountCiphertextCommitmentEqualityRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(zkbridge.CiphertextCommitmentEqualityProofDataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte CiphertextCommitmentEquality proof at offset %d", req.ProofAccountKey(), proofInfo.Space, zkbridge.CiphertextCommitmentEqualityProofDataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/ciphertext-commitment-equality", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.CiphertextCommitmentEqualityContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a CiphertextCommitmentEquality context", req.ContextStateAccountKey(), contextInfo.Space, core.CiphertextCommitmentEqualityContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyCiphertextCommitmentEquality, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyCiphertextCommitmentEquality)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountCiphertextCommitmentEqualityResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountBatchedGroupedCiphertext3HandlesValidity godoc
+// @Summary      Verify a BatchedGroupedCiphertext3HandlesValidity proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyBatchedGroupedCiphertext3HandlesValidity, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-grouped-ciphertext-3-handles-validity). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountBatchedGroupedCiphertext3HandlesValidityRequest true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountBatchedGroupedCiphertext3HandlesValidityResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/batched-grouped-ciphertext-3-handles-validity [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountBatchedGroupedCiphertext3HandlesValidity(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountBatchedGroupedCiphertext3HandlesValidityRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(zkbridge.BatchedGroupedCiphertext3HandlesValidityProofDataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte BatchedGroupedCiphertext3HandlesValidity proof at offset %d", req.ProofAccountKey(), proofInfo.Space, zkbridge.BatchedGroupedCiphertext3HandlesValidityProofDataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/batched-grouped-ciphertext-3-handles-validity", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.BatchedGroupedCiphertext3HandlesValidityContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a BatchedGroupedCiphertext3HandlesValidity context", req.ContextStateAccountKey(), contextInfo.Space, core.BatchedGroupedCiphertext3HandlesValidityContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext3HandlesValidity, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext3HandlesValidity)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountBatchedGroupedCiphertext3HandlesValidityResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountBatchedRangeProofU128 godoc
+// @Summary      Verify a BatchedRangeProofU128 proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyBatchedRangeProofU128, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-range-proof-u128). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountBatchedRangeProofU128Request true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountBatchedRangeProofU128Response
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/batched-range-proof-u128 [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountBatchedRangeProofU128(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountBatchedRangeProofU128Request)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(zkbridge.BatchedRangeProofU128DataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte BatchedRangeProofU128 proof at offset %d", req.ProofAccountKey(), proofInfo.Space, zkbridge.BatchedRangeProofU128DataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/batched-range-proof-u128", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.BatchedRangeProofU128ContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a BatchedRangeProofU128 context", req.ContextStateAccountKey(), contextInfo.Space, core.BatchedRangeProofU128ContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyBatchedRangeProofU128, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyBatchedRangeProofU128)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountBatchedRangeProofU128Response(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountZeroCiphertext godoc
+// @Summary      Verify a ZeroCiphertext proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyZeroCiphertext, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/zero-ciphertext). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountZeroCiphertextRequest true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountZeroCiphertextResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/zero-ciphertext [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountZeroCiphertext(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountZeroCiphertextRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(core.ZeroCiphertextProofDataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte ZeroCiphertext proof at offset %d", req.ProofAccountKey(), proofInfo.Space, core.ZeroCiphertextProofDataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/zero-ciphertext", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.ZeroCiphertextContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a ZeroCiphertext context", req.ContextStateAccountKey(), contextInfo.Space, core.ZeroCiphertextContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyZeroCiphertext, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyZeroCiphertext)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountZeroCiphertextResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountCiphertextCiphertextEquality godoc
+// @Summary      Verify a CiphertextCiphertextEquality proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyCiphertextCiphertextEquality, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/ciphertext-ciphertext-equality). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountCiphertextCiphertextEqualityRequest true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountCiphertextCiphertextEqualityResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/ciphertext-ciphertext-equality [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountCiphertextCiphertextEquality(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountCiphertextCiphertextEqualityRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(core.CiphertextCiphertextEqualityProofDataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte CiphertextCiphertextEquality proof at offset %d", req.ProofAccountKey(), proofInfo.Space, core.CiphertextCiphertextEqualityProofDataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/ciphertext-ciphertext-equality", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.CiphertextCiphertextEqualityContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a CiphertextCiphertextEquality context", req.ContextStateAccountKey(), contextInfo.Space, core.CiphertextCiphertextEqualityContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyCiphertextCiphertextEquality, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyCiphertextCiphertextEquality)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountCiphertextCiphertextEqualityResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountPercentageWithCap godoc
+// @Summary      Verify a PercentageWithCap proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyPercentageWithCap, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/percentage-with-cap). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountPercentageWithCapRequest true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountPercentageWithCapResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/percentage-with-cap [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountPercentageWithCap(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountPercentageWithCapRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(core.PercentageWithCapProofDataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte PercentageWithCap proof at offset %d", req.ProofAccountKey(), proofInfo.Space, core.PercentageWithCapProofDataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/percentage-with-cap", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.PercentageWithCapContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a PercentageWithCap context", req.ContextStateAccountKey(), contextInfo.Space, core.PercentageWithCapContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyPercentageWithCap, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyPercentageWithCap)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountPercentageWithCapResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountBatchedRangeProofU64 godoc
+// @Summary      Verify a BatchedRangeProofU64 proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyBatchedRangeProofU64, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-range-proof-u64). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountBatchedRangeProofU64Request true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountBatchedRangeProofU64Response
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/batched-range-proof-u64 [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountBatchedRangeProofU64(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountBatchedRangeProofU64Request)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(core.BatchedRangeProofU64ProofDataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte BatchedRangeProofU64 proof at offset %d", req.ProofAccountKey(), proofInfo.Space, core.BatchedRangeProofU64ProofDataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/batched-range-proof-u64", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.BatchedRangeProofU64ContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a BatchedRangeProofU64 context", req.ContextStateAccountKey(), contextInfo.Space, core.BatchedRangeProofU64ContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyBatchedRangeProofU64, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyBatchedRangeProofU64)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountBatchedRangeProofU64Response(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountBatchedRangeProofU256 godoc
+// @Summary      Verify a BatchedRangeProofU256 proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyBatchedRangeProofU256, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-range-proof-u256). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountBatchedRangeProofU256Request true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountBatchedRangeProofU256Response
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/batched-range-proof-u256 [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountBatchedRangeProofU256(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountBatchedRangeProofU256Request)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(core.BatchedRangeProofU256ProofDataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte BatchedRangeProofU256 proof at offset %d", req.ProofAccountKey(), proofInfo.Space, core.BatchedRangeProofU256ProofDataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/batched-range-proof-u256", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.BatchedRangeProofU256ContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a BatchedRangeProofU256 context", req.ContextStateAccountKey(), contextInfo.Space, core.BatchedRangeProofU256ContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyBatchedRangeProofU256, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyBatchedRangeProofU256)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountBatchedRangeProofU256Response(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountGroupedCiphertext2HandlesValidity godoc
+// @Summary      Verify a GroupedCiphertext2HandlesValidity proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyGroupedCiphertext2HandlesValidity, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/grouped-ciphertext-2-handles-validity). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountGroupedCiphertext2HandlesValidityRequest true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountGroupedCiphertext2HandlesValidityResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/grouped-ciphertext-2-handles-validity [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountGroupedCiphertext2HandlesValidity(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountGroupedCiphertext2HandlesValidityRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(core.GroupedCiphertext2HandlesValidityProofDataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte GroupedCiphertext2HandlesValidity proof at offset %d", req.ProofAccountKey(), proofInfo.Space, core.GroupedCiphertext2HandlesValidityProofDataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/grouped-ciphertext-2-handles-validity", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.GroupedCiphertext2HandlesValidityContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a GroupedCiphertext2HandlesValidity context", req.ContextStateAccountKey(), contextInfo.Space, core.GroupedCiphertext2HandlesValidityContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyGroupedCiphertext2HandlesValidity, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyGroupedCiphertext2HandlesValidity)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountGroupedCiphertext2HandlesValidityResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountBatchedGroupedCiphertext2HandlesValidity godoc
+// @Summary      Verify a BatchedGroupedCiphertext2HandlesValidity proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyBatchedGroupedCiphertext2HandlesValidity, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-grouped-ciphertext-2-handles-validity). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountBatchedGroupedCiphertext2HandlesValidityRequest true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountBatchedGroupedCiphertext2HandlesValidityResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/batched-grouped-ciphertext-2-handles-validity [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountBatchedGroupedCiphertext2HandlesValidity(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountBatchedGroupedCiphertext2HandlesValidityRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(core.BatchedGroupedCiphertext2HandlesValidityProofDataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte BatchedGroupedCiphertext2HandlesValidity proof at offset %d", req.ProofAccountKey(), proofInfo.Space, core.BatchedGroupedCiphertext2HandlesValidityProofDataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/batched-grouped-ciphertext-2-handles-validity", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.BatchedGroupedCiphertext2HandlesValidityContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a BatchedGroupedCiphertext2HandlesValidity context", req.ContextStateAccountKey(), contextInfo.Space, core.BatchedGroupedCiphertext2HandlesValidityContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext2HandlesValidity, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext2HandlesValidity)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountBatchedGroupedCiphertext2HandlesValidityResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
+	))
+}
+
+// ContextStateVerifyFromAccountGroupedCiphertext3HandlesValidity godoc
+// @Summary      Verify a GroupedCiphertext3HandlesValidity proof from an account and persist its context
+// @Description  ZkElgamalProof VerifyGroupedCiphertext3HandlesValidity, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/grouped-ciphertext-3-handles-validity). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.
+// @Tags         v2-transaction-zk-elgamal-proof-context-state
+// @Accept       json
+// @Produce      json
+// @Param        request body ContextStateVerifyFromAccountGroupedCiphertext3HandlesValidityRequest true "Context-state verify-from-account request"
+// @Success      200 {object} ContextStateVerifyFromAccountGroupedCiphertext3HandlesValidityResponse
+// @Failure      400 {object} map[string]string
+// @Failure      502 {object} map[string]string
+// @Router       /svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/grouped-ciphertext-3-handles-validity [post]
+func (h *ZkElgamalProofTransactionHandler) ContextStateVerifyFromAccountGroupedCiphertext3HandlesValidity(w http.ResponseWriter, r *http.Request) {
+	req := new(ContextStateVerifyFromAccountGroupedCiphertext3HandlesValidityRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.ProofAccountKey(),
+		req.ContextStateAccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	proofInfo := accounts[req.ProofAccountKey().Base58()]
+	if !proofInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s does not exist -- write the proof first (see record/write)", req.ProofAccountKey()))
+		return
+	}
+	if req.ToProofOffset() > 0xFFFFFFFF {
+		handler.WriteError(w, http.StatusBadRequest, "proof_offset: exceeds 4294967295")
+		return
+	}
+	if proofInfo.Space < req.ToProofOffset()+uint64(core.GroupedCiphertext3HandlesValidityProofDataLen) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("proof_account: %s is %d bytes, too small to hold a %d-byte GroupedCiphertext3HandlesValidity proof at offset %d", req.ProofAccountKey(), proofInfo.Space, core.GroupedCiphertext3HandlesValidityProofDataLen, req.ToProofOffset()))
+		return
+	}
+
+	contextInfo := accounts[req.ContextStateAccountKey().Base58()]
+	if !contextInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s does not exist -- create it first via context-state/create/grouped-ciphertext-3-handles-validity", req.ContextStateAccountKey()))
+		return
+	}
+	if contextInfo.Owner != core.ZkElgamalProof.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is not owned by %s", req.ContextStateAccountKey(), core.ZkElgamalProof.ID()))
+		return
+	}
+	if contextInfo.Space != core.GroupedCiphertext3HandlesValidityContextStateSpace {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("context_state_account: %s is %d bytes, expected %d for a GroupedCiphertext3HandlesValidity context", req.ContextStateAccountKey(), contextInfo.Space, core.GroupedCiphertext3HandlesValidityContextStateSpace))
+		return
+	}
+
+	ix, err := core.ZkElgamalProof.VerifyFromAccountContextState(core.ZkElgamalProofInstructionVerifyGroupedCiphertext3HandlesValidity, req.ProofAccountKey(), uint32(req.ToProofOffset()), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	computeUnitLimit := req.ToComputeUnitLimit()
+	if computeUnitLimit == 0 {
+		computeUnitLimit = core.ZkElgamalProof.RecommendedComputeUnitLimit(core.ZkElgamalProofInstructionVerifyGroupedCiphertext3HandlesValidity)
+	}
+	instructions := types.NewInstructions(core.ComputeBudget.SetComputeUnitLimit(computeUnitLimit), ix)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	handler.WriteOK(w, NewContextStateVerifyFromAccountGroupedCiphertext3HandlesValidityResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), nonceAuthority,
+		req.ProofAccountKey(), req.ToProofOffset(), req.ContextStateAccountKey(), req.ContextStateAccountOwnerKey(),
+		fee,
 	))
 }

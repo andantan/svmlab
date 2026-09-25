@@ -2532,6 +2532,72 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/tool/prove/confidential-transfer-with-fee": {
+            "post": {
+                "description": "Builds the equality, transfer-amount validity, percentage-with-cap, fee validity, and 256-bit range proofs a single confidential transfer on a fee-charging mint requires, in one call, because they are built from the same fresh randomness and only agree with each other if drawn together. The mint is named rather than its parameters being passed in: the transfer fee rate and cap in effect this epoch (TransferFeeConfig), the auditor key (ConfidentialTransferMint), and the withdraw withheld authority key (ConfidentialTransferFeeConfig) are read from it, since the deployed program recomputes them from the same place and rejects proofs built for different values. Each *_proof_data blob goes to the matching zk-elgamal-proof/context-state/verify endpoint, and auditor_ciphertext_lo/hi and new_source_decryptable_available_balance are what the transfer-with-fee instruction itself carries. The response cannot be rebuilt: a second call draws new randomness and produces proofs that no longer match any context-state account already verified from the first. The source balance must not change, and the epoch must not roll over into a different fee, between building these proofs and the transfer landing.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool"
+                ],
+                "summary": "Build the five proofs one confidential TransferWithFee needs",
+                "parameters": [
+                    {
+                        "description": "Transfer-with-fee inputs",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialTransferWithFeeRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialTransferWithFeeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/tool/prove/confidential-withdraw": {
             "post": {
                 "description": "Builds the equality and 64-bit range proofs a single confidential withdrawal requires, in one call, because they are built from the same fresh randomness and only agree with each other if drawn together. equality_proof_data goes to zk-elgamal-proof/context-state/verify/ciphertext-commitment-equality and range_proof_data to verify/batched-range-proof-u64, and new_decryptable_available_balance is what the withdraw instruction itself carries. The response cannot be rebuilt: a second call draws new randomness and produces proofs that no longer match any context-state account already verified from the first. The account's balance must not change between building these proofs and the withdrawal landing.",
@@ -2589,6 +2655,138 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/tool/prove/confidential-withdraw-withheld-from-accounts": {
+            "post": {
+                "description": "Sums the withheld confidential fee ciphertexts of source_accounts, decrypts the total with the withdraw authority's ElGamal secret key, re-encrypts it under the destination account's ElGamal key, and proves the two ciphertexts encrypt the same value. The sources' withheld amounts, the withdraw authority's public key (from the mint), and the destination's ElGamal key and current decryptable balance are read from chain, since the deployed program compares the proof against exactly those. ciphertext_ciphertext_equality_proof_data goes to zk-elgamal-proof/context-state/verify/ciphertext-ciphertext-equality, and new_decryptable_available_balance is what the withdraw instruction itself carries. The total must fit in 32 bits. The response goes stale if any source's withheld amount, or the destination's decryptable balance, changes before the withdraw lands.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool"
+                ],
+                "summary": "Build the proof one confidential WithdrawWithheldTokensFromAccounts needs",
+                "parameters": [
+                    {
+                        "description": "Mint, sources, destination, withdraw authority secret, AE key",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialWithdrawWithheldFromAccountsRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialWithdrawWithheldFromAccountsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/tool/prove/confidential-withdraw-withheld-from-mint": {
+            "post": {
+                "description": "Decrypts the mint's withheld confidential fee amount with the withdraw authority's ElGamal secret key, re-encrypts that amount under the destination account's ElGamal key, and proves the two ciphertexts encrypt the same value. The mint's withheld ciphertext, the withdraw authority's public key, and the destination's ElGamal key and current decryptable balance are read from chain, since the deployed program compares the proof against exactly those. ciphertext_ciphertext_equality_proof_data goes to zk-elgamal-proof/context-state/verify/ciphertext-ciphertext-equality, and new_decryptable_available_balance is what the withdraw instruction itself carries. The withheld amount must fit in 32 bits. The response cannot be rebuilt against a context-state account already verified from an earlier call, and it goes stale if more fees are harvested onto the mint, or the destination's decryptable balance changes, before the withdraw lands.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool"
+                ],
+                "summary": "Build the proof one confidential WithdrawWithheldTokensFromMint needs",
+                "parameters": [
+                    {
+                        "description": "Mint, destination, withdraw authority secret, AE key",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialWithdrawWithheldFromMintRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialWithdrawWithheldFromMintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/tool/prove/pubkey-validity": {
             "post": {
                 "description": "Derives the public key secret_key determines and builds a sigma-protocol proof that whoever holds secret_key knows it -- what extensions/confidential-transfer-account/configure-account requires alongside the public key it names, since nothing else lets the deployed program tell a real ElGamal public key from 32 arbitrary bytes. The proof is zero-knowledge: public_key and proof in the response reveal nothing about secret_key beyond what configure-account already needs to see.",
@@ -2632,6 +2830,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/misc.ProvePubkeyValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/tool/split/record-chunks": {
+            "post": {
+                "description": "Splits data (base58-encoded, typically a proof_data blob from a tool/prove endpoint) into the writes that put all of it into a SPL Record account. A proof too large for one transaction -- a 256-bit range proof is 1064 bytes -- is written into a record account first and then verified from there (zk-elgamal-proof/context-state/verify-from-account), and a single record/write carries at most about 1000 bytes. Each chunk's offset and data go straight into a record/write request; total_length is the data_length for record/create-account; proof_offset (33, the record header) is the proof_offset the verify-from-account request needs. chunk_size defaults to 900, which fits a transaction with or without a durable nonce, and cannot exceed 1000.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool"
+                ],
+                "summary": "Split bytes into record/write chunks",
+                "parameters": [
+                    {
+                        "description": "Bytes to split",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.SplitRecordChunksRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.SplitRecordChunksResponse"
                         }
                     },
                     "400": {
@@ -2921,6 +3176,318 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/record/close": {
+            "post": {
+                "description": "SPL Record CloseAccount: drains record_account's lamports into receiver, which removes the account once the transaction ends. authority signs. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-record"
+                ],
+                "summary": "Close a record account and reclaim its rent",
+                "parameters": [
+                    {
+                        "description": "Record request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordCloseRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordCloseResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/record/create-account": {
+            "post": {
+                "description": "System CreateAccount only, owned by the Record program and sized for a header plus data_length bytes of data (33 + data_length), but not yet initialized. Initialize it in the same transaction as this (see record/initialize): an uninitialized record account can be initialized by anyone, with any authority they like. This is what holds a proof too large to carry in one transaction, such as a 256-bit range proof (1064 bytes, so data_length 1064). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-record"
+                ],
+                "summary": "Fund a new account, sized and owned for the SPL Record program",
+                "parameters": [
+                    {
+                        "description": "Record create-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordCreateAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordCreateAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/record/initialize": {
+            "post": {
+                "description": "SPL Record Initialize: marks record_account as a record and names its authority. record_account must already exist, owned by the Record program (see record/create-account), and not yet be initialized. The authority does not sign here, which is why this should land in the same transaction as record/create-account -- an uninitialized record account can be initialized by anyone, with any authority they like. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-record"
+                ],
+                "summary": "Initialize a record account",
+                "parameters": [
+                    {
+                        "description": "Record request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordInitializeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordInitializeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/record/reallocate": {
+            "post": {
+                "description": "SPL Record Reallocate: grows record_account to hold data_length bytes (excluding the 33-byte header); it does nothing if the account is already that large. The account must already hold enough lamports for the larger size, since this instruction does not fund it -- top it up with a system transfer first. authority signs. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-record"
+                ],
+                "summary": "Grow a record account",
+                "parameters": [
+                    {
+                        "description": "Record request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordReallocateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordReallocateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/record/set-authority": {
+            "post": {
+                "description": "SPL Record SetAuthority: makes new_authority the record's authority. authority, the current one, signs. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-record"
+                ],
+                "summary": "Hand a record account to a new authority",
+                "parameters": [
+                    {
+                        "description": "Record request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordSetAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordSetAuthorityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/record/write": {
+            "post": {
+                "description": "SPL Record Write: copies data into record_account at offset (counted from the end of the 33-byte header). It fails if that would run past the end of the account, so create or reallocate the record large enough first. data is base58-encoded and has to fit in one transaction: about 1000 bytes without a durable nonce, about 900 with one, so a larger proof is written in several calls, each at its own offset. authority signs. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-record"
+                ],
+                "summary": "Write bytes into a record account",
+                "parameters": [
+                    {
+                        "description": "Record request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordWriteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.RecordWriteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
                         "schema": {
                             "type": "object",
                             "additionalProperties": {
@@ -5384,7 +5951,7 @@ const docTemplate = `{
         },
         "/svm/v2/transaction/token/extensions/confidential-transfer-account/reallocate": {
             "post": {
-                "description": "Checks whether account already holds enough space for its existing extensions plus ConfidentialTransferAccount, and grows it if not. The instruction itself only ever needs the one new extension: Reallocate reads account's own existing extensions on chain and unions them with what this sends, so a caller never resends what is already there. Getting the resize's rent right is this endpoint's own job: it reads account's current extensions and actual lamports, asks GetAccountDataSize for the full target size once ConfidentialTransferAccount is unioned in, and only then knows rent_payer's shortfall — the same authority Reallocate itself defers to, asked directly rather than recomputed here. Unlike ConfidentialTransferMint, ConfidentialTransferAccount is exactly the token-account extension Reallocate's own account list expects: this is the endpoint that actually succeeds, preparing an account for confidential-transfer-account/configure-account, which otherwise fails as InvalidAccountData the moment the program tries to write pending/available balance ciphertexts into an account that never reserved the 295 bytes those TLV fields need. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "description": "Checks whether account already holds enough space for its existing extensions plus ConfidentialTransferAccount, and grows it if not. The instruction itself only ever needs the one new extension: Reallocate reads account's own existing extensions on chain and unions them with what this sends, so a caller never resends what is already there. Getting the resize's rent right is this endpoint's own job: it reads account's current extensions and actual lamports, asks GetAccountDataSize for the full target size once ConfidentialTransferAccount is unioned in, and only then knows rent_payer's shortfall — the same authority Reallocate itself defers to, asked directly rather than recomputed here. Unlike ConfidentialTransferMint, ConfidentialTransferAccount is exactly the token-account extension Reallocate's own account list expects: this is the endpoint that actually succeeds, preparing an account for confidential-transfer-account/configure-account, which otherwise fails as InvalidAccountData the moment the program tries to write pending/available balance ciphertexts into an account that never reserved the 295 bytes those TLV fields need. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. On a mint that charges a transfer fee, set include_confidential_transfer_fee_amount: configure-account then also initializes ConfidentialTransferFeeAmount, and room for both has to be reserved in this one call.",
                 "consumes": [
                     "application/json"
                 ],
@@ -5496,6 +6063,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-account/transfer-with-fee": {
+            "post": {
+                "description": "Moves an amount confidentially from source to destination on a mint that carries TransferFeeConfig -- neither the amount, the fee, nor either account's resulting balance ever appears in plaintext on chain. Once a mint has that extension the plain confidential transfer is refused and only this instruction is accepted. Both accounts must already carry the ConfidentialTransferAccount extension, and destination must also carry ConfidentialTransferFeeAmount, where the withheld fee accumulates. Builds only the TransferWithFee instruction: the five zero-knowledge proofs it depends on (equality, transfer amount validity, fee percentage-with-cap, fee validity, and a 256-bit range proof) must already be verified into context-state accounts, whose addresses are named here -- build the proofs with tool/prove/confidential-transfer-with-fee, create the accounts with zk-elgamal-proof/context-state/create, and verify each with context-state/verify. new_source_decryptable_available_balance and auditor_ciphertext_lo/hi must come from that same tool call, since a later call draws new randomness and no longer matches the verified proofs. The source balance must not change, and the epoch must not roll over into a different fee, between building the proofs and this transfer landing. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Move tokens confidentially on a mint that charges a transfer fee",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Source, mint, destination, owner, ElGamal/AE key material, amount, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialTransferWithFeeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialTransferWithFeeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/extensions/confidential-transfer-account/withdraw": {
             "post": {
                 "description": "Moves amount out of account's confidential available balance back into its ordinary public balance -- the reverse of deposit. amount is public, but the remaining encrypted balance is not, so the program needs two proofs it is what it should be: an equality proof and a 64-bit range proof. Builds only the Withdraw instruction: both proofs must already be verified into context-state accounts, whose addresses are named here -- build the proofs with tool/prove/confidential-withdraw, create the accounts with zk-elgamal-proof/context-state/create, and verify each with context-state/verify. new_decryptable_available_balance must come from that same tool/prove/confidential-withdraw call, since a later call draws new randomness and no longer matches the verified proofs. The account's balance must not change between building the proofs and this withdrawal landing. decimals is checked against the mint rather than filled in from it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -5539,6 +6163,348 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.ConfidentialWithdrawResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-fee-config/disable-harvest-to-mint": {
+            "post": {
+                "description": "Clears harvest_to_mint_enabled, so the mint rejects confidential fees harvested from token accounts -- the mint's ConfidentialTransferFeeConfig.harvest_to_mint_enabled flag. Authorized by the ConfidentialTransferFeeConfig's own authority, not the TransferFeeConfig's withdraw withheld authority. No zero-knowledge proof is needed, and the instruction carries no data beyond its own discriminant. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that mint stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Stop a mint accepting harvested confidential fees",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.DisableHarvestToMintRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.DisableHarvestToMintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-fee-config/enable-harvest-to-mint": {
+            "post": {
+                "description": "Sets harvest_to_mint_enabled, so the mint accepts confidential fees harvested from token accounts -- the mint's ConfidentialTransferFeeConfig.harvest_to_mint_enabled flag. Authorized by the ConfidentialTransferFeeConfig's own authority, not the TransferFeeConfig's withdraw withheld authority. No zero-knowledge proof is needed, and the instruction carries no data beyond its own discriminant. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that mint stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Let a mint accept harvested confidential fees",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.EnableHarvestToMintRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.EnableHarvestToMintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-fee-config/harvest-withheld-tokens-to-mint": {
+            "post": {
+                "description": "Moves the confidential fees withheld on each of source_accounts into the mint's own withheld amount (ConfidentialTransferFeeConfig.withheld_amount), where the withdraw authority can then collect them all at once with withdraw-withheld-tokens-from-mint. It is permissionless: no account signs, so anyone with a fee payer can run it. The mint must have harvest_to_mint_enabled set (see enable-harvest-to-mint), which this endpoint checks. A source account that does not carry both TransferFeeAmount and ConfidentialTransferAccount is skipped by the program rather than rejected, so the response lists harvested_sources and skipped_sources; a request where nothing would be harvested is rejected. The transaction has to fit the 1232-byte limit, which caps how many sources one call can carry; this endpoint checks that and says so. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Move withheld confidential fees from token accounts to the mint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, source accounts, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialHarvestWithheldTokensToMintRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialHarvestWithheldTokensToMintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-fee-config/initialize": {
+            "post": {
+                "description": "Names who may later change this extension (authority, optional) and the ElGamal public key withheld confidential transfer fees are encrypted under (withdraw_withheld_authority_elgamal_pubkey, required, base58-encoded raw 32-byte ElGamal public key, not a Solana address). A mint that already charges an ordinary transfer fee refuses the plain confidential transfer and accepts only transfer-with-fee, which needs this extension. This can only ever run in the narrow window every mint extension shares: after create-mint has allocated the account and before initialize-mint2 locks the extension list forever -- there is no path back into an already-initialized mint. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Attach the ConfidentialTransferFeeConfig extension to a mint",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, auto-approve flag, auditor key, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.InitializeConfidentialTransferFeeConfigRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.InitializeConfidentialTransferFeeConfigResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-fee-config/withdraw-withheld-tokens-from-accounts": {
+            "post": {
+                "description": "Moves the confidential fees withheld on each of source_accounts straight into destination's available balance and zeroes them, without revealing the amount and without going through the mint (see withdraw-withheld-tokens-from-mint for that route). Authorized by the TransferFeeConfig's withdraw withheld authority. Builds only the instruction: the CiphertextCiphertextEquality proof must already be verified into a context-state account, whose address is named here -- build the proof and new_decryptable_available_balance with tool/prove/confidential-withdraw-withheld-from-accounts using the same source_accounts, create the account with zk-elgamal-proof/context-state/create/ciphertext-ciphertext-equality, and verify it with context-state/verify/ciphertext-ciphertext-equality. The proof covers the sum of the sources' withheld ciphertexts as they are when it is built, so any transfer into a source in between makes it fail. Every source must carry ConfidentialTransferFeeAmount, and the transaction has to fit the 1232-byte limit, which caps how many sources one call can carry; this endpoint checks both. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Withdraw confidential fees withheld on token accounts into a token account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, sources, destination, equality context-state account, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialWithdrawWithheldTokensFromAccountsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialWithdrawWithheldTokensFromAccountsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-fee-config/withdraw-withheld-tokens-from-mint": {
+            "post": {
+                "description": "Moves the confidential fees gathered on the mint (see harvest-withheld-tokens-to-mint) into destination's available balance and zeroes the mint's withheld amount, without revealing it. Authorized by the TransferFeeConfig's withdraw withheld authority. The destination may be any token account of this mint that carries ConfidentialTransferAccount, including the sender's own. Builds only the instruction: the CiphertextCiphertextEquality proof must already be verified into a context-state account, whose address is named here -- build the proof and new_decryptable_available_balance with tool/prove/confidential-withdraw-withheld-from-mint, create the account with zk-elgamal-proof/context-state/create/ciphertext-ciphertext-equality, and verify it with context-state/verify/ciphertext-ciphertext-equality. The proof is bound to the mint's withheld ciphertext and to the destination's ElGamal key as they are when it is built, so harvesting more fees or reconfiguring the destination in between makes it fail. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Withdraw the mint's withheld confidential fees into a token account",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, destination, equality context-state account, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialWithdrawWithheldTokensFromMintRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialWithdrawWithheldTokensFromMintResponse"
                         }
                     },
                     "400": {
@@ -8908,6 +9874,630 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/batched-grouped-ciphertext-2-handles-validity": {
+            "post": {
+                "description": "ZkElgamalProof VerifyBatchedGroupedCiphertext2HandlesValidity, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-grouped-ciphertext-2-handles-validity). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a BatchedGroupedCiphertext2HandlesValidity proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountBatchedGroupedCiphertext2HandlesValidityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountBatchedGroupedCiphertext2HandlesValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/batched-grouped-ciphertext-3-handles-validity": {
+            "post": {
+                "description": "ZkElgamalProof VerifyBatchedGroupedCiphertext3HandlesValidity, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-grouped-ciphertext-3-handles-validity). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a BatchedGroupedCiphertext3HandlesValidity proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountBatchedGroupedCiphertext3HandlesValidityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountBatchedGroupedCiphertext3HandlesValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/batched-range-proof-u128": {
+            "post": {
+                "description": "ZkElgamalProof VerifyBatchedRangeProofU128, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-range-proof-u128). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a BatchedRangeProofU128 proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountBatchedRangeProofU128Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountBatchedRangeProofU128Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/batched-range-proof-u256": {
+            "post": {
+                "description": "ZkElgamalProof VerifyBatchedRangeProofU256, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-range-proof-u256). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a BatchedRangeProofU256 proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountBatchedRangeProofU256Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountBatchedRangeProofU256Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/batched-range-proof-u64": {
+            "post": {
+                "description": "ZkElgamalProof VerifyBatchedRangeProofU64, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-range-proof-u64). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a BatchedRangeProofU64 proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountBatchedRangeProofU64Request"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountBatchedRangeProofU64Response"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/ciphertext-ciphertext-equality": {
+            "post": {
+                "description": "ZkElgamalProof VerifyCiphertextCiphertextEquality, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/ciphertext-ciphertext-equality). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a CiphertextCiphertextEquality proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountCiphertextCiphertextEqualityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountCiphertextCiphertextEqualityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/ciphertext-commitment-equality": {
+            "post": {
+                "description": "ZkElgamalProof VerifyCiphertextCommitmentEquality, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/ciphertext-commitment-equality). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a CiphertextCommitmentEquality proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountCiphertextCommitmentEqualityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountCiphertextCommitmentEqualityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/grouped-ciphertext-2-handles-validity": {
+            "post": {
+                "description": "ZkElgamalProof VerifyGroupedCiphertext2HandlesValidity, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/grouped-ciphertext-2-handles-validity). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a GroupedCiphertext2HandlesValidity proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountGroupedCiphertext2HandlesValidityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountGroupedCiphertext2HandlesValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/grouped-ciphertext-3-handles-validity": {
+            "post": {
+                "description": "ZkElgamalProof VerifyGroupedCiphertext3HandlesValidity, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/grouped-ciphertext-3-handles-validity). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a GroupedCiphertext3HandlesValidity proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountGroupedCiphertext3HandlesValidityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountGroupedCiphertext3HandlesValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/percentage-with-cap": {
+            "post": {
+                "description": "ZkElgamalProof VerifyPercentageWithCap, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/percentage-with-cap). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a PercentageWithCap proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountPercentageWithCapRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountPercentageWithCapResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/pubkey-validity": {
+            "post": {
+                "description": "ZkElgamalProof VerifyPubkeyValidity, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/pubkey-validity). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a PubkeyValidity proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountPubkeyValidityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountPubkeyValidityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/zk-elgamal-proof/context-state/verify-from-account/zero-ciphertext": {
+            "post": {
+                "description": "ZkElgamalProof VerifyZeroCiphertext, proof-in-account and context-state form: reads the proof from proof_account at proof_offset -- five bytes of instruction data however large the proof is -- and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account. This is the way to verify a proof too large to carry in one transaction, such as a 256-bit range proof: write it into a record account first (record/create-account, record/initialize, record/write), then verify it from there with proof_offset 33. context_state_account must already exist, sized and owned for this proof type (see context-state/create/zero-ciphertext). recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well. A ComputeBudget SetComputeUnitLimit instruction is placed ahead of the verify, because the program charges a fixed compute cost per proof type (range u128 costs the whole default 200,000 and u256 costs 368,000): compute_unit_limit sets it, and left empty it is this proof type's own cost plus a margin.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-zk-elgamal-proof-context-state"
+                ],
+                "summary": "Verify a ZeroCiphertext proof from an account and persist its context",
+                "parameters": [
+                    {
+                        "description": "Context-state verify-from-account request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountZeroCiphertextRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ContextStateVerifyFromAccountZeroCiphertextResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/zk-elgamal-proof/context-state/verify/batched-grouped-ciphertext-2-handles-validity": {
             "post": {
                 "description": "ZkElgamalProof VerifyBatchedGroupedCiphertext2HandlesValidity, context-state form: verifies proof_data and, because context_state_account and context_state_account_owner are given, writes the proof's context into that account instead of only checking it. context_state_account must already exist, sized and owned for this proof type (see context-state/create/batched-grouped-ciphertext-2-handles-validity) -- created in an earlier transaction, or (to close the front-running window the interface crate's own docs describe) merged into this same transaction by combining this endpoint's instruction with that create endpoint's. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -10064,6 +11654,96 @@ const docTemplate = `{
                 }
             }
         },
+        "misc.ProveConfidentialTransferWithFeeRequest": {
+            "type": "object",
+            "properties": {
+                "ae_key": {
+                    "description": "AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the\nnew one, base58-encoded raw 16-byte key.",
+                    "type": "string",
+                    "example": ""
+                },
+                "amount": {
+                    "description": "Amount is the raw base-unit count to move, before the fee. It cannot\nexceed 2^48 - 1 nor the source's current available balance.",
+                    "type": "string",
+                    "example": "1000"
+                },
+                "current_available_balance_ciphertext": {
+                    "description": "CurrentAvailableBalanceCiphertext is the source's current available\nbalance, base58-encoded raw 64-byte ElGamal ciphertext.",
+                    "type": "string",
+                    "example": ""
+                },
+                "current_decryptable_available_balance": {
+                    "description": "CurrentDecryptableAvailableBalance is the source's current available\nbalance, base58-encoded raw 36-byte AE ciphertext.",
+                    "type": "string",
+                    "example": ""
+                },
+                "destination_elgamal_pubkey": {
+                    "description": "DestinationElgamalPubkey is the destination account's ElGamal public\nkey, base58-encoded.",
+                    "type": "string",
+                    "example": ""
+                },
+                "mint": {
+                    "description": "Mint must carry the TransferFeeConfig, ConfidentialTransferMint, and\nConfidentialTransferFeeConfig extensions.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_elgamal_secret_key": {
+                    "description": "SourceElgamalSecretKey is the source account's own ElGamal secret\nkey, base58-encoded. The public key is derived from it here.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "misc.ProveConfidentialTransferWithFeeResponse": {
+            "type": "object",
+            "properties": {
+                "auditor_ciphertext_hi": {
+                    "type": "string"
+                },
+                "auditor_ciphertext_lo": {
+                    "type": "string"
+                },
+                "auditor_elgamal_pubkey": {
+                    "type": "string"
+                },
+                "epoch": {
+                    "type": "integer"
+                },
+                "equality_proof_data": {
+                    "type": "string"
+                },
+                "fee": {
+                    "type": "string"
+                },
+                "fee_rate_basis_points": {
+                    "type": "integer"
+                },
+                "fee_validity_proof_data": {
+                    "type": "string"
+                },
+                "maximum_fee": {
+                    "type": "string"
+                },
+                "new_source_decryptable_available_balance": {
+                    "type": "string"
+                },
+                "percentage_with_cap_proof_data": {
+                    "type": "string"
+                },
+                "range_proof_data": {
+                    "type": "string"
+                },
+                "source_elgamal_pubkey": {
+                    "type": "string"
+                },
+                "transfer_amount_validity_proof_data": {
+                    "type": "string"
+                },
+                "withdraw_withheld_authority_elgamal_pubkey": {
+                    "type": "string"
+                }
+            }
+        },
         "misc.ProveConfidentialWithdrawRequest": {
             "type": "object",
             "properties": {
@@ -10111,6 +11791,103 @@ const docTemplate = `{
                 }
             }
         },
+        "misc.ProveConfidentialWithdrawWithheldFromAccountsRequest": {
+            "type": "object",
+            "properties": {
+                "ae_key": {
+                    "description": "AeKey is the destination's own AE key, base58-encoded raw 16 bytes,\nneeded to work out its new decryptable balance.",
+                    "type": "string",
+                    "example": ""
+                },
+                "destination": {
+                    "description": "Destination is the token account the fees are credited to, which must\nhold Mint and carry the ConfidentialTransferAccount extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "mint": {
+                    "description": "Mint must carry the ConfidentialTransferFeeConfig extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_accounts": {
+                    "description": "SourceAccounts are the token accounts to withdraw from, each holding\nMint and carrying ConfidentialTransferFeeAmount. The same set has to\ngo to the withdraw endpoint.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "withdraw_elgamal_secret_key": {
+                    "description": "WithdrawElgamalSecretKey is the secret key of the ElGamal public key\nthe mint encrypts withheld fees under, base58-encoded raw 32 bytes.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "misc.ProveConfidentialWithdrawWithheldFromAccountsResponse": {
+            "type": "object",
+            "properties": {
+                "ciphertext_ciphertext_equality_proof_data": {
+                    "type": "string"
+                },
+                "destination_elgamal_pubkey": {
+                    "type": "string"
+                },
+                "new_decryptable_available_balance": {
+                    "type": "string"
+                },
+                "withdraw_elgamal_pubkey": {
+                    "type": "string"
+                },
+                "withheld_amount": {
+                    "type": "string"
+                }
+            }
+        },
+        "misc.ProveConfidentialWithdrawWithheldFromMintRequest": {
+            "type": "object",
+            "properties": {
+                "ae_key": {
+                    "description": "AeKey is the destination's own AE key, base58-encoded raw 16 bytes,\nneeded to work out its new decryptable balance.",
+                    "type": "string",
+                    "example": ""
+                },
+                "destination": {
+                    "description": "Destination is the token account the fees are credited to, which must\nhold Mint and carry the ConfidentialTransferAccount extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "mint": {
+                    "description": "Mint must carry the ConfidentialTransferFeeConfig extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "withdraw_elgamal_secret_key": {
+                    "description": "WithdrawElgamalSecretKey is the secret key of the ElGamal public key\nthe mint encrypts withheld fees under, base58-encoded raw 32 bytes.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "misc.ProveConfidentialWithdrawWithheldFromMintResponse": {
+            "type": "object",
+            "properties": {
+                "ciphertext_ciphertext_equality_proof_data": {
+                    "type": "string"
+                },
+                "destination_elgamal_pubkey": {
+                    "type": "string"
+                },
+                "new_decryptable_available_balance": {
+                    "type": "string"
+                },
+                "withdraw_elgamal_pubkey": {
+                    "type": "string"
+                },
+                "withheld_amount": {
+                    "type": "string"
+                }
+            }
+        },
         "misc.ProvePubkeyValidityRequest": {
             "type": "object",
             "properties": {
@@ -10140,6 +11917,22 @@ const docTemplate = `{
                     "example": "getEpochInfo"
                 },
                 "params": {}
+            }
+        },
+        "misc.RecordChunk": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "description": "Data is the chunk, base58-encoded.",
+                    "type": "string"
+                },
+                "length": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "description": "Offset is the record/write offset, as a string like every other\n64-bit value in this API.",
+                    "type": "string"
+                }
             }
         },
         "misc.RefreshBlockhashRequest": {
@@ -10498,6 +12291,40 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "slot": {
+                    "type": "integer"
+                }
+            }
+        },
+        "misc.SplitRecordChunksRequest": {
+            "type": "object",
+            "properties": {
+                "chunk_size": {
+                    "description": "ChunkSize is how many bytes each record/write carries. Left empty or\nzero it is 900, which fits a transaction with or without a durable\nnonce. It cannot exceed 1000.",
+                    "type": "integer",
+                    "example": 900
+                },
+                "data": {
+                    "description": "Data is the bytes to split, base58-encoded -- typically a proof_data\nblob from one of the tool/prove endpoints.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "misc.SplitRecordChunksResponse": {
+            "type": "object",
+            "properties": {
+                "chunks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/misc.RecordChunk"
+                    }
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the data starts within the record account:\n33, the record header's length. It is the proof_offset a\nverify-from-account request needs when Data is a proof.",
+                    "type": "integer"
+                },
+                "total_length": {
+                    "description": "TotalLength is len(Data) in bytes -- the data_length to create the\nrecord account with (record/create-account).",
                     "type": "integer"
                 }
             }
@@ -12355,6 +14182,94 @@ const docTemplate = `{
                 }
             }
         },
+        "v2.ConfidentialHarvestWithheldTokensToMintRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee. Nothing else signs.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must carry the ConfidentialTransferFeeConfig extension with\nharvest_to_mint_enabled set (see enable-harvest-to-mint).",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this\nextension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_accounts": {
+                    "description": "SourceAccounts are the token accounts to harvest from, each holding\nMint. There is no limit here beyond what fits in one transaction, which\nthis endpoint checks.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v2.ConfidentialHarvestWithheldTokensToMintResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "harvested_sources": {
+                    "description": "HarvestedSources are the source accounts that carry both\nTransferFeeAmount and ConfidentialTransferAccount, so the program\nactually moves their withheld fees. SkippedSources do not, and the\nprogram passes over them silently.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "skipped_sources": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.ConfidentialTransferRequest": {
             "type": "object",
             "properties": {
@@ -12493,6 +14408,160 @@ const docTemplate = `{
                 }
             }
         },
+        "v2.ConfidentialTransferWithFeeRequest": {
+            "type": "object",
+            "properties": {
+                "auditor_ciphertext_hi": {
+                    "description": "AuditorCiphertextHi is tool/prove/confidential-transfer's own\nauditor_ciphertext_hi, base58-encoded (64 bytes).",
+                    "type": "string",
+                    "example": ""
+                },
+                "auditor_ciphertext_lo": {
+                    "description": "AuditorCiphertextLo is tool/prove/confidential-transfer's own\nauditor_ciphertext_lo, base58-encoded (64 bytes).",
+                    "type": "string",
+                    "example": ""
+                },
+                "destination": {
+                    "description": "Destination is credited. It must already carry the\nConfidentialTransferAccount extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "equality_context_state_account": {
+                    "description": "EqualityContextStateAccount holds the verified\nCiphertextCommitmentEquality proof's context (see\ncontext-state/verify/ciphertext-commitment-equality).",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "fee_sigma_context_state_account": {
+                    "description": "FeeSigmaContextStateAccount holds the verified PercentageWithCap\nproof's context (see context-state/verify/percentage-with-cap).",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_validity_context_state_account": {
+                    "description": "FeeValidityContextStateAccount holds the verified\nBatchedGroupedCiphertext2HandlesValidity proof's context for the fee\n(see context-state/verify/batched-grouped-ciphertext-2-handles-validity).",
+                    "type": "string",
+                    "example": ""
+                },
+                "mint": {
+                    "description": "Mint is what both Source and Destination must hold, and must\nalready carry the ConfidentialTransferMint extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer owner. Non-empty,\nOwner itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_source_decryptable_available_balance": {
+                    "description": "NewSourceDecryptableAvailableBalance is tool/prove/confidential-transfer's\nown field of the same name, base58-encoded (36 bytes).",
+                    "type": "string",
+                    "example": ""
+                },
+                "owner": {
+                    "description": "Owner is Source's owner, or its multisig for a multisig-owned\naccount (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token account can never hold\nthis extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "range_proof_context_state_account": {
+                    "description": "RangeProofContextStateAccount holds the verified BatchedRangeProofU256\nproof's context (see context-state/verify/batched-range-proof-u256).",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source": {
+                    "description": "Source is debited. It must already carry the\nConfidentialTransferAccount extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "transfer_amount_validity_context_state_account": {
+                    "description": "TransferAmountValidityContextStateAccount holds the verified\nBatchedGroupedCiphertext3HandlesValidity proof's context for the\ntransfer amount (see\ncontext-state/verify/batched-grouped-ciphertext-3-handles-validity).",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ConfidentialTransferWithFeeResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "equality_context_state_account": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "fee_sigma_context_state_account": {
+                    "type": "string"
+                },
+                "fee_validity_context_state_account": {
+                    "type": "string"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "range_proof_context_state_account": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source": {
+                    "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "transfer_amount_validity_context_state_account": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.ConfidentialWithdrawRequest": {
             "type": "object",
             "properties": {
@@ -12602,6 +14671,227 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "range_proof_context_state_account": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ConfidentialWithdrawWithheldTokensFromAccountsRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the TransferFeeConfig's withdraw withheld authority, or\nits multisig for a multisig-owned one (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "destination": {
+                    "description": "Destination is the token account credited, which must hold Mint and\ncarry the ConfidentialTransferAccount extension. It may be any such\naccount, including the sender's own.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "equality_context_state_account": {
+                    "description": "EqualityContextStateAccount holds the verified\nCiphertextCiphertextEquality proof's context (see\ncontext-state/verify/ciphertext-ciphertext-equality).",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must carry the TransferFeeConfig and ConfidentialTransferFeeConfig\nextensions.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer owner. Non-empty, Owner\nitself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_decryptable_available_balance": {
+                    "description": "NewDecryptableAvailableBalance is the destination's available balance\nafter the credit, base58-encoded raw 36-byte AE ciphertext -- the\ntool/prove endpoint's new_decryptable_available_balance.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold\nthis extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "source_accounts": {
+                    "description": "SourceAccounts are the token accounts to withdraw from, each holding\nMint and carrying ConfidentialTransferFeeAmount. Their order does not\nmatter, but the proof was built from exactly this set, so it must be\nthe same one given to the prove tool.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "v2.ConfidentialWithdrawWithheldTokensFromAccountsResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "equality_context_state_account": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "source_accounts": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ConfidentialWithdrawWithheldTokensFromMintRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the TransferFeeConfig's withdraw withheld authority, or\nits multisig for a multisig-owned one (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "destination": {
+                    "description": "Destination is the token account credited, which must hold Mint and\ncarry the ConfidentialTransferAccount extension. It may be any such\naccount, including the sender's own.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "equality_context_state_account": {
+                    "description": "EqualityContextStateAccount holds the verified\nCiphertextCiphertextEquality proof's context (see\ncontext-state/verify/ciphertext-ciphertext-equality).",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must carry the TransferFeeConfig and ConfidentialTransferFeeConfig\nextensions.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer owner. Non-empty, Owner\nitself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_decryptable_available_balance": {
+                    "description": "NewDecryptableAvailableBalance is the destination's available balance\nafter the credit, base58-encoded raw 36-byte AE ciphertext -- the\ntool/prove endpoint's new_decryptable_available_balance.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold\nthis extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ConfidentialWithdrawWithheldTokensFromMintResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "destination": {
+                    "type": "string"
+                },
+                "equality_context_state_account": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -14177,6 +16467,1074 @@ const docTemplate = `{
                 }
             }
         },
+        "v2.ContextStateVerifyFromAccountBatchedGroupedCiphertext2HandlesValidityRequest": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountBatchedGroupedCiphertext2HandlesValidityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountBatchedGroupedCiphertext3HandlesValidityRequest": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountBatchedGroupedCiphertext3HandlesValidityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountBatchedRangeProofU128Request": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountBatchedRangeProofU128Response": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountBatchedRangeProofU256Request": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountBatchedRangeProofU256Response": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountBatchedRangeProofU64Request": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountBatchedRangeProofU64Response": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountCiphertextCiphertextEqualityRequest": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountCiphertextCiphertextEqualityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountCiphertextCommitmentEqualityRequest": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountCiphertextCommitmentEqualityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountGroupedCiphertext2HandlesValidityRequest": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountGroupedCiphertext2HandlesValidityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountGroupedCiphertext3HandlesValidityRequest": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountGroupedCiphertext3HandlesValidityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountPercentageWithCapRequest": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountPercentageWithCapResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountPubkeyValidityRequest": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountPubkeyValidityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountZeroCiphertextRequest": {
+            "type": "object",
+            "properties": {
+                "compute_unit_limit": {
+                    "description": "ComputeUnitLimit is the compute-unit limit the transaction is given, in\na ComputeBudget SetComputeUnitLimit instruction placed ahead of the\nverify. The ZkElgamalProof program charges a fixed cost per proof\ntype before it verifies anything (range u128 costs the entire default\n200,000 and u256 costs 368,000), so without a raised limit the larger\nproofs fail with ComputationalBudgetExceeded. Left empty or zero it is\nthis proof type's own cost plus a margin, rounded up to the next\nthousand. It cannot exceed 1,400,000, the most a transaction may have.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "context_state_account": {
+                    "description": "ContextStateAccount already exists, created via context-state/create.",
+                    "type": "string",
+                    "example": ""
+                },
+                "context_state_account_owner": {
+                    "description": "ContextStateAccountOwner is recorded as the context's owner -- the key\ncontext-state/close will later require a signature from. It does not sign\nhere.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "proof_account": {
+                    "description": "ProofAccount holds the proof data, already written (for example with\nrecord/write). Nothing checks who owns it -- the program only reads the\nbytes -- but it has to be large enough to hold offset plus the proof.",
+                    "type": "string",
+                    "example": ""
+                },
+                "proof_offset": {
+                    "description": "ProofOffset is where the proof data starts within ProofAccount's data, up to\n4294967295. For a record account that is 33 plus wherever the proof was\nwritten, so 33 for a proof written from offset 0.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ContextStateVerifyFromAccountZeroCiphertextResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "context_state_account": {
+                    "type": "string"
+                },
+                "context_state_account_owner": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "proof_account": {
+                    "type": "string"
+                },
+                "proof_offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.ContextStateVerifyGroupedCiphertext2HandlesValidityRequest": {
             "type": "object",
             "properties": {
@@ -15171,6 +18529,89 @@ const docTemplate = `{
                 }
             }
         },
+        "v2.DisableHarvestToMintRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the authority the ConfidentialTransferFeeConfig names\n(its authority field, not the TransferFeeConfig's withdraw withheld\nauthority), or its multisig for a multisig-owned one (see\nMultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that mint stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the mint, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the ConfidentialTransferFeeConfig extension\n(see confidential-transfer-fee-config/initialize).",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this\nextension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.DisableHarvestToMintResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.DisableNonConfidentialCreditsRequest": {
             "type": "object",
             "properties": {
@@ -15318,6 +18759,89 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.EnableHarvestToMintRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the authority the ConfidentialTransferFeeConfig names\n(its authority field, not the TransferFeeConfig's withdraw withheld\nauthority), or its multisig for a multisig-owned one (see\nMultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that mint stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the mint, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the ConfidentialTransferFeeConfig extension\n(see confidential-transfer-fee-config/initialize).",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this\nextension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.EnableHarvestToMintResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
                     "type": "string"
                 },
                 "program": {
@@ -15829,6 +19353,90 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.InitializeConfidentialTransferFeeConfigRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority may later reconfigure this extension. Left empty, it can\nnever be reconfigured.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint is the account this attaches to. It must already exist (see\ncreate-mint) and not yet be initialized -- initialize-mint2 has to\nrun after this, never before.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this\nextension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "withdraw_withheld_authority_elgamal_pubkey": {
+                    "description": "WithdrawWithheldAuthorityElgamalPubkey is required: the ElGamal\npublic key withheld fees are encrypted under, base58-encoded (a\n32-byte compressed Ristretto point, not a Solana address -- see\ntool/generate/elgamal-keypair). Whoever holds its secret key can\ndecrypt every withheld fee, and with the fee parameters that can\nreveal information about transfer amounts.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.InitializeConfidentialTransferFeeConfigResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "withdraw_withheld_authority_elgamal_pubkey": {
                     "type": "string"
                 }
             }
@@ -16835,6 +20443,11 @@ const docTemplate = `{
                     "type": "string",
                     "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
                 },
+                "include_confidential_transfer_fee_amount": {
+                    "description": "IncludeConfidentialTransferFeeAmount also reserves room for the\nConfidentialTransferFeeAmount extension, in the same Reallocate\ninstruction. Set it when Account's mint charges a transfer fee: on\nsuch a mint, configure-account itself initializes\nConfidentialTransferFeeAmount alongside ConfidentialTransferAccount,\nso the account needs room for both before it runs, and the two have\nto be reserved together -- reallocating for one and then the other\nleaves room for only one, since neither exists yet for the second\ncall to count.",
+                    "type": "boolean",
+                    "example": false
+                },
                 "multisig_signers": {
                     "description": "MultisigSigners is empty for a single-signer owner. Non-empty, Owner\nitself does not sign; the named members do, in its place.",
                     "type": "array",
@@ -17311,6 +20924,468 @@ const docTemplate = `{
                 "target_size": {
                     "description": "TargetSize is the total account size GetAccountDataSize reported for\nAccount's existing extensions plus TransferFeeConfig, asked of the\ndeployed program rather than recomputed here.",
                     "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.RecordCloseRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the record's recorded authority. It signs.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "receiver": {
+                    "description": "Receiver gains the record's lamports.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "record_account": {
+                    "description": "RecordAccount must already be initialized.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.RecordCloseResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "receiver": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "reclaimed_lamports": {
+                    "type": "integer"
+                },
+                "record_account": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.RecordCreateAccountRequest": {
+            "type": "object",
+            "properties": {
+                "data_length": {
+                    "description": "DataLength is how many bytes of data (excluding the 33-byte header) the\nrecord should hold. For a 256-bit range proof that is 1064; a proof is\nverified from record offset 33.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "record_account": {
+                    "description": "RecordAccount is the account created. It signs alongside RentPayer, since an\naddress does not exist until whoever holds its private key authorizes its\ncreation. It must not already exist.",
+                    "type": "string",
+                    "example": ""
+                },
+                "rent_payer": {
+                    "description": "RentPayer funds RecordAccount's creation for exactly the rent-exemption\nminimum for its size (33 + data_length).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.RecordCreateAccountResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "data_length": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "record_account": {
+                    "type": "string"
+                },
+                "rent_exempt_lamports": {
+                    "type": "integer"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "space": {
+                    "type": "integer"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.RecordInitializeRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is who may later write to, reassign, reallocate, or close the\nrecord. It does not sign here, which is why this should land in the same\ntransaction as record/create-account: an uninitialized record account can\nbe initialized by anyone, with any authority they like.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "record_account": {
+                    "description": "RecordAccount must already exist, owned by the Record program and at least\n33 bytes (see record/create-account), and not yet initialized.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.RecordInitializeResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "record_account": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.RecordReallocateRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the record's recorded authority. It signs.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "data_length": {
+                    "description": "DataLength is how many bytes of data (excluding the 33-byte header) the\nrecord should hold afterwards. It does nothing if the account is already\nthat large.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "record_account": {
+                    "description": "RecordAccount must already be initialized. It must already hold enough\nlamports to be rent exempt at the new size: this instruction does not fund\nit, so top it up with a system transfer first.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.RecordReallocateResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "data_length": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "record_account": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.RecordSetAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the record's current authority. It signs.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "new_authority": {
+                    "description": "NewAuthority becomes the record's authority. It does not sign.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "record_account": {
+                    "description": "RecordAccount must already be initialized.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.RecordSetAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "record_account": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.RecordWriteRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the record's recorded authority. It signs.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "data": {
+                    "description": "Data is the bytes to write, base58-encoded. It has to fit in one\ntransaction alongside everything else: about 1000 bytes without a durable\nnonce, about 900 with one. A larger proof is written in several calls,\neach at its own offset.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "offset": {
+                    "description": "Offset counts from the end of the record's 33-byte header, not from the\nstart of the account: writing at offset 0 puts the first byte at byte 33.\nA proof written from offset 0 is verified with proof_offset 33.",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "record_account": {
+                    "description": "RecordAccount must already be initialized (see record/initialize).",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.RecordWriteResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "length": {
+                    "type": "integer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "offset": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "record_account": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "transaction": {
                     "type": "string"

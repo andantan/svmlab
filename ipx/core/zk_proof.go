@@ -884,3 +884,89 @@ func (z *zkElgamalProof) VerifyGroupedCiphertext3HandlesValidityContextState(pro
 
 	return types.NewInstruction(z.id, contextStateAccounts(contextStateAccount, contextStateAccountOwner), data), nil
 }
+
+// zkVerifyFromAccountDataLen is the exact instruction-data length that
+// tells the ZkElgamalProof program to read a proof from an account rather
+// than from the instruction itself: one discriminator byte and a u32
+// offset. The program decides the mode by this length alone, confirmed
+// against agave's process_verify_proof.
+const zkVerifyFromAccountDataLen = 5
+
+// VerifyFromAccountContextState builds any Verify* instruction in its
+// proof-in-account form, storing the proof's context into a context-state
+// account. opcode is one of the ZkElgamalProofInstructionVerify* values.
+//
+// The instruction data is just [opcode, offset(u32)] -- five bytes however
+// large the proof is, which is the whole point: a proof too big for a
+// transaction (a 256-bit range proof is 1064 bytes) is written into
+// proofAccount first, then verified from there. proofOffset is where the
+// proof data starts within proofAccount's data: for a Record account that
+// is core.RecordAccountHeaderLen (33) plus wherever the proof was written.
+// The program reads exactly the proof type's own size from that offset, and
+// does not check who owns proofAccount.
+//
+// Accounts, in order: the proof account (readonly), the context-state
+// account (writable, created earlier, owned by this program), and its
+// authority (readonly, not a signer) -- confirmed against the program's
+// own instruction doc and process_verify_proof.
+func (z *zkElgamalProof) VerifyFromAccountContextState(opcode uint8, proofAccount *types.PublicKey, proofOffset uint32, contextStateAccount, contextStateAccountOwner *types.PublicKey) (*types.Instruction, error) {
+	if proofAccount.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify from account: proof account is required")
+	}
+	if contextStateAccount.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify from account: context state account is required")
+	}
+	if contextStateAccountOwner.IsNil() {
+		return nil, fmt.Errorf("zk elgamal proof verify from account: context state account owner is required")
+	}
+	if opcode == ZkElgamalProofInstructionCloseContextState || opcode > ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext3HandlesValidity {
+		return nil, fmt.Errorf("zk elgamal proof verify from account: opcode %d is not a verify instruction", opcode)
+	}
+
+	data := codec.Binary.AppendU8(nil, opcode)
+	data = codec.Binary.AppendU32(data, proofOffset)
+
+	accounts := types.NewAccounts(types.NewReadonlyAccount(proofAccount))
+	accounts = append(accounts, contextStateAccounts(contextStateAccount, contextStateAccountOwner)...)
+
+	return types.NewInstruction(z.id, accounts, data), nil
+}
+
+// zkVerifyComputeUnits is the fixed compute-unit cost the ZkElgamalProof
+// program charges per instruction, before it does any work -- confirmed
+// against agave's zk-elgamal-proof program constants (each is passed to
+// consume_checked ahead of the verification itself). The range proofs are
+// the expensive ones: u128 costs the whole default per-instruction budget
+// of 200,000 and u256 costs 368,000, so those transactions fail with
+// ComputationalBudgetExceeded unless a ComputeBudget SetComputeUnitLimit
+// raises the limit.
+var zkVerifyComputeUnits = map[uint8]uint32{
+	ZkElgamalProofInstructionCloseContextState:                              3_300,
+	ZkElgamalProofInstructionVerifyZeroCiphertext:                           6_000,
+	ZkElgamalProofInstructionVerifyCiphertextCiphertextEquality:             8_000,
+	ZkElgamalProofInstructionVerifyCiphertextCommitmentEquality:             6_400,
+	ZkElgamalProofInstructionVerifyPubkeyValidity:                           2_600,
+	ZkElgamalProofInstructionVerifyPercentageWithCap:                        6_500,
+	ZkElgamalProofInstructionVerifyBatchedRangeProofU64:                     111_000,
+	ZkElgamalProofInstructionVerifyBatchedRangeProofU128:                    200_000,
+	ZkElgamalProofInstructionVerifyBatchedRangeProofU256:                    368_000,
+	ZkElgamalProofInstructionVerifyGroupedCiphertext2HandlesValidity:        6_400,
+	ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext2HandlesValidity: 13_000,
+	ZkElgamalProofInstructionVerifyGroupedCiphertext3HandlesValidity:        8_100,
+	ZkElgamalProofInstructionVerifyBatchedGroupedCiphertext3HandlesValidity: 16_400,
+}
+
+// RecommendedComputeUnitLimit is a compute-unit limit that comfortably
+// covers opcode's fixed cost: that cost plus 10%, rounded up to the next
+// thousand, so the ComputeBudget SetComputeUnitLimit instruction that
+// carries it and the transaction's own overhead have room. It returns 0 for
+// an opcode this program does not have.
+func (z *zkElgamalProof) RecommendedComputeUnitLimit(opcode uint8) uint32 {
+	cost, ok := zkVerifyComputeUnits[opcode]
+	if !ok {
+		return 0
+	}
+
+	withMargin := cost + cost/10
+	return (withMargin + 999) / 1000 * 1000
+}

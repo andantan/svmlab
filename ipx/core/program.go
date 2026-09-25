@@ -67,6 +67,15 @@ const (
 	// wrote), never as the program an instruction is sent to the way
 	// System or Token-2022 itself is.
 	ZkElgamalProofProgramAddress = "ZkE1Gama1Proof11111111111111111111111111111"
+
+	// RecordProgramAddress is the SPL Record program: a general-purpose
+	// account that holds arbitrary bytes behind an authority, writable in
+	// pieces across several transactions. It exists here because a
+	// zero-knowledge proof too large for one transaction (a 256-bit range
+	// proof is 1064 bytes) can be written into a record account first and
+	// then verified from there, instead of being carried in the verify
+	// instruction's own data.
+	RecordProgramAddress = "recr1L3PCGKLbckBqMNcJhuuyU1zgo8nBhfLVsJNwr5"
 )
 
 // The same addresses decoded once at startup.
@@ -85,4 +94,5 @@ var (
 	StakeProgramID           = types.MustPublicKeyFromBase58(StakeProgramAddress)
 	VoteProgramID            = types.MustPublicKeyFromBase58(VoteProgramAddress)
 	ZkElgamalProofProgramID  = types.MustPublicKeyFromBase58(ZkElgamalProofProgramAddress)
+	RecordProgramID          = types.MustPublicKeyFromBase58(RecordProgramAddress)
 )

@@ -1,14 +1,18 @@
 package misc
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/andantan/svmlab/api/handler"
 	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/core/codec"
+	"github.com/andantan/svmlab/core/types"
 	"github.com/andantan/svmlab/core/zkbridge"
+	"github.com/andantan/svmlab/internal/rpc"
 )
 
 type ToolHandler struct{}
@@ -343,4 +347,367 @@ func (h *ToolHandler) ProveConfidentialEmptyAccount(w http.ResponseWriter, r *ht
 	}
 
 	handler.WriteOK(w, NewProveConfidentialEmptyAccountResponse(proof, publicKey))
+}
+
+// ProveConfidentialTransferWithFee godoc
+// @Summary      Build the five proofs one confidential TransferWithFee needs
+// @Description  Builds the equality, transfer-amount validity, percentage-with-cap, fee validity, and 256-bit range proofs a single confidential transfer on a fee-charging mint requires, in one call, because they are built from the same fresh randomness and only agree with each other if drawn together. The mint is named rather than its parameters being passed in: the transfer fee rate and cap in effect this epoch (TransferFeeConfig), the auditor key (ConfidentialTransferMint), and the withdraw withheld authority key (ConfidentialTransferFeeConfig) are read from it, since the deployed program recomputes them from the same place and rejects proofs built for different values. Each *_proof_data blob goes to the matching zk-elgamal-proof/context-state/verify endpoint, and auditor_ciphertext_lo/hi and new_source_decryptable_available_balance are what the transfer-with-fee instruction itself carries. The response cannot be rebuilt: a second call draws new randomness and produces proofs that no longer match any context-state account already verified from the first. The source balance must not change, and the epoch must not roll over into a different fee, between building these proofs and the transfer landing.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ProveConfidentialTransferWithFeeRequest  true  "Transfer-with-fee inputs"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ProveConfidentialTransferWithFeeResponse
+// @Failure      400   {object}  map[string]string
+// @Failure      502   {object}  map[string]string
+// @Router       /svm/tool/prove/confidential-transfer-with-fee [post]
+func (h *ToolHandler) ProveConfidentialTransferWithFee(w http.ResponseWriter, r *http.Request) {
+	req := new(ProveConfidentialTransferWithFeeRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), []*types.PublicKey{req.MintKey()}, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read mint: %s", err))
+		return
+	}
+	mintInfo := accounts[req.MintKey().Base58()]
+	if !mintInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", req.MintKey()))
+		return
+	}
+	if mintInfo.Owner != core.Token2022ProgramID.Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is not owned by Token-2022", req.MintKey()))
+		return
+	}
+	mintData, err := mintInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode mint: %s", err))
+		return
+	}
+
+	feeConfig, err := core.DecodeTransferFeeConfig(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+	auditorPublicKey, err := core.ConfidentialTransferMintAuditor(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+	withdrawPublicKey, err := core.ConfidentialTransferFeeWithdrawAuthority(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+	epochInfo, err := chain.Cli.EpochInfo(r.Context(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read epoch info: %s", err))
+		return
+	}
+	rate := feeConfig.EffectiveTransferFee(epochInfo.Epoch)
+
+	sourcePublicKey, err := core.DeriveElGamalPublicKey(req.ToSourceSecretKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source_elgamal_secret_key: %s", err))
+		return
+	}
+
+	proofs, err := core.BuildTransferWithFeeProofs(
+		req.ToSourceSecretKey(), sourcePublicKey, req.ToDestinationElgamalPubkey(), auditorPublicKey, withdrawPublicKey,
+		req.ToCurrentAvailableBalanceCiphertext(), req.ToCurrentDecryptableAvailableBalance(), req.ToAeKey(),
+		req.ToAmount(), rate.TransferFeeBasisPoints, rate.MaximumFee,
+	)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewProveConfidentialTransferWithFeeResponse(
+		proofs, sourcePublicKey, auditorPublicKey, withdrawPublicKey,
+		rate.TransferFeeBasisPoints, rate.MaximumFee, epochInfo.Epoch,
+	))
+}
+
+// SplitRecordChunks godoc
+// @Summary      Split bytes into record/write chunks
+// @Description  Splits data (base58-encoded, typically a proof_data blob from a tool/prove endpoint) into the writes that put all of it into a SPL Record account. A proof too large for one transaction -- a 256-bit range proof is 1064 bytes -- is written into a record account first and then verified from there (zk-elgamal-proof/context-state/verify-from-account), and a single record/write carries at most about 1000 bytes. Each chunk's offset and data go straight into a record/write request; total_length is the data_length for record/create-account; proof_offset (33, the record header) is the proof_offset the verify-from-account request needs. chunk_size defaults to 900, which fits a transaction with or without a durable nonce, and cannot exceed 1000.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      SplitRecordChunksRequest  true  "Bytes to split"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  SplitRecordChunksResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/tool/split/record-chunks [post]
+func (h *ToolHandler) SplitRecordChunks(w http.ResponseWriter, r *http.Request) {
+	req := new(SplitRecordChunksRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewSplitRecordChunksResponse(req.data, req.chunkSize))
+}
+
+// ProveConfidentialWithdrawWithheldFromMint godoc
+// @Summary      Build the proof one confidential WithdrawWithheldTokensFromMint needs
+// @Description  Decrypts the mint's withheld confidential fee amount with the withdraw authority's ElGamal secret key, re-encrypts that amount under the destination account's ElGamal key, and proves the two ciphertexts encrypt the same value. The mint's withheld ciphertext, the withdraw authority's public key, and the destination's ElGamal key and current decryptable balance are read from chain, since the deployed program compares the proof against exactly those. ciphertext_ciphertext_equality_proof_data goes to zk-elgamal-proof/context-state/verify/ciphertext-ciphertext-equality, and new_decryptable_available_balance is what the withdraw instruction itself carries. The withheld amount must fit in 32 bits. The response cannot be rebuilt against a context-state account already verified from an earlier call, and it goes stale if more fees are harvested onto the mint, or the destination's decryptable balance changes, before the withdraw lands.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ProveConfidentialWithdrawWithheldFromMintRequest  true  "Mint, destination, withdraw authority secret, AE key"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ProveConfidentialWithdrawWithheldFromMintResponse
+// @Failure      400   {object}  map[string]string
+// @Failure      502   {object}  map[string]string
+// @Router       /svm/tool/prove/confidential-withdraw-withheld-from-mint [post]
+func (h *ToolHandler) ProveConfidentialWithdrawWithheldFromMint(w http.ResponseWriter, r *http.Request) {
+	req := new(ProveConfidentialWithdrawWithheldFromMintRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), []*types.PublicKey{req.MintKey(), req.DestinationKey()}, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+	mintInfo := accounts[req.MintKey().Base58()]
+	if !mintInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", req.MintKey()))
+		return
+	}
+	destInfo := accounts[req.DestinationKey().Base58()]
+	if !destInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s does not exist", req.DestinationKey()))
+		return
+	}
+	if mintInfo.Owner != core.Token2022ProgramID.Base58() || destInfo.Owner != core.Token2022ProgramID.Base58() {
+		handler.WriteError(w, http.StatusBadRequest, "mint and destination must both be owned by Token-2022")
+		return
+	}
+	mintData, err := mintInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode mint: %s", err))
+		return
+	}
+	destData, err := destInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode destination: %s", err))
+		return
+	}
+	if len(destData) < 32 || !bytes.Equal(destData[:32], req.MintKey().Bytes()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s does not hold mint %s", req.DestinationKey(), req.MintKey()))
+		return
+	}
+
+	withheld, err := core.ConfidentialTransferFeeWithheldAmount(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+	withdrawPublicKey, err := core.ConfidentialTransferFeeWithdrawAuthority(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+	destPublicKey, destDecryptable, err := core.ConfidentialTransferAccountKeys(destData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s: %s", req.DestinationKey(), err))
+		return
+	}
+
+	derived, err := core.DeriveElGamalPublicKey(req.ToWithdrawSecretKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("withdraw_elgamal_secret_key: %s", err))
+		return
+	}
+	if !bytes.Equal(derived, withdrawPublicKey) {
+		handler.WriteError(w, http.StatusBadRequest, "withdraw_elgamal_secret_key does not match the mint's withdraw withheld authority ElGamal public key")
+		return
+	}
+
+	proof, err := core.BuildWithdrawWithheldFromMintProof(
+		req.ToWithdrawSecretKey(), withdrawPublicKey, destPublicKey,
+		withheld, destDecryptable, req.ToAeKey(),
+	)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, &ProveConfidentialWithdrawWithheldFromMintResponse{
+		CiphertextCiphertextEqualityProofData: codec.Base58.Encode(proof.EqualityProof),
+		NewDecryptableAvailableBalance:        codec.Base58.Encode(proof.NewDecryptableAvailableBalance),
+		WithheldAmount:                        strconv.FormatUint(proof.Amount, 10),
+		WithdrawElgamalPubkey:                 codec.Base58.Encode(withdrawPublicKey),
+		DestinationElgamalPubkey:              codec.Base58.Encode(destPublicKey),
+	})
+}
+
+// ProveConfidentialWithdrawWithheldFromAccounts godoc
+// @Summary      Build the proof one confidential WithdrawWithheldTokensFromAccounts needs
+// @Description  Sums the withheld confidential fee ciphertexts of source_accounts, decrypts the total with the withdraw authority's ElGamal secret key, re-encrypts it under the destination account's ElGamal key, and proves the two ciphertexts encrypt the same value. The sources' withheld amounts, the withdraw authority's public key (from the mint), and the destination's ElGamal key and current decryptable balance are read from chain, since the deployed program compares the proof against exactly those. ciphertext_ciphertext_equality_proof_data goes to zk-elgamal-proof/context-state/verify/ciphertext-ciphertext-equality, and new_decryptable_available_balance is what the withdraw instruction itself carries. The total must fit in 32 bits. The response goes stale if any source's withheld amount, or the destination's decryptable balance, changes before the withdraw lands.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ProveConfidentialWithdrawWithheldFromAccountsRequest  true  "Mint, sources, destination, withdraw authority secret, AE key"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ProveConfidentialWithdrawWithheldFromAccountsResponse
+// @Failure      400   {object}  map[string]string
+// @Failure      502   {object}  map[string]string
+// @Router       /svm/tool/prove/confidential-withdraw-withheld-from-accounts [post]
+func (h *ToolHandler) ProveConfidentialWithdrawWithheldFromAccounts(w http.ResponseWriter, r *http.Request) {
+	req := new(ProveConfidentialWithdrawWithheldFromAccountsRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), []*types.PublicKey{req.MintKey(), req.DestinationKey()}, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+	srcAccounts, err := chain.Cli.GetMultipleAccounts(r.Context(), req.SourceKeys(), rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read source accounts: %s", err))
+		return
+	}
+	mintInfo := accounts[req.MintKey().Base58()]
+	if !mintInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", req.MintKey()))
+		return
+	}
+	destInfo := accounts[req.DestinationKey().Base58()]
+	if !destInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s does not exist", req.DestinationKey()))
+		return
+	}
+	if mintInfo.Owner != core.Token2022ProgramID.Base58() || destInfo.Owner != core.Token2022ProgramID.Base58() {
+		handler.WriteError(w, http.StatusBadRequest, "mint and destination must both be owned by Token-2022")
+		return
+	}
+	mintData, err := mintInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode mint: %s", err))
+		return
+	}
+	destData, err := destInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode destination: %s", err))
+		return
+	}
+	if len(destData) < 32 || !bytes.Equal(destData[:32], req.MintKey().Bytes()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s does not hold mint %s", req.DestinationKey(), req.MintKey()))
+		return
+	}
+
+	var withheld [][]byte
+	for i, src := range req.SourceKeys() {
+		info := srcAccounts[src.Base58()]
+		if !info.Exists() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source_accounts[%d]: %s does not exist", i, src))
+			return
+		}
+		if info.Owner != core.Token2022ProgramID.Base58() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source_accounts[%d]: %s is not owned by Token-2022", i, src))
+			return
+		}
+		data, err := info.Bytes()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode source_accounts[%d]: %s", i, err))
+			return
+		}
+		if len(data) < 32 || !bytes.Equal(data[:32], req.MintKey().Bytes()) {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source_accounts[%d]: %s does not hold mint %s", i, src, req.MintKey()))
+			return
+		}
+		ct, err := core.ConfidentialTransferFeeAmountWithheld(data)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source_accounts[%d]: %s: %s", i, src, err))
+			return
+		}
+		withheld = append(withheld, ct)
+	}
+	withdrawPublicKey, err := core.ConfidentialTransferFeeWithdrawAuthority(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+	destPublicKey, destDecryptable, err := core.ConfidentialTransferAccountKeys(destData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s: %s", req.DestinationKey(), err))
+		return
+	}
+
+	derived, err := core.DeriveElGamalPublicKey(req.ToWithdrawSecretKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("withdraw_elgamal_secret_key: %s", err))
+		return
+	}
+	if !bytes.Equal(derived, withdrawPublicKey) {
+		handler.WriteError(w, http.StatusBadRequest, "withdraw_elgamal_secret_key does not match the mint's withdraw withheld authority ElGamal public key")
+		return
+	}
+
+	proof, err := core.BuildWithdrawWithheldFromAccountsProof(
+		req.ToWithdrawSecretKey(), withdrawPublicKey, destPublicKey,
+		withheld, destDecryptable, req.ToAeKey(),
+	)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, &ProveConfidentialWithdrawWithheldFromAccountsResponse{
+		CiphertextCiphertextEqualityProofData: codec.Base58.Encode(proof.EqualityProof),
+		NewDecryptableAvailableBalance:        codec.Base58.Encode(proof.NewDecryptableAvailableBalance),
+		WithheldAmount:                        strconv.FormatUint(proof.Amount, 10),
+		WithdrawElgamalPubkey:                 codec.Base58.Encode(withdrawPublicKey),
+		DestinationElgamalPubkey:              codec.Base58.Encode(destPublicKey),
+	})
 }

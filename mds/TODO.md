@@ -493,6 +493,47 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     계정으로의 전송에 선택 필드 `memo`로 Memo 명령을 앞에 붙이는 기능(우리 API엔 Memo
     명령을 붙일 방법이 없음), ④ 이후 transfer-hook 추가 계정/pausable 정지 등 조건 추가
 
+  **default-account-state·interest-bearing·scaled-ui-amount·pausable — devnet 확인.**
+  (`extensions/default-account-state/{initialize,update}`, `interest-bearing/{initialize,
+  update-rate}`, `scaled-ui-amount/{initialize,update-multiplier}`, `pausable/{initialize,
+  pause,resume}`). 생성기 `gen_init.py`에 "mint+authority(+multisig)" 유형 추가
+  - 권한자: default-account-state update=**민트 freeze authority**(확장에 별도 authority 없음),
+    interest/scaled/pausable=각 확장의 첫 32바이트 authority(`core.MintExtensionAuthority`)
+  - 크기: default-state 1B, interest 52B, scaled 56B, pausable 33B (합쳐 264B)
+  - default-account-state: frozen 기본값이면 새 ATA가 frozen(state 2) → mint-to가
+    `Custom(17)`, `thaw-account` 후 성공; update로 initialized로 바꾼 뒤 만든 ATA는
+    state 1. initialize 시점엔 민트가 미초기화라 "freeze authority 있음"을 검사 못 함(문서화)
+  - pausable: pause 후 mint-to/transfer가 `Custom(67)`(MintPaused), resume 후 정상
+  - interest-bearing: rate 500→1000, `pre_update_average_rate`=500 기록
+  - scaled-ui-amount: multiplier 1.5→2.5, `amount-to-ui(100)`이 1.5→2.5. interest-bearing과
+    scaled-ui-amount는 함께 못 쓴다고 알고 있어 **다른 민트로 분리해 테스트**(합쳐 붙였을 때
+    프로그램 거절 여부는 미확인)
+  - 우리 mint-to/transfer는 frozen/paused를 사전에 못 알려줌(→보완 패스)
+
+  **포인터 3종 + TokenMetadata + TokenGroup — devnet 확인 (14개).**
+  - `extensions/{metadata,group,group-member}-pointer/{initialize,update}`(opcode 39/40/41,
+    authority(32)+address(32), 각 64B). update는 주소를 비우면 해제
+  - **token-metadata/token-group 인터페이스는 opcode가 아니라 8바이트 discriminator**
+    (SHA-256("spl_token_metadata_interface:initialize_account") 앞 8B 등, 업스트림 hash
+    라벨에서 계산 — `d2e11ea258b84d8d`가 알려진 값과 일치)이고 문자열은 Borsh(u32 길이+바이트)
+  - `extensions/token-metadata/{initialize,update-field,remove-key,update-authority}`:
+    Token-2022는 메타데이터를 **민트 안**에 두므로 초기화된 민트 + 자기 자신을 가리키는
+    MetadataPointer가 전제. 계정이 커지는데 **프로그램이 rent를 내주지 않음** → 엔드포인트가
+    새 크기의 rent 부족분을 계산해 `rent_payer`의 System Transfer를 같은 트랜잭션 앞에 넣음
+    (registry create와 동일). 가변 길이라 data-size가 못 잰다. 단일 서명자만(멀티시그 필드 없음)
+    - 234→363B(=234+4+125), 이후 늘리고 줄이면 크기가 항상 계산과 일치(줄여도 rent는
+      **환수 안 됨** — 최종 389B에서 ~0.0002 SOL이 민트에 남음, withdraw-excess-lamports로 회수)
+    - update-authority: 넘기면 옛 권한 거절, 비우면 영구 잠금
+  - `extensions/token-group/{initialize-group,update-max-size,update-authority,
+    initialize-member}`: 그룹 318B(=+4+80), 멤버 민트 310B(=+4+72). 멤버 번호 1,2,3과
+    그룹 size 증가 확인, 가득 찬 그룹은 사전검사가 거절, max_size는 현재 size 미만 불가.
+    initialize-member는 멤버 민트 authority와 그룹 update authority **둘 다 서명**
+  - **미구현: `Emit`**(메타데이터 return data, 상태 변화 없음 — 빌더는 core에 있고 엔드포인트
+    없음). 시뮬레이션에서만 의미가 있고 계정 데이터를 직접 읽으면 같은 정보
+  - 남은 확장: transfer-hook 2(훅 프로그램 필요), permissioned-burn 4, SetAuthority 확장
+    권한 13종. 확장 다 끝난 뒤 보완 패스 → Metaplex Token Metadata(기존 SPL Token용)
+
+
 
   ApplyPendingBalance 등)는 여전히 진행 중 — 각각 필요한 proof 종류가 다름
   (range proof, ciphertext equality proof 등), 하나씩 순서대로 계속.

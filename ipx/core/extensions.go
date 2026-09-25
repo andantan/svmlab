@@ -2,6 +2,7 @@ package core
 
 import (
 	"fmt"
+	"math"
 	"math/big"
 
 	"github.com/andantan/svmlab/core/codec"
@@ -2293,4 +2294,351 @@ func (t *token) DisableCpiGuard(account, owner *types.PublicKey, signers []*type
 	accounts := types.NewAccounts(types.NewWritableAccount(account))
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}
+
+// MintExtensionAuthority returns the authority a mint's extension names in its
+// first 32 bytes -- the layout InterestBearingConfig (rate authority),
+// ScaledUiAmountConfig (multiplier authority) and PausableConfig (pause
+// authority) all share, stored as a plain 32-byte key with the all-zero
+// sentinel for absent. It returns nil when the extension is missing or carries
+// no authority.
+func MintExtensionAuthority(mintData []byte, want ExtensionType) *types.PublicKey {
+	raw := FindExtensionData(mintData, want)
+	if len(raw) < 32 {
+		return nil
+	}
+	for _, b := range raw[:32] {
+		if b != 0 {
+			key, err := types.NewPublicKeyFromBytes(raw[:32])
+			if err != nil {
+				return nil
+			}
+			return key
+		}
+	}
+
+	return nil
+}
+
+// InitializeDefaultAccountState attaches the DefaultAccountState extension to
+// mint: every token account created for it from then on starts in state, which
+// is how a mint makes new accounts start frozen until its freeze authority
+// thaws them. TokenInstruction DefaultAccountStateExtension (28), sub 0; data
+// is the account state (1 = initialized, 2 = frozen -- uninitialized is
+// meaningless here and rejected); accounts are [mint(writable)]. Like every
+// mint extension, this can only run before initialize-mint2. A frozen default
+// needs the mint to have a freeze authority, or nobody could ever thaw an
+// account.
+func (t *token) InitializeDefaultAccountState(mint *types.PublicKey, state uint8) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize default account state: mint is required")
+	}
+	if state != TokenAccountStateInitialized && state != TokenAccountStateFrozen {
+		return nil, fmt.Errorf("token initialize default account state: state %d must be initialized (%d) or frozen (%d)", state, TokenAccountStateInitialized, TokenAccountStateFrozen)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionDefaultAccountStateExtension)
+	data = codec.Binary.AppendU8(data, DefaultAccountStateInstructionInitialize)
+	data = codec.Binary.AppendU8(data, state)
+
+	return types.NewInstruction(t.id, types.NewAccounts(types.NewWritableAccount(mint)), data), nil
+}
+
+// UpdateDefaultAccountState changes the state new token accounts of mint start
+// in. Authorized by the mint's freeze authority. Sub 1 under opcode 28; data is
+// the new state; accounts are [mint(writable), freeze authority (+multisig
+// signers)].
+func (t *token) UpdateDefaultAccountState(mint, freezeAuthority *types.PublicKey, signers []*types.PublicKey, state uint8) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token update default account state: mint is required")
+	}
+	if err := validateAuthority("token update default account state", freezeAuthority, signers); err != nil {
+		return nil, err
+	}
+	if state != TokenAccountStateInitialized && state != TokenAccountStateFrozen {
+		return nil, fmt.Errorf("token update default account state: state %d must be initialized (%d) or frozen (%d)", state, TokenAccountStateInitialized, TokenAccountStateFrozen)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionDefaultAccountStateExtension)
+	data = codec.Binary.AppendU8(data, DefaultAccountStateInstructionUpdate)
+	data = codec.Binary.AppendU8(data, state)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(mint))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, freezeAuthority, signers), data), nil
+}
+
+// InitializeInterestBearingMint attaches the InterestBearingConfig extension to
+// mint, naming who may later change the rate (rateAuthority, MaybeNull -- 32
+// zero bytes for none) and the initial rate in basis points (i16, may be
+// negative). TokenInstruction InterestBearingMintExtension (33), sub 0;
+// accounts are [mint(writable)]. The extension only changes how amounts are
+// displayed (see amount-to-ui); it never mints tokens. Like every mint
+// extension, this can only run before initialize-mint2.
+func (t *token) InitializeInterestBearingMint(mint, rateAuthority *types.PublicKey, rate int16) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize interest bearing mint: mint is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInterestBearingMintExtension)
+	data = codec.Binary.AppendU8(data, InterestBearingMintInstructionInitialize)
+	data = appendMaybeNullAddress(data, rateAuthority)
+	data = codec.Binary.AppendU16(data, uint16(rate))
+
+	return types.NewInstruction(t.id, types.NewAccounts(types.NewWritableAccount(mint)), data), nil
+}
+
+// UpdateInterestBearingRate changes the interest rate of mint (basis points,
+// i16). Authorized by the extension's rate authority. Sub 1 under opcode 33;
+// accounts are [mint(writable), rate authority (+multisig signers)].
+func (t *token) UpdateInterestBearingRate(mint, rateAuthority *types.PublicKey, signers []*types.PublicKey, rate int16) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token update interest bearing rate: mint is required")
+	}
+	if err := validateAuthority("token update interest bearing rate", rateAuthority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionInterestBearingMintExtension)
+	data = codec.Binary.AppendU8(data, InterestBearingMintInstructionUpdateRate)
+	data = codec.Binary.AppendU16(data, uint16(rate))
+
+	accounts := types.NewAccounts(types.NewWritableAccount(mint))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, rateAuthority, signers), data), nil
+}
+
+// InitializeScaledUiAmount attaches the ScaledUiAmount extension to mint,
+// naming who may later change the multiplier (authority, MaybeNull) and the
+// initial multiplier (f64, little-endian; must be positive and not subnormal).
+// TokenInstruction ScaledUiAmountExtension (43), sub 0; accounts are
+// [mint(writable)]. Like the interest-bearing extension it only changes how
+// amounts are displayed. Like every mint extension, this can only run before
+// initialize-mint2.
+func (t *token) InitializeScaledUiAmount(mint, authority *types.PublicKey, multiplier float64) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize scaled ui amount: mint is required")
+	}
+	if err := checkScaledMultiplier(multiplier); err != nil {
+		return nil, fmt.Errorf("token initialize scaled ui amount: %w", err)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionScaledUiAmountExtension)
+	data = codec.Binary.AppendU8(data, ScaledUiAmountMintInstructionInitialize)
+	data = appendMaybeNullAddress(data, authority)
+	data = codec.Binary.AppendU64(data, math.Float64bits(multiplier))
+
+	return types.NewInstruction(t.id, types.NewAccounts(types.NewWritableAccount(mint)), data), nil
+}
+
+// UpdateScaledUiAmountMultiplier sets a new multiplier on mint, taking effect
+// at effectiveTimestamp (unix seconds; a time already past applies it
+// immediately). Authorized by the extension's multiplier authority. Sub 1 under
+// opcode 43; data is the multiplier (f64) then the timestamp (i64); accounts
+// are [mint(writable), multiplier authority (+multisig signers)].
+func (t *token) UpdateScaledUiAmountMultiplier(mint, authority *types.PublicKey, signers []*types.PublicKey, multiplier float64, effectiveTimestamp int64) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token update scaled ui amount multiplier: mint is required")
+	}
+	if err := validateAuthority("token update scaled ui amount multiplier", authority, signers); err != nil {
+		return nil, err
+	}
+	if err := checkScaledMultiplier(multiplier); err != nil {
+		return nil, fmt.Errorf("token update scaled ui amount multiplier: %w", err)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionScaledUiAmountExtension)
+	data = codec.Binary.AppendU8(data, ScaledUiAmountMintInstructionUpdateMultiplier)
+	data = codec.Binary.AppendU64(data, math.Float64bits(multiplier))
+	data = codec.Binary.AppendU64(data, uint64(effectiveTimestamp))
+
+	accounts := types.NewAccounts(types.NewWritableAccount(mint))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// checkScaledMultiplier rejects what the program rejects: a multiplier that is
+// not positive, or is NaN, infinite or subnormal.
+func checkScaledMultiplier(m float64) error {
+	if math.IsNaN(m) || math.IsInf(m, 0) || m <= 0 {
+		return fmt.Errorf("multiplier %v must be a positive finite number", m)
+	}
+	if m < 2.2250738585072014e-308 {
+		return fmt.Errorf("multiplier %v is subnormal", m)
+	}
+
+	return nil
+}
+
+// InitializePausable attaches the Pausable extension to mint, naming the pause
+// authority, who can stop and resume all minting, burning and transferring of
+// the mint. TokenInstruction PausableExtension (44), sub 0; data is the
+// authority address (32 bytes, plain, not MaybeNull); accounts are
+// [mint(writable)]. Like every mint extension, this can only run before
+// initialize-mint2.
+func (t *token) InitializePausable(mint, authority *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize pausable: mint is required")
+	}
+	if authority.IsNil() {
+		return nil, fmt.Errorf("token initialize pausable: authority is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionPausableExtension)
+	data = codec.Binary.AppendU8(data, PausableInstructionInitialize)
+	data = codec.Binary.AppendBytes(data, authority.Bytes())
+
+	return types.NewInstruction(t.id, types.NewAccounts(types.NewWritableAccount(mint)), data), nil
+}
+
+// PauseMint stops minting, burning and transferring of mint until ResumeMint.
+// Authorized by the pause authority. Sub 1 under opcode 44, no data; accounts
+// are [mint(writable), pause authority (+multisig signers)].
+func (t *token) PauseMint(mint, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	return t.pausableToggle("token pause mint", PausableInstructionPause, mint, authority, signers)
+}
+
+// ResumeMint lifts a pause. Authorized by the pause authority. Sub 2 under
+// opcode 44, no data; accounts as PauseMint.
+func (t *token) ResumeMint(mint, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	return t.pausableToggle("token resume mint", PausableInstructionResume, mint, authority, signers)
+}
+
+func (t *token) pausableToggle(name string, sub uint8, mint, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("%s: mint is required", name)
+	}
+	if err := validateAuthority(name, authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionPausableExtension)
+	data = codec.Binary.AppendU8(data, sub)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(mint))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// InitializeMetadataPointer attaches the MetadataPointer extension to mint, naming
+// who may later change the pointer (authority, MaybeNull) and the address it
+// points to (address, MaybeNull -- all zero bytes for none). TokenInstruction
+// MetadataPointerExtension (39), sub 0; data is authority(32) + address(32); accounts are
+// [mint(writable)]. The pointer only records where the metadata lives -- the
+// mint itself for the Token-2022 native implementation, or another account or
+// program. Like every mint extension, this can only run before initialize-mint2.
+func (t *token) InitializeMetadataPointer(mint, authority, address *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize metadata pointer: mint is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionMetadataPointerExtension)
+	data = codec.Binary.AppendU8(data, MetadataPointerInstructionInitialize)
+	data = appendMaybeNullAddress(data, authority)
+	data = appendMaybeNullAddress(data, address)
+
+	return types.NewInstruction(t.id, types.NewAccounts(types.NewWritableAccount(mint)), data), nil
+}
+
+// UpdateMetadataPointer changes the address mint's MetadataPointer extension points
+// to (all zero bytes clears it). Authorized by the pointer's authority. Sub 1
+// under MetadataPointerExtension (39); data is the new address (32); accounts are [mint(writable),
+// pointer authority (+multisig signers)].
+func (t *token) UpdateMetadataPointer(mint, authority *types.PublicKey, signers []*types.PublicKey, address *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token update metadata pointer: mint is required")
+	}
+	if err := validateAuthority("token update metadata pointer", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionMetadataPointerExtension)
+	data = codec.Binary.AppendU8(data, MetadataPointerInstructionUpdate)
+	data = appendMaybeNullAddress(data, address)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(mint))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// InitializeGroupPointer attaches the GroupPointer extension to mint, naming
+// who may later change the pointer (authority, MaybeNull) and the address it
+// points to (address, MaybeNull -- all zero bytes for none). TokenInstruction
+// GroupPointerExtension (40), sub 0; data is authority(32) + address(32); accounts are
+// [mint(writable)]. The pointer only records where the group lives -- the
+// mint itself for the Token-2022 native implementation, or another account or
+// program. Like every mint extension, this can only run before initialize-mint2.
+func (t *token) InitializeGroupPointer(mint, authority, address *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize group pointer: mint is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionGroupPointerExtension)
+	data = codec.Binary.AppendU8(data, GroupPointerInstructionInitialize)
+	data = appendMaybeNullAddress(data, authority)
+	data = appendMaybeNullAddress(data, address)
+
+	return types.NewInstruction(t.id, types.NewAccounts(types.NewWritableAccount(mint)), data), nil
+}
+
+// UpdateGroupPointer changes the address mint's GroupPointer extension points
+// to (all zero bytes clears it). Authorized by the pointer's authority. Sub 1
+// under GroupPointerExtension (40); data is the new address (32); accounts are [mint(writable),
+// pointer authority (+multisig signers)].
+func (t *token) UpdateGroupPointer(mint, authority *types.PublicKey, signers []*types.PublicKey, address *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token update group pointer: mint is required")
+	}
+	if err := validateAuthority("token update group pointer", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionGroupPointerExtension)
+	data = codec.Binary.AppendU8(data, GroupPointerInstructionUpdate)
+	data = appendMaybeNullAddress(data, address)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(mint))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// InitializeGroupMemberPointer attaches the GroupMemberPointer extension to mint, naming
+// who may later change the pointer (authority, MaybeNull) and the address it
+// points to (address, MaybeNull -- all zero bytes for none). TokenInstruction
+// GroupMemberPointerExtension (41), sub 0; data is authority(32) + address(32); accounts are
+// [mint(writable)]. The pointer only records where the group member lives -- the
+// mint itself for the Token-2022 native implementation, or another account or
+// program. Like every mint extension, this can only run before initialize-mint2.
+func (t *token) InitializeGroupMemberPointer(mint, authority, address *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize group member pointer: mint is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionGroupMemberPointerExtension)
+	data = codec.Binary.AppendU8(data, GroupMemberPointerInstructionInitialize)
+	data = appendMaybeNullAddress(data, authority)
+	data = appendMaybeNullAddress(data, address)
+
+	return types.NewInstruction(t.id, types.NewAccounts(types.NewWritableAccount(mint)), data), nil
+}
+
+// UpdateGroupMemberPointer changes the address mint's GroupMemberPointer extension points
+// to (all zero bytes clears it). Authorized by the pointer's authority. Sub 1
+// under GroupMemberPointerExtension (41); data is the new address (32); accounts are [mint(writable),
+// pointer authority (+multisig signers)].
+func (t *token) UpdateGroupMemberPointer(mint, authority *types.PublicKey, signers []*types.PublicKey, address *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token update group member pointer: mint is required")
+	}
+	if err := validateAuthority("token update group member pointer", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionGroupMemberPointerExtension)
+	data = codec.Binary.AppendU8(data, GroupMemberPointerInstructionUpdate)
+	data = appendMaybeNullAddress(data, address)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(mint))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
 }

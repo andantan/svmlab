@@ -258,6 +258,47 @@ func run() error {
 				r.Post("/initialize", tk.InitializeConfidentialTransferMint)
 				r.Post("/update", tk.UpdateConfidentialTransferMint)
 			})
+			r.Route("/extensions/token-metadata", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializeTokenMetadata)
+				r.Post("/update-field", tk.UpdateTokenMetadataField)
+				r.Post("/remove-key", tk.RemoveTokenMetadataKey)
+				r.Post("/update-authority", tk.UpdateTokenMetadataAuthority)
+			})
+			r.Route("/extensions/token-group", func(r chi.Router) {
+				r.Post("/initialize-group", tk.InitializeTokenGroup)
+				r.Post("/update-max-size", tk.UpdateTokenGroupMaxSize)
+				r.Post("/update-authority", tk.UpdateTokenGroupAuthority)
+				r.Post("/initialize-member", tk.InitializeTokenGroupMember)
+			})
+			r.Route("/extensions/metadata-pointer", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializeMetadataPointer)
+				r.Post("/update", tk.UpdateMetadataPointer)
+			})
+			r.Route("/extensions/group-pointer", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializeGroupPointer)
+				r.Post("/update", tk.UpdateGroupPointer)
+			})
+			r.Route("/extensions/group-member-pointer", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializeGroupMemberPointer)
+				r.Post("/update", tk.UpdateGroupMemberPointer)
+			})
+			r.Route("/extensions/default-account-state", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializeDefaultAccountState)
+				r.Post("/update", tk.UpdateDefaultAccountState)
+			})
+			r.Route("/extensions/interest-bearing", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializeInterestBearingMint)
+				r.Post("/update-rate", tk.UpdateInterestBearingRate)
+			})
+			r.Route("/extensions/scaled-ui-amount", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializeScaledUiAmount)
+				r.Post("/update-multiplier", tk.UpdateScaledUiAmountMultiplier)
+			})
+			r.Route("/extensions/pausable", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializePausable)
+				r.Post("/pause", tk.PauseMint)
+				r.Post("/resume", tk.ResumeMint)
+			})
 			r.Route("/extensions/memo-transfer", func(r chi.Router) {
 				r.Post("/reallocate", tk.ReallocateMemoTransfer)
 				r.Post("/enable", tk.EnableRequiredMemoTransfers)

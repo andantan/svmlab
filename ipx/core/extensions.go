@@ -1438,3 +1438,60 @@ func (t *token) EnableNonConfidentialCredits(account, owner *types.PublicKey, si
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
 }
+
+// ConfidentialWithdraw builds a ConfidentialTransfer extension's Withdraw
+// instruction -- sub-instruction 6, moving amount out of account's
+// confidential available balance back into its ordinary public balance.
+// The amount is public (it is leaving the confidential side), but the
+// program still has to be convinced the remaining encrypted balance is
+// what it should be and non-negative, so, like Transfer, it depends on
+// proofs verified beforehand into context-state accounts: an equality
+// proof and a 64-bit range proof over the remaining balance.
+//
+// newDecryptableAvailableBalance is BuildWithdrawProofs's own
+// NewDecryptableAvailableBalance, packed here rather than recomputed.
+//
+// Confirmed against the interface crate's own inner_withdraw and
+// WithdrawInstructionData: data is amount(u64) + decimals(u8) + the new
+// decryptable balance (36) + the two proof offsets, both 0 to signal a
+// context-state account; accounts are [token_account(writable),
+// mint(readonly), equality context state(readonly), range proof context
+// state(readonly), authority(+multisig)], with no instructions sysvar
+// since neither proof location is an instruction offset.
+func (t *token) ConfidentialWithdraw(account, mint, equalityContext, rangeContext, authority *types.PublicKey, signers []*types.PublicKey, amount uint64, decimals uint8, newDecryptableAvailableBalance []byte) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token withdraw: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token withdraw: mint is required")
+	}
+	if equalityContext.IsNil() {
+		return nil, fmt.Errorf("token withdraw: equality context state account is required")
+	}
+	if rangeContext.IsNil() {
+		return nil, fmt.Errorf("token withdraw: range proof context state account is required")
+	}
+	if err := validateAuthority("token withdraw", authority, signers); err != nil {
+		return nil, err
+	}
+	if len(newDecryptableAvailableBalance) != AeCiphertextLen {
+		return nil, fmt.Errorf("token withdraw: new decryptable available balance is %d bytes, expected %d", len(newDecryptableAvailableBalance), AeCiphertextLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionWithdraw)
+	data = codec.Binary.AppendU64(data, amount)
+	data = codec.Binary.AppendU8(data, decimals)
+	data = codec.Binary.AppendBytes(data, newDecryptableAvailableBalance)
+	data = codec.Binary.AppendU8(data, 0) // equality_proof_instruction_offset: 0 = context state account
+	data = codec.Binary.AppendU8(data, 0) // range_proof_instruction_offset
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(mint),
+		types.NewReadonlyAccount(equalityContext),
+		types.NewReadonlyAccount(rangeContext),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}

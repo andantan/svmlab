@@ -263,3 +263,45 @@ func (h *ToolHandler) ProveConfidentialTransfer(w http.ResponseWriter, r *http.R
 
 	handler.WriteOK(w, NewProveConfidentialTransferResponse(proofs, sourcePublicKey))
 }
+
+// ProveConfidentialWithdraw godoc
+// @Summary      Build the two proofs one confidential Withdraw needs
+// @Description  Builds the equality and 64-bit range proofs a single confidential withdrawal requires, in one call, because they are built from the same fresh randomness and only agree with each other if drawn together. equality_proof_data goes to zk-elgamal-proof/context-state/verify/ciphertext-commitment-equality and range_proof_data to verify/batched-range-proof-u64, and new_decryptable_available_balance is what the withdraw instruction itself carries. The response cannot be rebuilt: a second call draws new randomness and produces proofs that no longer match any context-state account already verified from the first. The account's balance must not change between building these proofs and the withdrawal landing.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ProveConfidentialWithdrawRequest  true  "Withdraw inputs"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ProveConfidentialWithdrawResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/tool/prove/confidential-withdraw [post]
+func (h *ToolHandler) ProveConfidentialWithdraw(w http.ResponseWriter, r *http.Request) {
+	req := new(ProveConfidentialWithdrawRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	publicKey, err := core.DeriveElGamalPublicKey(req.ToElgamalSecretKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("elgamal_secret_key: %s", err))
+		return
+	}
+
+	proofs, err := core.BuildWithdrawProofs(
+		req.ToElgamalSecretKey(), publicKey,
+		req.ToCurrentAvailableBalanceCiphertext(), req.ToCurrentDecryptableAvailableBalance(), req.ToAeKey(),
+		req.ToAmount(),
+	)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewProveConfidentialWithdrawResponse(proofs, publicKey))
+}

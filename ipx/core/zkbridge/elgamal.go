@@ -75,3 +75,22 @@ func ElGamalSubtractCiphertexts(a, b []byte) ([]byte, error) {
 	}
 	return out, nil
 }
+
+// ElGamalSubtractAmount subtracts a plaintext amount from a ciphertext
+// homomorphically -- the ciphertext of (value - amount) under the same
+// key, without decrypting. Confidential Withdraw uses it to derive the
+// remaining-balance ciphertext the on-chain program will itself compute.
+func ElGamalSubtractAmount(ciphertext []byte, amount uint64) ([]byte, error) {
+	if len(ciphertext) != ElGamalCiphertextLen {
+		return nil, fmt.Errorf("zkbridge: elgamal subtract amount: ciphertext is %d bytes, want %d", len(ciphertext), ElGamalCiphertextLen)
+	}
+
+	out, err := invoke("elgamal_sub_amount", Bytes(ciphertext), Scalar(amount))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) != ElGamalCiphertextLen {
+		return nil, fmt.Errorf("zkbridge: elgamal_sub_amount returned %d bytes, want %d", len(out), ElGamalCiphertextLen)
+	}
+	return out, nil
+}

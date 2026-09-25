@@ -371,3 +371,101 @@ func NewProveConfidentialTransferResponse(p *core.TransferProofs, sourcePublicKe
 		SourceElgamalPubkey:                  codec.Base58.Encode(sourcePublicKey),
 	}
 }
+
+// ProveConfidentialWithdrawRequest names everything the two proofs one
+// confidential Withdraw needs are built from. Both come out of one request
+// because they share their inputs: the same fresh Pedersen opening and the
+// same remaining-balance ciphertext feed both, so proofs built in separate
+// calls would each draw different randomness and no longer describe the
+// same withdrawal.
+type ProveConfidentialWithdrawRequest struct {
+	// ElgamalSecretKey is the account's own ElGamal secret key,
+	// base58-encoded. The public key is derived from it here.
+	ElgamalSecretKey string `json:"elgamal_secret_key" example:""`
+
+	// CurrentAvailableBalanceCiphertext is the account's current available
+	// balance, base58-encoded raw 64-byte ElGamal ciphertext.
+	CurrentAvailableBalanceCiphertext string `json:"current_available_balance_ciphertext" example:""`
+
+	// CurrentDecryptableAvailableBalance is the account's current available
+	// balance, base58-encoded raw 36-byte AE ciphertext.
+	CurrentDecryptableAvailableBalance string `json:"current_decryptable_available_balance" example:""`
+
+	// AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the
+	// new one, base58-encoded raw 16-byte key.
+	AeKey string `json:"ae_key" example:""`
+
+	// Amount is the raw base-unit count to withdraw. It cannot exceed the
+	// account's current available balance.
+	Amount string `json:"amount" example:"5"`
+
+	secretKey                          []byte
+	currentAvailableBalanceCiphertext  []byte
+	currentDecryptableAvailableBalance []byte
+	aeKey                              []byte
+	amount                             uint64
+}
+
+func (r *ProveConfidentialWithdrawRequest) ValidateRequest() error {
+	var err error
+
+	if r.secretKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ElgamalSecretKey), 32); err != nil {
+		return errors.New("elgamal_secret_key: " + err.Error())
+	}
+	if r.currentAvailableBalanceCiphertext, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.CurrentAvailableBalanceCiphertext), 64); err != nil {
+		return errors.New("current_available_balance_ciphertext: " + err.Error())
+	}
+	if r.currentDecryptableAvailableBalance, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.CurrentDecryptableAvailableBalance), core.AeCiphertextLen); err != nil {
+		return errors.New("current_decryptable_available_balance: " + err.Error())
+	}
+	if r.aeKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AeKey), core.AeKeyLen); err != nil {
+		return errors.New("ae_key: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: " + err.Error())
+	}
+	if r.amount == 0 {
+		return errors.New("amount must be greater than zero")
+	}
+
+	return nil
+}
+
+func (r *ProveConfidentialWithdrawRequest) ToElgamalSecretKey() []byte { return r.secretKey }
+func (r *ProveConfidentialWithdrawRequest) ToCurrentAvailableBalanceCiphertext() []byte {
+	return r.currentAvailableBalanceCiphertext
+}
+func (r *ProveConfidentialWithdrawRequest) ToCurrentDecryptableAvailableBalance() []byte {
+	return r.currentDecryptableAvailableBalance
+}
+func (r *ProveConfidentialWithdrawRequest) ToAeKey() []byte  { return r.aeKey }
+func (r *ProveConfidentialWithdrawRequest) ToAmount() uint64 { return r.amount }
+
+// ProveConfidentialWithdrawResponse carries the two proof-data blobs (each
+// the proof_data of its matching zk-elgamal-proof/context-state/verify
+// endpoint) and the one value Withdraw's own instruction data needs.
+// Nothing here can be rebuilt later: a second call draws new openings and
+// produces proofs that no longer match any context-state account already
+// verified from this response.
+type ProveConfidentialWithdrawResponse struct {
+	EqualityProofData string `json:"equality_proof_data"`
+	RangeProofData    string `json:"range_proof_data"`
+
+	NewDecryptableAvailableBalance string `json:"new_decryptable_available_balance"`
+
+	ElgamalPubkey string `json:"elgamal_pubkey"`
+}
+
+func NewProveConfidentialWithdrawResponse(p *core.WithdrawProofs, publicKey []byte) *ProveConfidentialWithdrawResponse {
+	return &ProveConfidentialWithdrawResponse{
+		EqualityProofData:              codec.Base58.Encode(p.EqualityProof),
+		RangeProofData:                 codec.Base58.Encode(p.RangeProof),
+		NewDecryptableAvailableBalance: codec.Base58.Encode(p.NewDecryptableAvailableBalance),
+		ElgamalPubkey:                  codec.Base58.Encode(publicKey),
+	}
+}

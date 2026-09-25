@@ -87,35 +87,53 @@ const MaxRangeProofCommitments = 8
 // actually uses -- unused slots are zero, not omitted.
 const BatchedRangeProofU128DataLen = 1000
 
+// BatchedRangeProofU64DataLen is context 264 (the same fixed 8-slot
+// BatchedRangeProofContext) + proof 672 = 936, confirmed against
+// zk-sdk-pod's RANGE_PROOF_U64_LEN.
+const BatchedRangeProofU64DataLen = 936
+
 // ProveBatchedRangeProofU128 proves that each amounts[i] fits within
 // bitLengths[i] bits and matches commitments[i] (opened with
 // openings[i]), batched into one proof whose bit lengths must sum to
 // 128. Returns the full ProofData bytes (context || proof); the context
 // itself is always 264 bytes (8 fixed slots), whether n is 1 or 8.
 func ProveBatchedRangeProofU128(commitments [][]byte, amounts []uint64, bitLengths []uint8, openings [][]byte) ([]byte, error) {
+	return proveBatchedRange("proof_batched_range_u128", 128, BatchedRangeProofU128DataLen, commitments, amounts, bitLengths, openings)
+}
+
+// ProveBatchedRangeProofU64 is ProveBatchedRangeProofU128's 64-bit
+// counterpart: the bit lengths must sum to exactly 64, and the result is
+// the 936-byte ProofData a VerifyBatchedRangeProofU64 instruction
+// carries. Confidential Withdraw uses it with a single 64-bit commitment
+// to the remaining balance.
+func ProveBatchedRangeProofU64(commitments [][]byte, amounts []uint64, bitLengths []uint8, openings [][]byte) ([]byte, error) {
+	return proveBatchedRange("proof_batched_range_u64", 64, BatchedRangeProofU64DataLen, commitments, amounts, bitLengths, openings)
+}
+
+func proveBatchedRange(export string, totalBits, dataLen int, commitments [][]byte, amounts []uint64, bitLengths []uint8, openings [][]byte) ([]byte, error) {
 	n := len(commitments)
 	if n == 0 || len(amounts) != n || len(bitLengths) != n || len(openings) != n {
-		return nil, fmt.Errorf("zkbridge: prove batched range proof u128: requires equal-length non-empty inputs, got %d commitments, %d amounts, %d bit lengths, %d openings",
-			n, len(amounts), len(bitLengths), len(openings))
+		return nil, fmt.Errorf("zkbridge: prove batched range proof u%d: requires equal-length non-empty inputs, got %d commitments, %d amounts, %d bit lengths, %d openings",
+			totalBits, n, len(amounts), len(bitLengths), len(openings))
 	}
 	if n > MaxRangeProofCommitments {
-		return nil, fmt.Errorf("zkbridge: prove batched range proof u128: supports at most %d commitments, got %d", MaxRangeProofCommitments, n)
+		return nil, fmt.Errorf("zkbridge: prove batched range proof u%d: supports at most %d commitments, got %d", totalBits, MaxRangeProofCommitments, n)
 	}
 	var sum int
 	for _, bits := range bitLengths {
 		sum += int(bits)
 	}
-	if sum != 128 {
-		return nil, fmt.Errorf("zkbridge: prove batched range proof u128: bit lengths sum to %d, want 128", sum)
+	if sum != totalBits {
+		return nil, fmt.Errorf("zkbridge: prove batched range proof u%d: bit lengths sum to %d, want %d", totalBits, sum, totalBits)
 	}
 	for i, c := range commitments {
 		if len(c) != PedersenCommitmentLen {
-			return nil, fmt.Errorf("zkbridge: prove batched range proof u128: commitments[%d] is %d bytes, want %d", i, len(c), PedersenCommitmentLen)
+			return nil, fmt.Errorf("zkbridge: prove batched range proof u%d: commitments[%d] is %d bytes, want %d", totalBits, i, len(c), PedersenCommitmentLen)
 		}
 	}
 	for i, o := range openings {
 		if len(o) != PedersenOpeningLen {
-			return nil, fmt.Errorf("zkbridge: prove batched range proof u128: openings[%d] is %d bytes, want %d", i, len(o), PedersenOpeningLen)
+			return nil, fmt.Errorf("zkbridge: prove batched range proof u%d: openings[%d] is %d bytes, want %d", totalBits, i, len(o), PedersenOpeningLen)
 		}
 	}
 
@@ -124,13 +142,13 @@ func ProveBatchedRangeProofU128(commitments [][]byte, amounts []uint64, bitLengt
 	openingBytes := make([][]byte, n)
 	copy(openingBytes, openings)
 
-	out, err := invoke("proof_batched_range_u128",
+	out, err := invoke(export,
 		Scalar(n), Concat(commitmentBytes), U64s(amounts), Bytes(bitLengths), Concat(openingBytes))
 	if err != nil {
 		return nil, err
 	}
-	if len(out) != BatchedRangeProofU128DataLen {
-		return nil, fmt.Errorf("zkbridge: proof_batched_range_u128 returned %d bytes, want %d", len(out), BatchedRangeProofU128DataLen)
+	if len(out) != dataLen {
+		return nil, fmt.Errorf("zkbridge: %s returned %d bytes, want %d", export, len(out), dataLen)
 	}
 	return out, nil
 }

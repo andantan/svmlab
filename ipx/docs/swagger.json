@@ -2469,6 +2469,63 @@
                 }
             }
         },
+        "/svm/tool/prove/confidential-withdraw": {
+            "post": {
+                "description": "Builds the equality and 64-bit range proofs a single confidential withdrawal requires, in one call, because they are built from the same fresh randomness and only agree with each other if drawn together. equality_proof_data goes to zk-elgamal-proof/context-state/verify/ciphertext-commitment-equality and range_proof_data to verify/batched-range-proof-u64, and new_decryptable_available_balance is what the withdraw instruction itself carries. The response cannot be rebuilt: a second call draws new randomness and produces proofs that no longer match any context-state account already verified from the first. The account's balance must not change between building these proofs and the withdrawal landing.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool"
+                ],
+                "summary": "Build the two proofs one confidential Withdraw needs",
+                "parameters": [
+                    {
+                        "description": "Withdraw inputs",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialWithdrawRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialWithdrawResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/tool/prove/pubkey-validity": {
             "post": {
                 "description": "Derives the public key secret_key determines and builds a sigma-protocol proof that whoever holds secret_key knows it -- what extensions/confidential-transfer-account/configure-account requires alongside the public key it names, since nothing else lets the deployed program tell a real ElGamal public key from 32 arbitrary bytes. The proof is zero-knowledge: public_key and proof in the response reveal nothing about secret_key beyond what configure-account already needs to see.",
@@ -5305,6 +5362,63 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.ConfidentialTransferResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-account/withdraw": {
+            "post": {
+                "description": "Moves amount out of account's confidential available balance back into its ordinary public balance -- the reverse of deposit. amount is public, but the remaining encrypted balance is not, so the program needs two proofs it is what it should be: an equality proof and a 64-bit range proof. Builds only the Withdraw instruction: both proofs must already be verified into context-state accounts, whose addresses are named here -- build the proofs with tool/prove/confidential-withdraw, create the accounts with zk-elgamal-proof/context-state/create, and verify each with context-state/verify. new_decryptable_available_balance must come from that same tool/prove/confidential-withdraw call, since a later call draws new randomness and no longer matches the verified proofs. The account's balance must not change between building the proofs and this withdrawal landing. decimals is checked against the mint rather than filled in from it. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Withdraw from a confidential balance to the public balance",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Account, mint, owner, amount, decimals, context-state accounts, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialWithdrawRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialWithdrawResponse"
                         }
                     },
                     "400": {
@@ -9804,6 +9918,53 @@
                 }
             }
         },
+        "misc.ProveConfidentialWithdrawRequest": {
+            "type": "object",
+            "properties": {
+                "ae_key": {
+                    "description": "AeKey decrypts CurrentDecryptableAvailableBalance and encrypts the\nnew one, base58-encoded raw 16-byte key.",
+                    "type": "string",
+                    "example": ""
+                },
+                "amount": {
+                    "description": "Amount is the raw base-unit count to withdraw. It cannot exceed the\naccount's current available balance.",
+                    "type": "string",
+                    "example": "5"
+                },
+                "current_available_balance_ciphertext": {
+                    "description": "CurrentAvailableBalanceCiphertext is the account's current available\nbalance, base58-encoded raw 64-byte ElGamal ciphertext.",
+                    "type": "string",
+                    "example": ""
+                },
+                "current_decryptable_available_balance": {
+                    "description": "CurrentDecryptableAvailableBalance is the account's current available\nbalance, base58-encoded raw 36-byte AE ciphertext.",
+                    "type": "string",
+                    "example": ""
+                },
+                "elgamal_secret_key": {
+                    "description": "ElgamalSecretKey is the account's own ElGamal secret key,\nbase58-encoded. The public key is derived from it here.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "misc.ProveConfidentialWithdrawResponse": {
+            "type": "object",
+            "properties": {
+                "elgamal_pubkey": {
+                    "type": "string"
+                },
+                "equality_proof_data": {
+                    "type": "string"
+                },
+                "new_decryptable_available_balance": {
+                    "type": "string"
+                },
+                "range_proof_data": {
+                    "type": "string"
+                }
+            }
+        },
         "misc.ProvePubkeyValidityRequest": {
             "type": "object",
             "properties": {
@@ -12089,6 +12250,131 @@
                 },
                 "source": {
                     "type": "string"
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ConfidentialWithdrawRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "description": "Account is debited from its confidential available balance and\ncredited to its public balance. It must already carry the\nConfidentialTransferAccount extension.",
+                    "type": "string",
+                    "example": ""
+                },
+                "amount": {
+                    "description": "Amount is the raw base-unit count to withdraw, not a UI decimal\nstring. It must be the same amount tool/prove/confidential-withdraw\nbuilt its proofs for.",
+                    "type": "string",
+                    "example": "5"
+                },
+                "decimals": {
+                    "description": "Decimals must equal Mint's own, the same check every other\n*Checked-shaped instruction in this API runs rather than trusting\nthe caller's figure.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "equality_context_state_account": {
+                    "description": "EqualityContextStateAccount holds the verified\nCiphertextCommitmentEquality proof's context (see\ncontext-state/verify/ciphertext-commitment-equality).",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint is what Account must hold, and is the source of the decimals\nchecked against.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer owner. Non-empty,\nOwner itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_decryptable_available_balance": {
+                    "description": "NewDecryptableAvailableBalance is tool/prove/confidential-withdraw's\nown new_decryptable_available_balance, base58-encoded (36 bytes).",
+                    "type": "string",
+                    "example": ""
+                },
+                "owner": {
+                    "description": "Owner is Account's owner, or its multisig for a multisig-owned\naccount (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token account can never hold\nthis extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "range_proof_context_state_account": {
+                    "description": "RangeProofContextStateAccount holds the verified BatchedRangeProofU64\nproof's context (see context-state/verify/batched-range-proof-u64).",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ConfidentialWithdrawResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "amount": {
+                    "type": "string"
+                },
+                "equality_context_state_account": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "range_proof_context_state_account": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 },
                 "transaction": {
                     "type": "string"

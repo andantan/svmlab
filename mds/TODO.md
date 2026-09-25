@@ -227,12 +227,42 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     `disableConfidentialTransferConfidentialCredits`). 두 enable은 시그니처를
     직접 보진 않았고 둘 다 0이던 계좌가 최종적으로 1,1로 돌아온 걸 온체인에서
     읽어 확인. 꺼진 상태에서 실제 전송이 거부되는지는 시도 안 함
-  - 남은 ConfidentialTransfer: `EmptyAccount`(4, `VerifyZeroCiphertext`),
-    `Withdraw`(6, equality + `BatchedRangeProofU64`) — wasm에
-    `proof_zero_ciphertext`/`proof_batched_range_u64` export 있음, 브릿지
-    Prove 함수만 새로 필요. `TransferWithFee`(13, 민트에
+  - 남은 ConfidentialTransfer: `EmptyAccount`(4, `VerifyZeroCiphertext`) —
+    wasm에 `proof_zero_ciphertext` export 있음, 브릿지 Prove 함수만 새로
+    필요. `TransferWithFee`(13, 민트에
     `ConfidentialTransferFeeConfig` 필요, proof 5종), `ConfigureAccountWithRegistry`
     (14, ElGamal registry 프로그램 필요)
+
+  **`Withdraw`(opcode 27 sub 6) devnet 완주 — 기밀 available → 공개 잔액.**
+  트랜잭션 `2ikz2Je…`, `err: None`, 6221 CU, RPC parsed
+  `withdrawConfidentialTransfer`의 두 proof offset이 0(컨텍스트 계정
+  참조). 수신 계정에서 5를 꺼내 공개 잔액 40→45, 기밀 decryptable 20→15
+  (수신 ae_key로 복호화해 확인). ElGamal 암호문 자체를 복호화한 건 아님
+  - upstream `inner_withdraw`/`WithdrawInstructionData` 확인: 데이터
+    `amount(u64)+decimals(u8)+new_decryptable_available_balance(36)+
+    equality offset(0)+range offset(0)`, 계좌 `[account(w), mint, equality
+    ctx, range ctx, authority(+멀티시그)]`(offset 모드일 때만 인스트럭션
+    sysvar). `Transfer`와 달리 validity proof가 없음 — 목적지·auditor에게
+    새로 암호화해 보내는 값이 없어서. 컨텍스트 계정은 equality(161)+
+    range u64(297) 두 개
+  - proof 구성은 solana-go `NewWithdrawProofData`를 그대로 이식: 남는 잔액
+    암호문 = 현재 available − 평문 amount(`elgamal_sub_amount`), 그 잔액에
+    새 Pedersen commitment, equality proof, 64비트 range proof
+    (`proof_batched_range_u64`, commitment 1개). amount는 공개라 암호화할
+    대상이 없음. 서버가 현재 decryptable을 ae_key로 풀어 잔액 초과를 사전 거절
+  - `zkbridge`: `ProveBatchedRangeProofU64`(936바이트) 신규, u128과 내부
+    구현 공유(`proveBatchedRange`). `ElGamalSubtractAmount` 신규. wasm
+    export 두 개를 처음 써봤는데 온체인 검증기가 그대로 받아들임
+  - **신규 `POST /svm/tool/prove/confidential-withdraw`**: equality+range
+    proof와 `new_decryptable_available_balance`를 한 번에 생성. 두 proof가
+    같은 opening을 공유하므로 **재생성 불가**, 계정 잔액이 proof 생성~withdraw
+    사이에 바뀌면 실패
+  - **신규 `POST .../confidential-transfer-account/withdraw`**: 요청에
+    `account`/`mint`/`owner`/`amount`/`decimals`/두 컨텍스트 계정/
+    `new_decryptable_available_balance`. decimals는 민트와 대조, 컨텍스트
+    계정 존재·owner·space 사전확인. 서버는 proof를 만들지 않음
+  - 이제 기밀 잔액이 나오는 길이 생김 — `EmptyAccount`(available을 전부
+    withdraw해 0으로 만든 뒤)로 이어갈 수 있음
 
   **신규 최상위 그룹 `/svm/v2/transaction/zk-elgamal-proof/context-state/`**
   (ZkElgamalProof는 Token-2022와 별개 프로그램이라 compute-budget처럼 자기
@@ -438,9 +468,9 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     (InitializeGroup, UpdateGroupMaxSize, UpdateGroupAuthority, InitializeMember)
   - Metaplex Token Metadata — 완전히 다른 프로그램, Borsh 직렬화 새로 배워야 함,
     근데 지갑/익스플로러 실질 표준이라 결국 필요
-  - Confidential Transfer(15개 중 11개 완료: InitializeMint/UpdateMint/
+  - Confidential Transfer(15개 중 12개 완료: InitializeMint/UpdateMint/
     ConfigureAccount/ApproveAccount/Deposit/ApplyPendingBalance/Transfer/
-    크레딧 토글 4개. 남은 건 Withdraw·EmptyAccount·TransferWithFee·
+    Withdraw/크레딧 토글 4개. 남은 건 EmptyAccount·TransferWithFee·
     ConfigureAccountWithRegistry) / Confidential Transfer
     Fee / Confidential Mint Burn — ElGamal 암호화가 들어가는 가장 무거운
     서브시스템 (각각 15/6/6개 instruction)

@@ -469,3 +469,57 @@ func NewProveConfidentialWithdrawResponse(p *core.WithdrawProofs, publicKey []by
 		ElgamalPubkey:                  codec.Base58.Encode(publicKey),
 	}
 }
+
+// ProveConfidentialEmptyAccountRequest names what the single proof one
+// confidential EmptyAccount needs is built from: the account's ElGamal
+// secret key and its current available balance ciphertext, which must
+// encrypt zero.
+type ProveConfidentialEmptyAccountRequest struct {
+	// ElgamalSecretKey is the account's own ElGamal secret key,
+	// base58-encoded. The public key is derived from it here.
+	ElgamalSecretKey string `json:"elgamal_secret_key" example:""`
+
+	// AvailableBalanceCiphertext is the account's current available
+	// balance, base58-encoded raw 64-byte ElGamal ciphertext, read off
+	// chain. It must already encrypt zero (see
+	// extensions/confidential-transfer-account/withdraw) or the proof
+	// will not verify.
+	AvailableBalanceCiphertext string `json:"available_balance_ciphertext" example:""`
+
+	secretKey  []byte
+	ciphertext []byte
+}
+
+func (r *ProveConfidentialEmptyAccountRequest) ValidateRequest() error {
+	var err error
+
+	if r.secretKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.ElgamalSecretKey), 32); err != nil {
+		return errors.New("elgamal_secret_key: " + err.Error())
+	}
+	if r.ciphertext, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AvailableBalanceCiphertext), 64); err != nil {
+		return errors.New("available_balance_ciphertext: " + err.Error())
+	}
+
+	return nil
+}
+
+func (r *ProveConfidentialEmptyAccountRequest) ToElgamalSecretKey() []byte { return r.secretKey }
+func (r *ProveConfidentialEmptyAccountRequest) ToAvailableBalanceCiphertext() []byte {
+	return r.ciphertext
+}
+
+// ProveConfidentialEmptyAccountResponse carries the proof-data blob (the
+// proof_data of zk-elgamal-proof/context-state/verify/zero-ciphertext).
+// It is only valid while the account's available balance ciphertext is
+// the one it was built from.
+type ProveConfidentialEmptyAccountResponse struct {
+	ZeroCiphertextProofData string `json:"zero_ciphertext_proof_data"`
+	ElgamalPubkey           string `json:"elgamal_pubkey"`
+}
+
+func NewProveConfidentialEmptyAccountResponse(proof, publicKey []byte) *ProveConfidentialEmptyAccountResponse {
+	return &ProveConfidentialEmptyAccountResponse{
+		ZeroCiphertextProofData: codec.Base58.Encode(proof),
+		ElgamalPubkey:           codec.Base58.Encode(publicKey),
+	}
+}

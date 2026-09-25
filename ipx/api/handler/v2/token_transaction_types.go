@@ -14167,3 +14167,188 @@ func NewConfidentialWithdrawResponse(
 		Fee:                           newSystemPayer(feePayer, fee),
 	}
 }
+
+// ConfidentialEmptyAccountRequest resets Account's confidential available
+// balance to all-zero bytes so the token account can be closed. A
+// confidential account only closes once its pending and available balance
+// ciphertexts are literally all zero bytes; after a withdraw empties the
+// available balance it still holds a randomized encryption of zero, which
+// is not that. This takes a proof that the stored ciphertext encrypts
+// zero, then overwrites it. It fails if the available balance is already
+// empty, so it only applies to an account that once held a balance.
+//
+// This builds only the EmptyAccount instruction. The zero-ciphertext proof
+// must already be verified into a context-state account: build it with
+// tool/prove/confidential-empty-account, create the account with
+// zk-elgamal-proof/context-state/create/zero-ciphertext, and verify it
+// with context-state/verify/zero-ciphertext.
+type ConfidentialEmptyAccountRequest struct {
+	// Account must already carry the ConfidentialTransferAccount extension
+	// (see configure-account).
+	Account string `json:"account" example:""`
+
+	// Owner is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners).
+	Owner string `json:"owner" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// ZeroCiphertextContextStateAccount holds the verified ZeroCiphertext
+	// proof's context (see context-state/verify/zero-ciphertext).
+	ZeroCiphertextContextStateAccount string `json:"zero_ciphertext_context_state_account" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer owner. Non-empty, Owner
+	// itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account         *types.PublicKey
+	zeroContext     *types.PublicKey
+	owner           *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *ConfidentialEmptyAccountRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.owner, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Owner)); err != nil {
+		return errors.New("owner: " + err.Error())
+	}
+	if r.zeroContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.ZeroCiphertextContextStateAccount)); err != nil {
+		return errors.New("zero_ciphertext_context_state_account: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ConfidentialEmptyAccountRequest) AccountKey() *types.PublicKey     { return r.account }
+func (r *ConfidentialEmptyAccountRequest) OwnerKey() *types.PublicKey       { return r.owner }
+func (r *ConfidentialEmptyAccountRequest) ZeroContextKey() *types.PublicKey { return r.zeroContext }
+func (r *ConfidentialEmptyAccountRequest) FeePayerKey() *types.PublicKey    { return r.feePayer }
+func (r *ConfidentialEmptyAccountRequest) Blockhash() *types.Hash           { return r.rbh }
+func (r *ConfidentialEmptyAccountRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ConfidentialEmptyAccountRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ConfidentialEmptyAccountRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ConfidentialEmptyAccountResponse reports the built transaction.
+type ConfidentialEmptyAccountResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account string `json:"account"`
+	Owner   string `json:"owner"`
+	Program string `json:"program"`
+
+	ZeroCiphertextContextStateAccount string `json:"zero_ciphertext_context_state_account"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewConfidentialEmptyAccountResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, owner, tokenProgram, zeroContext, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ConfidentialEmptyAccountResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ConfidentialEmptyAccountResponse{
+		Transaction:                       codec.Base64.Encode(raw),
+		Message:                           codec.Base64.Encode(message),
+		RecentBlockhash:                   tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                       keys,
+		Signers:                           signers,
+		NonceAuthority:                    nonceAuth,
+		Account:                           account.Base58(),
+		Owner:                             owner.Base58(),
+		Program:                           tokenProgram.Base58(),
+		ZeroCiphertextContextStateAccount: zeroContext.Base58(),
+		Fee:                               newSystemPayer(feePayer, fee),
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"github.com/andantan/svmlab/api/handler"
 	"github.com/andantan/svmlab/core"
 	"github.com/andantan/svmlab/core/codec"
+	"github.com/andantan/svmlab/core/zkbridge"
 )
 
 type ToolHandler struct{}
@@ -304,4 +305,42 @@ func (h *ToolHandler) ProveConfidentialWithdraw(w http.ResponseWriter, r *http.R
 	}
 
 	handler.WriteOK(w, NewProveConfidentialWithdrawResponse(proofs, publicKey))
+}
+
+// ProveConfidentialEmptyAccount godoc
+// @Summary      Build the zero-ciphertext proof one confidential EmptyAccount needs
+// @Description  Proves that the account's available balance ciphertext encrypts zero under its ElGamal key. zero_ciphertext_proof_data goes to zk-elgamal-proof/context-state/verify/zero-ciphertext. The ciphertext must already encrypt zero -- withdraw the whole balance first -- or the proof will not verify against the deployed program. This does not check that itself, since a confidential balance cannot be read without its AE key.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ProveConfidentialEmptyAccountRequest  true  "EmptyAccount inputs"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ProveConfidentialEmptyAccountResponse
+// @Failure      400   {object}  map[string]string
+// @Router       /svm/tool/prove/confidential-empty-account [post]
+func (h *ToolHandler) ProveConfidentialEmptyAccount(w http.ResponseWriter, r *http.Request) {
+	req := new(ProveConfidentialEmptyAccountRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	publicKey, err := core.DeriveElGamalPublicKey(req.ToElgamalSecretKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("elgamal_secret_key: %s", err))
+		return
+	}
+
+	proof, err := zkbridge.ProveZeroCiphertext(req.ToElgamalSecretKey(), publicKey, req.ToAvailableBalanceCiphertext())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, NewProveConfidentialEmptyAccountResponse(proof, publicKey))
 }

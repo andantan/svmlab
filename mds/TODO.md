@@ -227,9 +227,7 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     `disableConfidentialTransferConfidentialCredits`). 두 enable은 시그니처를
     직접 보진 않았고 둘 다 0이던 계좌가 최종적으로 1,1로 돌아온 걸 온체인에서
     읽어 확인. 꺼진 상태에서 실제 전송이 거부되는지는 시도 안 함
-  - 남은 ConfidentialTransfer: `EmptyAccount`(4, `VerifyZeroCiphertext`) —
-    wasm에 `proof_zero_ciphertext` export 있음, 브릿지 Prove 함수만 새로
-    필요. `TransferWithFee`(13, 민트에
+  - 남은 ConfidentialTransfer: `TransferWithFee`(13, 민트에
     `ConfidentialTransferFeeConfig` 필요, proof 5종), `ConfigureAccountWithRegistry`
     (14, ElGamal registry 프로그램 필요)
 
@@ -263,6 +261,38 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     계정 존재·owner·space 사전확인. 서버는 proof를 만들지 않음
   - 이제 기밀 잔액이 나오는 길이 생김 — `EmptyAccount`(available을 전부
     withdraw해 0으로 만든 뒤)로 이어갈 수 있음
+
+  **`EmptyAccount`(opcode 27 sub 4) devnet 완주 — 기밀 available을 0 바이트로
+  초기화.** 트랜잭션 `31pnDhA8…`, `err: None`, 1677 CU, RPC parsed
+  `emptyConfidentialTransferAccount`(`proofInstructionOffset: 0`, 컨텍스트
+  계정 참조). 실행 후 계정 데이터를 읽어 `available_balance`가 전부 0
+  바이트, `pending_balance_lo/hi`도 0임을 확인
+  - **왜 필요한가**: 확장이 붙은 토큰 계정은 `closable()`(pending lo/hi와
+    available이 전부 0 **바이트**)이어야 닫힘. `Withdraw`로 잔액을 다
+    꺼내도 available은 "값이 0인 랜덤 암호문"이라 0 바이트가 아님. 이
+    인스트럭션이 그걸 증명(`VerifyZeroCiphertext`)받고 `EncryptedBalance::
+    zeroed()`로 덮어씀. 갓 configure한 계정은 이미 비어 있어 불필요하고,
+    available이 이미 비어 있으면 오히려 실패
+  - upstream `process_empty_account` 원문 확인: 컨텍스트의 pubkey가
+    계정 `elgamal_pubkey`와, 컨텍스트의 ciphertext가 `available_balance`와
+    같아야 함(각각 `ElGamalPubkeyMismatch`/`BalanceMismatch`). 데이터는
+    `proof_instruction_offset`(i8) 하나, 계좌 `[account(w), zero ctx(r),
+    owner(+멀티시그)]`, 컨텍스트 계정은 zero-ciphertext(129바이트)
+  - `zkbridge.ProveZeroCiphertext`(wasm `proof_zero_ciphertext`, 192바이트)
+    신규. **신규 `POST /svm/tool/prove/confidential-empty-account`**
+    (`elgamal_secret_key`+`available_balance_ciphertext` → proof). 이
+    엔드포인트는 ciphertext가 실제로 0인지 확인하지 않음(AE 키 없이는
+    못 읽음) — 0이 아니면 verify 단계에서 거절됨. **신규 `POST
+    .../confidential-transfer-account/empty-account`**: `account`/`owner`/
+    `zero_ciphertext_context_state_account`, 컨텍스트 계정 존재·owner·space
+    사전확인
+  - 순서(devnet 확인): 남은 기밀 잔액 15를 `Withdraw`로 전부 꺼내 공개
+    잔액 60·decryptable 0 → **withdraw 뒤의 새 available**로 proof 생성
+    (이전 값으로 만들면 거절됨) → `create/verify zero-ciphertext` →
+    `empty-account`. 컨텍스트 계정은 이후 `close`로 회수해 사라진 것 확인
+  - **미확인**: 비워진 토큰 계정을 실제로 `close-account`로 닫아보진 않음
+    (공개 잔액 60이 남아 있어 먼저 비워야 함). "확장이 붙은 채로 닫히는지"는
+    아직 미검증
 
   **신규 최상위 그룹 `/svm/v2/transaction/zk-elgamal-proof/context-state/`**
   (ZkElgamalProof는 Token-2022와 별개 프로그램이라 compute-budget처럼 자기
@@ -468,9 +498,9 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     (InitializeGroup, UpdateGroupMaxSize, UpdateGroupAuthority, InitializeMember)
   - Metaplex Token Metadata — 완전히 다른 프로그램, Borsh 직렬화 새로 배워야 함,
     근데 지갑/익스플로러 실질 표준이라 결국 필요
-  - Confidential Transfer(15개 중 12개 완료: InitializeMint/UpdateMint/
-    ConfigureAccount/ApproveAccount/Deposit/ApplyPendingBalance/Transfer/
-    Withdraw/크레딧 토글 4개. 남은 건 EmptyAccount·TransferWithFee·
+  - Confidential Transfer(15개 중 13개 완료: InitializeMint/UpdateMint/
+    ConfigureAccount/ApproveAccount/EmptyAccount/Deposit/ApplyPendingBalance/
+    Transfer/Withdraw/크레딧 토글 4개. 남은 건 TransferWithFee·
     ConfigureAccountWithRegistry) / Confidential Transfer
     Fee / Confidential Mint Burn — ElGamal 암호화가 들어가는 가장 무거운
     서브시스템 (각각 15/6/6개 instruction)

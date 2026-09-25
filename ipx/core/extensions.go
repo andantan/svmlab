@@ -1495,3 +1495,42 @@ func (t *token) ConfidentialWithdraw(account, mint, equalityContext, rangeContex
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
 }
+
+// EmptyAccount builds a ConfidentialTransfer extension's EmptyAccount
+// instruction -- sub-instruction 4, which resets account's confidential
+// available balance to all-zero bytes so the token account can be closed.
+// A confidential account only closes once its pending and available
+// balance ciphertexts are literally all zero bytes; after a Withdraw
+// empties the available balance it still holds a randomized encryption
+// of zero, which is not that. This instruction takes a proof that the
+// stored ciphertext encrypts zero, then overwrites it.
+//
+// The proof is a VerifyZeroCiphertext verified beforehand into a
+// context-state account, named here rather than carried inline. Confirmed
+// against the interface crate's own doc comment and
+// EmptyAccountInstructionData: data is just the proof offset (0 signals a
+// context state account), and accounts are [token_account(writable), zero
+// ciphertext context state(readonly), owner(+multisig)]. It fails if the
+// available balance is already empty.
+func (t *token) EmptyAccount(account, zeroCiphertextContext, owner *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token empty account: account is required")
+	}
+	if zeroCiphertextContext.IsNil() {
+		return nil, fmt.Errorf("token empty account: zero ciphertext context state account is required")
+	}
+	if err := validateAuthority("token empty account", owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionEmptyAccount)
+	data = codec.Binary.AppendU8(data, 0) // proof_instruction_offset: 0 = context state account
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(zeroCiphertextContext),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}

@@ -152,3 +152,31 @@ func proveBatchedRange(export string, totalBits, dataLen int, commitments [][]by
 	}
 	return out, nil
 }
+
+// ZeroCiphertextProofDataLen is context 96 (pubkey 32 + ciphertext 64) +
+// proof 96 = 192, confirmed against zk-sdk-pod's
+// ZERO_CIPHERTEXT_PROOF_LEN and the interface crate's
+// ZeroCiphertextProofContext.
+const ZeroCiphertextProofDataLen = 192
+
+// ProveZeroCiphertext proves that ciphertext encrypts the value zero under
+// the keypair's public key. Returns the full ProofData bytes (context ||
+// proof), ready to embed in a VerifyZeroCiphertext instruction.
+func ProveZeroCiphertext(secretKey, publicKey, ciphertext []byte) ([]byte, error) {
+	kp, err := marshalElGamalKeypair(secretKey, publicKey)
+	if err != nil {
+		return nil, err
+	}
+	if len(ciphertext) != ElGamalCiphertextLen {
+		return nil, fmt.Errorf("zkbridge: prove zero ciphertext: ciphertext is %d bytes, want %d", len(ciphertext), ElGamalCiphertextLen)
+	}
+
+	out, err := invoke("proof_zero_ciphertext", Bytes(kp), Bytes(ciphertext))
+	if err != nil {
+		return nil, err
+	}
+	if len(out) != ZeroCiphertextProofDataLen {
+		return nil, fmt.Errorf("zkbridge: proof_zero_ciphertext returned %d bytes, want %d", len(out), ZeroCiphertextProofDataLen)
+	}
+	return out, nil
+}

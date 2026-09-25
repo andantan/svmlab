@@ -2418,6 +2418,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/tool/prove/confidential-empty-account": {
+            "post": {
+                "description": "Proves that the account's available balance ciphertext encrypts zero under its ElGamal key. zero_ciphertext_proof_data goes to zk-elgamal-proof/context-state/verify/zero-ciphertext. The ciphertext must already encrypt zero -- withdraw the whole balance first -- or the proof will not verify against the deployed program. This does not check that itself, since a confidential balance cannot be read without its AE key.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "tool"
+                ],
+                "summary": "Build the zero-ciphertext proof one confidential EmptyAccount needs",
+                "parameters": [
+                    {
+                        "description": "EmptyAccount inputs",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialEmptyAccountRequest"
+                        }
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain name, e.g. solana",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Chain network, e.g. testnet",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/misc.ProveConfidentialEmptyAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/tool/prove/confidential-transfer": {
             "post": {
                 "description": "Builds the equality, ciphertext-validity, and range proofs a single confidential transfer requires, in one call, because they are built from the same fresh randomness and only agree with each other if drawn together. Each proof_data blob goes to the matching zk-elgamal-proof/context-state/verify endpoint (equality_proof_data to verify/ciphertext-commitment-equality, validity_proof_data to verify/batched-grouped-ciphertext-3-handles-validity, range_proof_data to verify/batched-range-proof-u128), and auditor_ciphertext_lo/hi and new_source_decryptable_available_balance are what the transfer instruction itself carries. The response cannot be rebuilt: a second call draws new randomness and produces proofs that no longer match any context-state account already verified from the first. The source balance must not change between building these proofs and the transfer landing, or the transfer's own checks against the stored balance fail.",
@@ -5140,6 +5197,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.DisableNonConfidentialCreditsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-account/empty-account": {
+            "post": {
+                "description": "Resets account's confidential available balance to all-zero bytes, which a confidential token account needs before it can be closed: after a withdraw empties the balance it still holds a randomized encryption of zero, not zero bytes. Takes a proof that the stored ciphertext encrypts zero, then overwrites it. Fails if the available balance is already empty, so it only applies to an account that once held a balance. Builds only the EmptyAccount instruction: the zero-ciphertext proof must already be verified into a context-state account, whose address is named here -- build the proof with tool/prove/confidential-empty-account, create the account with zk-elgamal-proof/context-state/create/zero-ciphertext, and verify it with context-state/verify/zero-ciphertext. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Empty a confidential account's available balance so it can be closed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Account, owner, zero-ciphertext context-state account, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialEmptyAccountRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialEmptyAccountResponse"
                         }
                     },
                     "400": {
@@ -9858,6 +9972,32 @@ const docTemplate = `{
                 }
             }
         },
+        "misc.ProveConfidentialEmptyAccountRequest": {
+            "type": "object",
+            "properties": {
+                "available_balance_ciphertext": {
+                    "description": "AvailableBalanceCiphertext is the account's current available\nbalance, base58-encoded raw 64-byte ElGamal ciphertext, read off\nchain. It must already encrypt zero (see\nextensions/confidential-transfer-account/withdraw) or the proof\nwill not verify.",
+                    "type": "string",
+                    "example": ""
+                },
+                "elgamal_secret_key": {
+                    "description": "ElgamalSecretKey is the account's own ElGamal secret key,\nbase58-encoded. The public key is derived from it here.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "misc.ProveConfidentialEmptyAccountResponse": {
+            "type": "object",
+            "properties": {
+                "elgamal_pubkey": {
+                    "type": "string"
+                },
+                "zero_ciphertext_proof_data": {
+                    "type": "string"
+                }
+            }
+        },
         "misc.ProveConfidentialTransferRequest": {
             "type": "object",
             "properties": {
@@ -12120,6 +12260,97 @@ const docTemplate = `{
                     }
                 },
                 "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ConfidentialEmptyAccountRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "description": "Account must already carry the ConfidentialTransferAccount extension\n(see configure-account).",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer owner. Non-empty, Owner\nitself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "owner": {
+                    "description": "Owner is Account's owner, or its multisig for a multisig-owned\naccount (see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token account can never hold\nthis extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "zero_ciphertext_context_state_account": {
+                    "description": "ZeroCiphertextContextStateAccount holds the verified ZeroCiphertext\nproof's context (see context-state/verify/zero-ciphertext).",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ConfidentialEmptyAccountResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "owner": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "zero_ciphertext_context_state_account": {
                     "type": "string"
                 }
             }

@@ -937,3 +937,238 @@ type ProveConfidentialWithdrawWithheldFromAccountsResponse struct {
 	WithdrawElgamalPubkey                 string `json:"withdraw_elgamal_pubkey"`
 	DestinationElgamalPubkey              string `json:"destination_elgamal_pubkey"`
 }
+
+// ProveConfidentialMintRequest names what the three proofs one confidential
+// Mint needs are built from. The mint and the destination account are named
+// rather than their ciphertexts and keys being passed in: the mint's current
+// confidential supply, its decryptable supply, the supply and auditor keys,
+// and the destination's ElGamal key are read from chain, since the deployed
+// program compares the proofs against exactly those values.
+type ProveConfidentialMintRequest struct {
+	// Mint must carry ConfidentialMintBurn and ConfidentialTransferMint.
+	Mint string `json:"mint" example:""`
+
+	// Destination is the token account credited, which must hold Mint and
+	// carry the ConfidentialTransferAccount extension.
+	Destination string `json:"destination" example:""`
+
+	// SupplyElgamalSecretKey is the secret key of the mint's supply ElGamal
+	// public key, base58-encoded raw 32 bytes.
+	SupplyElgamalSecretKey string `json:"supply_elgamal_secret_key" example:""`
+
+	// SupplyAeKey decrypts the mint's decryptable supply and encrypts the
+	// new one, base58-encoded raw 16 bytes.
+	SupplyAeKey string `json:"supply_ae_key" example:""`
+
+	// Amount is the raw base-unit count to mint. It cannot exceed 2^48 - 1.
+	Amount string `json:"amount" example:"1000"`
+
+	mint        *types.PublicKey
+	destination *types.PublicKey
+	secretKey   []byte
+	aeKey       []byte
+	amount      uint64
+}
+
+func (r *ProveConfidentialMintRequest) ValidateRequest() error {
+	var err error
+
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.destination, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Destination)); err != nil {
+		return errors.New("destination: " + err.Error())
+	}
+	if r.secretKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.SupplyElgamalSecretKey), 32); err != nil {
+		return errors.New("supply_elgamal_secret_key: " + err.Error())
+	}
+	if r.aeKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.SupplyAeKey), 16); err != nil {
+		return errors.New("supply_ae_key: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: " + err.Error())
+	}
+	if r.amount == 0 {
+		return errors.New("amount must be greater than zero")
+	}
+
+	return nil
+}
+
+func (r *ProveConfidentialMintRequest) MintKey() *types.PublicKey        { return r.mint }
+func (r *ProveConfidentialMintRequest) DestinationKey() *types.PublicKey { return r.destination }
+func (r *ProveConfidentialMintRequest) ToSupplySecretKey() []byte        { return r.secretKey }
+func (r *ProveConfidentialMintRequest) ToSupplyAeKey() []byte            { return r.aeKey }
+func (r *ProveConfidentialMintRequest) ToAmount() uint64                 { return r.amount }
+
+// ProveConfidentialMintResponse carries the three proof-data blobs (each the
+// proof_data of the matching zk-elgamal-proof/context-state/verify endpoint)
+// and the values the Mint instruction itself carries. It cannot be rebuilt: a
+// second call draws new randomness and produces proofs that no longer match
+// any context-state account already verified from the first, and it goes
+// stale if the mint's supply changes before the mint lands.
+type ProveConfidentialMintResponse struct {
+	EqualityProofData string `json:"equality_proof_data"`
+	ValidityProofData string `json:"validity_proof_data"`
+	RangeProofData    string `json:"range_proof_data"`
+
+	AuditorCiphertextLo  string `json:"auditor_ciphertext_lo"`
+	AuditorCiphertextHi  string `json:"auditor_ciphertext_hi"`
+	NewDecryptableSupply string `json:"new_decryptable_supply"`
+
+	SupplyElgamalPubkey      string `json:"supply_elgamal_pubkey"`
+	DestinationElgamalPubkey string `json:"destination_elgamal_pubkey"`
+	AuditorElgamalPubkey     string `json:"auditor_elgamal_pubkey,omitempty"`
+	CurrentSupply            string `json:"current_supply"`
+	NewSupply                string `json:"new_supply"`
+}
+
+// ProveConfidentialBurnRequest names what the three proofs one confidential
+// Burn needs are built from. The mint and the source account are named rather
+// than their contents passed in: the source's available balance ciphertext,
+// its decryptable balance and ElGamal key, and the mint's supply and auditor
+// keys are read from chain, since the deployed program compares the proofs
+// against exactly those values.
+type ProveConfidentialBurnRequest struct {
+	// Mint must carry ConfidentialMintBurn and ConfidentialTransferMint.
+	Mint string `json:"mint" example:""`
+
+	// Source is the token account burned from, which must hold Mint and carry
+	// the ConfidentialTransferAccount extension.
+	Source string `json:"source" example:""`
+
+	// SourceElgamalSecretKey is the secret key of the source account's own
+	// ElGamal public key, base58-encoded raw 32 bytes.
+	SourceElgamalSecretKey string `json:"source_elgamal_secret_key" example:""`
+
+	// AeKey decrypts the source's decryptable available balance and encrypts
+	// the new one, base58-encoded raw 16 bytes.
+	AeKey string `json:"ae_key" example:""`
+
+	// Amount is the raw base-unit count to burn. It cannot exceed 2^48 - 1 nor
+	// the source's available balance.
+	Amount string `json:"amount" example:"400"`
+
+	mint      *types.PublicKey
+	source    *types.PublicKey
+	secretKey []byte
+	aeKey     []byte
+	amount    uint64
+}
+
+func (r *ProveConfidentialBurnRequest) ValidateRequest() error {
+	var err error
+
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.source, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Source)); err != nil {
+		return errors.New("source: " + err.Error())
+	}
+	if r.secretKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.SourceElgamalSecretKey), 32); err != nil {
+		return errors.New("source_elgamal_secret_key: " + err.Error())
+	}
+	if r.aeKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AeKey), 16); err != nil {
+		return errors.New("ae_key: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: " + err.Error())
+	}
+	if r.amount == 0 {
+		return errors.New("amount must be greater than zero")
+	}
+
+	return nil
+}
+
+func (r *ProveConfidentialBurnRequest) MintKey() *types.PublicKey   { return r.mint }
+func (r *ProveConfidentialBurnRequest) SourceKey() *types.PublicKey { return r.source }
+func (r *ProveConfidentialBurnRequest) ToSourceSecretKey() []byte   { return r.secretKey }
+func (r *ProveConfidentialBurnRequest) ToAeKey() []byte             { return r.aeKey }
+func (r *ProveConfidentialBurnRequest) ToAmount() uint64            { return r.amount }
+
+// ProveConfidentialBurnResponse carries the three proof-data blobs (each the
+// proof_data of the matching zk-elgamal-proof/context-state/verify endpoint)
+// and the values the Burn instruction itself carries. It cannot be rebuilt: a
+// second call draws new randomness and no longer matches any context-state
+// account already verified from the first, and it goes stale if the source's
+// available balance changes before the burn lands.
+type ProveConfidentialBurnResponse struct {
+	EqualityProofData string `json:"equality_proof_data"`
+	ValidityProofData string `json:"validity_proof_data"`
+	RangeProofData    string `json:"range_proof_data"`
+
+	AuditorCiphertextLo            string `json:"auditor_ciphertext_lo"`
+	AuditorCiphertextHi            string `json:"auditor_ciphertext_hi"`
+	NewDecryptableAvailableBalance string `json:"new_decryptable_available_balance"`
+
+	SourceElgamalPubkey  string `json:"source_elgamal_pubkey"`
+	SupplyElgamalPubkey  string `json:"supply_elgamal_pubkey"`
+	AuditorElgamalPubkey string `json:"auditor_elgamal_pubkey,omitempty"`
+}
+
+// ProveConfidentialRotateSupplyElGamalPubkeyRequest names what the proof one
+// RotateSupplyElGamalPubkey needs is built from. The mint is named rather
+// than its supply ciphertext and key being passed in: they are read from
+// chain, since the deployed program compares the proof against exactly those.
+type ProveConfidentialRotateSupplyElGamalPubkeyRequest struct {
+	// Mint must carry the ConfidentialMintBurn extension.
+	Mint string `json:"mint" example:""`
+
+	// SupplyElgamalSecretKey is the secret key of the mint's current supply
+	// ElGamal public key, base58-encoded raw 32 bytes.
+	SupplyElgamalSecretKey string `json:"supply_elgamal_secret_key" example:""`
+
+	// NewSupplyElgamalPubkey is the key the supply moves to, base58-encoded
+	// raw 32 bytes (see generate/elgamal-keypair).
+	NewSupplyElgamalPubkey string `json:"new_supply_elgamal_pubkey" example:""`
+
+	mint      *types.PublicKey
+	secretKey []byte
+	newPubkey []byte
+}
+
+func (r *ProveConfidentialRotateSupplyElGamalPubkeyRequest) ValidateRequest() error {
+	var err error
+
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.secretKey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.SupplyElgamalSecretKey), 32); err != nil {
+		return errors.New("supply_elgamal_secret_key: " + err.Error())
+	}
+	if r.newPubkey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.NewSupplyElgamalPubkey), 32); err != nil {
+		return errors.New("new_supply_elgamal_pubkey: " + err.Error())
+	}
+
+	return nil
+}
+
+func (r *ProveConfidentialRotateSupplyElGamalPubkeyRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *ProveConfidentialRotateSupplyElGamalPubkeyRequest) ToSupplySecretKey() []byte {
+	return r.secretKey
+}
+func (r *ProveConfidentialRotateSupplyElGamalPubkeyRequest) ToNewSupplyPubkey() []byte {
+	return r.newPubkey
+}
+
+// ProveConfidentialRotateSupplyElGamalPubkeyResponse carries the proof-data
+// blob (the proof_data of
+// zk-elgamal-proof/context-state/verify/ciphertext-ciphertext-equality). It
+// goes stale if the mint's supply changes before the rotation lands.
+type ProveConfidentialRotateSupplyElGamalPubkeyResponse struct {
+	CiphertextCiphertextEqualityProofData string `json:"ciphertext_ciphertext_equality_proof_data"`
+	CurrentSupply                         string `json:"current_supply"`
+	CurrentSupplyElgamalPubkey            string `json:"current_supply_elgamal_pubkey"`
+	NewSupplyElgamalPubkey                string `json:"new_supply_elgamal_pubkey"`
+}

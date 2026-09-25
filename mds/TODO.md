@@ -227,8 +227,8 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     `disableConfidentialTransferConfidentialCredits`). 두 enable은 시그니처를
     직접 보진 않았고 둘 다 0이던 계좌가 최종적으로 1,1로 돌아온 걸 온체인에서
     읽어 확인. 꺼진 상태에서 실제 전송이 거부되는지는 시도 안 함
-  - 남은 ConfidentialTransfer: `ConfigureAccountWithRegistry`(14, ElGamal registry
-    프로그램 필요) — TransferWithFee(13)는 아래에서 완료
+  - 남은 ConfidentialTransfer 없음 — TransferWithFee(13)/ConfigureAccountWithRegistry(14)는
+    아래에서 완료
 
   **`Withdraw`(opcode 27 sub 6) devnet 완주 — 기밀 available → 공개 잔액.**
   트랜잭션 `2ikz2Je…`, `err: None`, 6221 CU, RPC parsed
@@ -370,11 +370,78 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     민트 withheld 0. 이어 1000 전송으로 수신 계정 withheld 50 → from-accounts로
     송신 계정 7100→7150, 수신 withheld 0
   - 목적지가 source와 같은 계정이면 borrow 충돌 가능성(미시도) — 다른 계정 사용
-  - 남은 것: `ConfigureAccountWithRegistry`(14), inline verify의
-    `compute_unit_limit`, 나머지 proof 종류의 prove tool, 이번 실행의 context/
-    record 계정 close(6개+record 1개), authority 미기록으로 회수 불가한 계정
-    (`FGEDoT6w…` 등 verify 안 한 것). SIMD-0296(4096B tx)/0385(v1 포맷)는 조사만,
+  - 남은 것: inline verify의 `compute_unit_limit`, 나머지 proof 종류의 prove
+    tool. 이번 실행의 context 7개/record 1개는 close 완료(`getAccountInfo` None).
+    authority 미기록으로 회수 불가한 계정(`FvVMM51V…`, `6QEFYcGY…`, `FGEDoT6w…`
+    — verify 안 한 것)은 그대로. SIMD-0296(4096B tx)/0385(v1 포맷)는 조사만,
     활성화 여부 미확인, 보류
+
+  **`ConfigureAccountWithRegistry`(sub 14) + ElGamal registry 그룹 — devnet 완주.
+  ConfidentialTransfer 15개 전부 완료.**
+  - registry 프로그램 `regVYJW7tcT8zipN5YiBvHsvR5jXW1uLFxaHSbugABg`(BPF upgradeable,
+    devnet 업그레이드 권한 `7VaWK6qq…`, **메인넷엔 미배포**). 지갑당 PDA
+    `["elgamal-registry", wallet]` 하나, 64B = owner(32)+elgamal_pubkey(32).
+    소스: `confidential/elgamal-registry{,-interface}`
+  - **신규 최상위 그룹 `/svm/v2/transaction/elgamal-registry/{create,update}`** —
+    pubkey-validity context 계정(65B)을 받음. create는 wallet 서명, PDA는 서버가 도출
+  - **프로그램은 PDA에 allocate+assign만 하고 lamports를 채우지 않음** —
+    잔액이 rent-exempt 미만이면 `AccountNotRentExempt`. 처음엔 이걸 몰라 devnet
+    에서 실패, `create`에 `rent_payer`를 추가해 부족분 System Transfer를 같은
+    트랜잭션 앞에 넣음(이미 미리 채운 주소면 그 잔액을 반영, 다른 용도 계정이면 거절)
+  - **close/delete 명령 없음**(`RegistryInstruction`은 0/1뿐, 소유 프로그램만
+    lamports를 뺄 수 있음) → registry rent(~0.0013 SOL)는 회수 불가. 테스트는 새
+    지갑에 만들 것(지갑당 하나라 같은 지갑으로 재생성 불가)
+  - `confidential-transfer-account/configure-account-with-registry` (데이터 없음,
+    `[27,14]`): accounts `[token(w), mint, registry, (rent_payer(w,signer), system)]`.
+    **owner 서명 불필요**(registry owner == 토큰 계정 owner만 확인) → 남이 대신
+    설정 가능. `rent_payer`를 주면 프로그램이 직접 realloc(수수료 민트면
+    ConfidentialTransferFeeAmount 자리까지) → 별도 `reallocate` 불필요.
+    (필드명은 처음 `payer`였다가 다른 API와 맞춰 `rent_payer`로 통일)
+  - 초기값: decryptable all-zero, 최대 pending counter 65536, allow_* 1/1,
+    approved는 민트 auto-approve를 따름(이 민트는 0 → approve-account 필요)
+  - devnet 검증(새 지갑): registry create → ATA(182B) → configure-with-registry 한
+    번에 **549B**(CT 295 + fee amount 64 확장 모두 붙음), 계정 elgamal_pubkey ==
+    registry 값. 이어 approve → mint-to 100 → deposit 100 → apply-pending-balance:
+    AE 복호화 100, registry 등록 ElGamal 키로 available ciphertext 복호화도 100,
+    pending 0. **all-zero decryptable이 첫 apply에서 정상화됨을 확인**
+  - `update` 전송 devnet 확인: 새 ElGamal 키의 pubkey-validity context로 registry의
+    키가 바뀌고 owner는 유지. **이미 configure된 계정의 키는 예전 그대로** — update는
+    이후 configure에만 영향
+  - 서명 기반 AE 키 도출 확인: `derive/ae-key-seed-message` → 계정 owner 키로 메시지
+    서명(서버 `/svm/sign`은 설정에 없는 키로 메시지를 못 서명해 로컬에서 ed25519로
+    서명) → `derive/ae-key`로 받은 키로 mint-to/deposit/apply(총 150) → AE 복호화
+    150, ElGamal 복호화도 150
+
+  **ConfidentialMintBurn(opcode 42) 6개 전부 — devnet 완주 (민트 `CyFziHgy…`).**
+  확장 상태 196B = confidential_supply(64)+decryptable_supply(36)+
+  supply_elgamal_pubkey(32)+pending_burn(64), TLV 타입 24. 확장 붙은 민트는
+  `create-mint`(고정 82B)가 아니라 `mint/data-size`(CT mint+MintBurn=435B) →
+  `system/create-account`(0B) → `allocate` → `assign`(Token-2022) → 확장별 initialize →
+  `initialize-mint2` 순서(단계 사이 선점 위험은 기존과 동일). 새 proof 종류 없음 —
+  transfer의 prover(equality·validity-3·range u128)를 재사용
+  - `confidential-mint-burn/initialize`(0): `supply_elgamal_pubkey`+`supply_ae_key`
+    (서버가 0을 AE 암호화해 decryptable_supply로), all-zero 키는 "없음"이라 거절
+  - `mint`(3) + `tool/prove/confidential-mint`: 3-handle 순서 [destination, supply,
+    auditor]. 새 공급량 ciphertext = 현재 공급량 + supply handle의 lo/hi 합(프로그램이
+    같은 식으로 계산해 바이트 비교). 목적지 pending과 공급량이 동시에 늘어남.
+    authority = **민트 authority**. 1000 발행 → 목적지 pending 1000, 공급량 1000
+  - `burn`(4) + `tool/prove/confidential-burn`: [source, supply, auditor] —
+    `BuildTransferProofs`에 목적지 자리를 supply 키로 넣은 것. authority = **토큰
+    계정 owner**(민트 authority 아님). 400 소각 → available 600, 민트 pending_burn 400,
+    공급량은 그대로 1000
+  - `apply-pending-burn`(5): 공급량 -= pending_burn, pending_burn = 0(→ 600).
+    decryptable_supply는 건드리지 않음
+  - `update-decryptable-supply`(2): `supply_ae_key`+`new_supply`를 서버가 AE 암호화.
+    프로그램이 공급량과 대조 못 하므로 호출자가 실제 값을 넣어야 함(apply 직후
+    1000 → 600으로 맞춤)
+  - `rotate-supply-elgamal-pubkey`(1) + `tool/prove/confidential-rotate-supply-
+    elgamal-pubkey`: ciphertext-ciphertext-equality(수수료 인출과 같은 종류).
+    pending_burn 0 필요, 공급량 32비트 이하(복호화 한계). 회전 후 새 키로 복호화 600,
+    옛 키로는 `decryption failed`, 새 키로 만든 mint 100이 통과(공급량 700)
+  - 미확인/미착수: **PermissionedBurn의 ConfidentialBurn 변형**(별개 확장, 승인자 계정이
+    하나 더 들어가고 PermissionedBurn 민트는 일반 Burn을 거절 — 코드에 타입/명령 번호만
+    있고 빌더 없음), 멀티시그 authority 경로(모든 빌더가 받지만 devnet 미실행), 확장이
+    붙은 민트/계정의 close, 동결/CpiGuard/일시정지 등 조합
 
   ApplyPendingBalance 등)는 여전히 진행 중 — 각각 필요한 proof 종류가 다름
   (range proof, ciphertext equality proof 등), 하나씩 순서대로 계속.
@@ -539,9 +606,8 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     (InitializeGroup, UpdateGroupMaxSize, UpdateGroupAuthority, InitializeMember)
   - Metaplex Token Metadata — 완전히 다른 프로그램, Borsh 직렬화 새로 배워야 함,
     근데 지갑/익스플로러 실질 표준이라 결국 필요
-  - Confidential Transfer(15개 중 14개 완료, 남은 건
-    ConfigureAccountWithRegistry) / Confidential Transfer Fee(6개 전부 완료) / Confidential Mint Burn — ElGamal 암호화가 들어가는 가장 무거운
-    서브시스템 (MintBurn 6개 instruction)
+  - Confidential Transfer(15개)/Transfer Fee(6개)/Mint Burn(6개) 전부 완료 — 남은 건
+    PermissionedBurn의 ConfidentialBurn, 멀티시그·close 검증 정도
 
 - **작은 후속 작업 (나중에)**
   - `getRecentPrioritizationFees` RPC 래퍼 — `svm/cluster/...`에 읽기 전용으로 추가.

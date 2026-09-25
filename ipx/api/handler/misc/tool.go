@@ -711,3 +711,325 @@ func (h *ToolHandler) ProveConfidentialWithdrawWithheldFromAccounts(w http.Respo
 		DestinationElgamalPubkey:              codec.Base58.Encode(destPublicKey),
 	})
 }
+
+// ProveConfidentialMint godoc
+// @Summary      Build the three proofs one confidential Mint needs
+// @Description  Builds the commitment-equality, batched grouped 3-handle validity and batched u128 range proofs a single confidential mint requires, in one call, because they are built from the same fresh randomness and only agree with each other if drawn together. The mint and the destination account are named rather than their contents passed in: the mint's current confidential supply and decryptable supply, the supply and auditor ElGamal keys, and the destination's ElGamal key are read from chain, since the deployed program compares the proofs against exactly those. supply_elgamal_secret_key has to match the mint's supply key and supply_ae_key has to decrypt its decryptable supply, and both are checked. Each *_proof_data blob goes to the matching zk-elgamal-proof/context-state/verify endpoint, and auditor_ciphertext_lo/hi and new_decryptable_supply are what the mint instruction itself carries. The response cannot be rebuilt: a second call draws new randomness and produces proofs that no longer match any context-state account already verified from the first. The mint's supply must not change between building these proofs and the mint landing.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ProveConfidentialMintRequest  true  "Mint, destination, supply keys, amount"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ProveConfidentialMintResponse
+// @Failure      400   {object}  map[string]string
+// @Failure      502   {object}  map[string]string
+// @Router       /svm/tool/prove/confidential-mint [post]
+func (h *ToolHandler) ProveConfidentialMint(w http.ResponseWriter, r *http.Request) {
+	req := new(ProveConfidentialMintRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), []*types.PublicKey{req.MintKey(), req.DestinationKey()}, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+	mintInfo := accounts[req.MintKey().Base58()]
+	if !mintInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", req.MintKey()))
+		return
+	}
+	destInfo := accounts[req.DestinationKey().Base58()]
+	if !destInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s does not exist", req.DestinationKey()))
+		return
+	}
+	if mintInfo.Owner != core.Token2022ProgramID.Base58() || destInfo.Owner != core.Token2022ProgramID.Base58() {
+		handler.WriteError(w, http.StatusBadRequest, "mint and destination must both be owned by Token-2022")
+		return
+	}
+	mintData, err := mintInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode mint: %s", err))
+		return
+	}
+	destData, err := destInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode destination: %s", err))
+		return
+	}
+	if len(destData) < 32 || !bytes.Equal(destData[:32], req.MintKey().Bytes()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s does not hold mint %s", req.DestinationKey(), req.MintKey()))
+		return
+	}
+
+	state, err := core.DecodeConfidentialMintBurn(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+	auditorPublicKey, err := core.ConfidentialTransferMintAuditor(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+	destPublicKey, _, err := core.ConfidentialTransferAccountKeys(destData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("destination: %s: %s", req.DestinationKey(), err))
+		return
+	}
+
+	derived, err := core.DeriveElGamalPublicKey(req.ToSupplySecretKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("supply_elgamal_secret_key: %s", err))
+		return
+	}
+	if !bytes.Equal(derived, state.SupplyElGamalPubkey) {
+		handler.WriteError(w, http.StatusBadRequest, "supply_elgamal_secret_key does not match the mint's supply ElGamal public key")
+		return
+	}
+
+	currentSupply, err := core.DecryptAeAmount(req.ToSupplyAeKey(), state.DecryptableSupply)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("supply_ae_key does not decrypt the mint's decryptable supply: %s", err))
+		return
+	}
+
+	proofs, err := core.BuildMintProofs(
+		req.ToSupplySecretKey(), state.SupplyElGamalPubkey, destPublicKey, auditorPublicKey,
+		state.ConfidentialSupply, state.DecryptableSupply, req.ToSupplyAeKey(),
+		req.ToAmount(),
+	)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	res := &ProveConfidentialMintResponse{
+		EqualityProofData:        codec.Base58.Encode(proofs.EqualityProof),
+		ValidityProofData:        codec.Base58.Encode(proofs.ValidityProof),
+		RangeProofData:           codec.Base58.Encode(proofs.RangeProof),
+		AuditorCiphertextLo:      codec.Base58.Encode(proofs.AuditorCiphertextLo),
+		AuditorCiphertextHi:      codec.Base58.Encode(proofs.AuditorCiphertextHi),
+		NewDecryptableSupply:     codec.Base58.Encode(proofs.NewDecryptableSupply),
+		SupplyElgamalPubkey:      codec.Base58.Encode(state.SupplyElGamalPubkey),
+		DestinationElgamalPubkey: codec.Base58.Encode(destPublicKey),
+		CurrentSupply:            strconv.FormatUint(currentSupply, 10),
+		NewSupply:                strconv.FormatUint(currentSupply+req.ToAmount(), 10),
+	}
+	if auditorPublicKey != nil {
+		res.AuditorElgamalPubkey = codec.Base58.Encode(auditorPublicKey)
+	}
+	handler.WriteOK(w, res)
+}
+
+// ProveConfidentialBurn godoc
+// @Summary      Build the three proofs one confidential Burn needs
+// @Description  Builds the commitment-equality, batched grouped 3-handle validity and batched u128 range proofs a single confidential burn requires, in one call, because they are built from the same fresh randomness and only agree with each other if drawn together. The mint and the source account are named rather than their contents passed in: the source's available balance ciphertext, decryptable balance and ElGamal key, and the mint's supply and auditor keys are read from chain, since the deployed program compares the proofs against exactly those. source_elgamal_secret_key has to match the source's ElGamal key and ae_key has to decrypt its decryptable balance, and both are checked, as is the amount against that balance. Each *_proof_data blob goes to the matching zk-elgamal-proof/context-state/verify endpoint, and auditor_ciphertext_lo/hi and new_decryptable_available_balance are what the burn instruction itself carries. The response cannot be rebuilt: a second call draws new randomness and produces proofs that no longer match any context-state account already verified from the first. The source's available balance must not change between building these proofs and the burn landing.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ProveConfidentialBurnRequest  true  "Mint, source, source ElGamal secret, AE key, amount"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ProveConfidentialBurnResponse
+// @Failure      400   {object}  map[string]string
+// @Failure      502   {object}  map[string]string
+// @Router       /svm/tool/prove/confidential-burn [post]
+func (h *ToolHandler) ProveConfidentialBurn(w http.ResponseWriter, r *http.Request) {
+	req := new(ProveConfidentialBurnRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), []*types.PublicKey{req.MintKey(), req.SourceKey()}, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+	mintInfo := accounts[req.MintKey().Base58()]
+	if !mintInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", req.MintKey()))
+		return
+	}
+	srcInfo := accounts[req.SourceKey().Base58()]
+	if !srcInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source: %s does not exist", req.SourceKey()))
+		return
+	}
+	if mintInfo.Owner != core.Token2022ProgramID.Base58() || srcInfo.Owner != core.Token2022ProgramID.Base58() {
+		handler.WriteError(w, http.StatusBadRequest, "mint and source must both be owned by Token-2022")
+		return
+	}
+	mintData, err := mintInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode mint: %s", err))
+		return
+	}
+	srcData, err := srcInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode source: %s", err))
+		return
+	}
+	if len(srcData) < 32 || !bytes.Equal(srcData[:32], req.MintKey().Bytes()) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source: %s does not hold mint %s", req.SourceKey(), req.MintKey()))
+		return
+	}
+
+	state, err := core.DecodeConfidentialMintBurn(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+	auditorPublicKey, err := core.ConfidentialTransferMintAuditor(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+	sourceExt := core.FindExtensionData(srcData, core.ExtensionTypeConfidentialTransferAccount)
+	if len(sourceExt) != 295 {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source: %s does not carry the ConfidentialTransferAccount extension", req.SourceKey()))
+		return
+	}
+	sourcePublicKey := sourceExt[1:33]
+	availableCiphertext := sourceExt[161:225]
+	decryptableBalance := sourceExt[225:261]
+
+	derived, err := core.DeriveElGamalPublicKey(req.ToSourceSecretKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("source_elgamal_secret_key: %s", err))
+		return
+	}
+	if !bytes.Equal(derived, sourcePublicKey) {
+		handler.WriteError(w, http.StatusBadRequest, "source_elgamal_secret_key does not match the source account's ElGamal public key")
+		return
+	}
+
+	proofs, err := core.BuildBurnProofs(
+		req.ToSourceSecretKey(), sourcePublicKey, state.SupplyElGamalPubkey, auditorPublicKey,
+		availableCiphertext, decryptableBalance, req.ToAeKey(),
+		req.ToAmount(),
+	)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	res := &ProveConfidentialBurnResponse{
+		EqualityProofData:              codec.Base58.Encode(proofs.EqualityProof),
+		ValidityProofData:              codec.Base58.Encode(proofs.ValidityProof),
+		RangeProofData:                 codec.Base58.Encode(proofs.RangeProof),
+		AuditorCiphertextLo:            codec.Base58.Encode(proofs.AuditorCiphertextLo),
+		AuditorCiphertextHi:            codec.Base58.Encode(proofs.AuditorCiphertextHi),
+		NewDecryptableAvailableBalance: codec.Base58.Encode(proofs.NewSourceDecryptableAvailableBalance),
+		SourceElgamalPubkey:            codec.Base58.Encode(sourcePublicKey),
+		SupplyElgamalPubkey:            codec.Base58.Encode(state.SupplyElGamalPubkey),
+	}
+	if auditorPublicKey != nil {
+		res.AuditorElgamalPubkey = codec.Base58.Encode(auditorPublicKey)
+	}
+	handler.WriteOK(w, res)
+}
+
+// ProveConfidentialRotateSupplyElGamalPubkey godoc
+// @Summary      Build the proof one RotateSupplyElGamalPubkey needs
+// @Description  Decrypts the mint's confidential supply with the current supply ElGamal secret key, re-encrypts it under new_supply_elgamal_pubkey, and proves the two ciphertexts encrypt the same value. The mint's supply ciphertext and key are read from chain, since the deployed program compares the proof against exactly those, and the given secret is checked against the mint's supply key. ciphertext_ciphertext_equality_proof_data goes to zk-elgamal-proof/context-state/verify/ciphertext-ciphertext-equality. The supply must fit in 32 bits. The response goes stale if a mint or burn changes the supply before the rotation lands, and the mint's pending burn must be zero when it does.
+// @Tags         tool
+// @Accept       json
+// @Produce      json
+// @Param        body  body      ProveConfidentialRotateSupplyElGamalPubkeyRequest  true  "Mint, current supply secret, new supply key"
+// @Param        X-Chain-Name     header    string  true  "Chain name, e.g. solana"
+// @Param        X-Chain-Network  header    string  true  "Chain network, e.g. testnet"
+// @Success      200   {object}  ProveConfidentialRotateSupplyElGamalPubkeyResponse
+// @Failure      400   {object}  map[string]string
+// @Failure      502   {object}  map[string]string
+// @Router       /svm/tool/prove/confidential-rotate-supply-elgamal-pubkey [post]
+func (h *ToolHandler) ProveConfidentialRotateSupplyElGamalPubkey(w http.ResponseWriter, r *http.Request) {
+	req := new(ProveConfidentialRotateSupplyElGamalPubkeyRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), []*types.PublicKey{req.MintKey()}, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read mint: %s", err))
+		return
+	}
+	mintInfo := accounts[req.MintKey().Base58()]
+	if !mintInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", req.MintKey()))
+		return
+	}
+	if mintInfo.Owner != core.Token2022ProgramID.Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s is not owned by Token-2022", req.MintKey()))
+		return
+	}
+	mintData, err := mintInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to decode mint: %s", err))
+		return
+	}
+	state, err := core.DecodeConfidentialMintBurn(mintData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s: %s", req.MintKey(), err))
+		return
+	}
+
+	derived, err := core.DeriveElGamalPublicKey(req.ToSupplySecretKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("supply_elgamal_secret_key: %s", err))
+		return
+	}
+	if !bytes.Equal(derived, state.SupplyElGamalPubkey) {
+		handler.WriteError(w, http.StatusBadRequest, "supply_elgamal_secret_key does not match the mint's supply ElGamal public key")
+		return
+	}
+
+	proof, supply, err := core.BuildRotateSupplyProof(req.ToSupplySecretKey(), state.SupplyElGamalPubkey, req.ToNewSupplyPubkey(), state.ConfidentialSupply)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	handler.WriteOK(w, &ProveConfidentialRotateSupplyElGamalPubkeyResponse{
+		CiphertextCiphertextEqualityProofData: codec.Base58.Encode(proof),
+		CurrentSupply:                         strconv.FormatUint(supply, 10),
+		CurrentSupplyElgamalPubkey:            codec.Base58.Encode(state.SupplyElGamalPubkey),
+		NewSupplyElgamalPubkey:                codec.Base58.Encode(req.ToNewSupplyPubkey()),
+	})
+}

@@ -1896,3 +1896,256 @@ func (t *token) ConfidentialConfigureAccountWithRegistry(account, mint, registry
 
 	return types.NewInstruction(t.id, accounts, data), nil
 }
+
+// InitializeConfidentialMintBurn attaches the ConfidentialMintBurn extension
+// to mint, naming the ElGamal public key the mint's confidential supply is
+// encrypted under and the initial (zero) supply encrypted under the supply
+// AE key -- the decryptable cache of that same supply.
+//
+// This is opcode 42 sub 0 (ConfidentialMintBurnInstructionInitializeMint).
+// Like every mint extension it can only run after the mint account has been
+// allocated (sized to include this extension) and before initialize-mint2
+// commits it. The all-zero ElGamal public key means "none" to the program,
+// which would leave the mint unable to mint or burn confidentially, so it is
+// refused here.
+//
+// Confirmed against the interface crate's InitializeMintData: the two fields
+// are plain fixed-size arrays, supply_elgamal_pubkey(32) +
+// decryptable_supply(36), not MaybeNull; accounts are [mint(writable)] and no
+// signer is needed.
+func (t *token) InitializeConfidentialMintBurn(mint *types.PublicKey, supplyElGamalPubkey, decryptableSupply []byte) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize confidential mint burn: mint is required")
+	}
+	if len(supplyElGamalPubkey) != 32 {
+		return nil, fmt.Errorf("token initialize confidential mint burn: supply elgamal pubkey is %d bytes, expected 32", len(supplyElGamalPubkey))
+	}
+	allZero := true
+	for _, b := range supplyElGamalPubkey {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+	if allZero {
+		return nil, fmt.Errorf("token initialize confidential mint burn: supply elgamal pubkey must not be all zero")
+	}
+	if len(decryptableSupply) != AeCiphertextLen {
+		return nil, fmt.Errorf("token initialize confidential mint burn: decryptable supply is %d bytes, expected %d", len(decryptableSupply), AeCiphertextLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialMintBurnExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialMintBurnInstructionInitializeMint)
+	data = codec.Binary.AppendBytes(data, supplyElGamalPubkey)
+	data = codec.Binary.AppendBytes(data, decryptableSupply)
+
+	return types.NewInstruction(t.id, types.NewAccounts(
+		types.NewWritableAccount(mint),
+	), data), nil
+}
+
+// ConfidentialMint builds a ConfidentialMintBurn extension's Mint instruction
+// -- sub-instruction 3 under opcode 42, which mints an encrypted amount
+// straight into destination's pending confidential balance and adds it to the
+// mint's confidential supply. Authorized by the mint's mint authority.
+//
+// The three proofs (commitment equality, batched grouped 3-handle validity,
+// batched u128 range) are verified beforehand into context-state accounts,
+// named here with offsets of 0. Confirmed against the interface crate's
+// inner_confidential_mint and MintInstructionData: data is
+// new_decryptable_supply(36) + auditor ciphertext lo(64) + hi(64) + the three
+// proof offsets (i8, 0); accounts are [token account(writable),
+// mint(writable), equality ctx, validity ctx, range ctx, authority
+// (+multisig signers)], with no instructions sysvar since no proof is an
+// instruction offset.
+func (t *token) ConfidentialMint(account, mint, equalityContext, validityContext, rangeContext, authority *types.PublicKey, signers []*types.PublicKey, newDecryptableSupply, auditorCiphertextLo, auditorCiphertextHi []byte) (*types.Instruction, error) {
+	const name = "token confidential mint"
+	if account.IsNil() {
+		return nil, fmt.Errorf("%s: account is required", name)
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("%s: mint is required", name)
+	}
+	if equalityContext.IsNil() || validityContext.IsNil() || rangeContext.IsNil() {
+		return nil, fmt.Errorf("%s: all three proof context state accounts are required", name)
+	}
+	if err := validateAuthority(name, authority, signers); err != nil {
+		return nil, err
+	}
+	if len(newDecryptableSupply) != AeCiphertextLen {
+		return nil, fmt.Errorf("%s: new decryptable supply is %d bytes, expected %d", name, len(newDecryptableSupply), AeCiphertextLen)
+	}
+	if len(auditorCiphertextLo) != 64 || len(auditorCiphertextHi) != 64 {
+		return nil, fmt.Errorf("%s: auditor ciphertexts are %d/%d bytes, expected 64 each", name, len(auditorCiphertextLo), len(auditorCiphertextHi))
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialMintBurnExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialMintBurnInstructionMint)
+	data = codec.Binary.AppendBytes(data, newDecryptableSupply)
+	data = codec.Binary.AppendBytes(data, auditorCiphertextLo)
+	data = codec.Binary.AppendBytes(data, auditorCiphertextHi)
+	data = codec.Binary.AppendU8(data, 0) // equality_proof_instruction_offset: 0 = context state account
+	data = codec.Binary.AppendU8(data, 0) // ciphertext_validity_proof_instruction_offset
+	data = codec.Binary.AppendU8(data, 0) // range_proof_instruction_offset
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewWritableAccount(mint),
+		types.NewReadonlyAccount(equalityContext),
+		types.NewReadonlyAccount(validityContext),
+		types.NewReadonlyAccount(rangeContext),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// ConfidentialBurn builds a ConfidentialMintBurn extension's Burn instruction
+// -- sub-instruction 4 under opcode 42, which subtracts an encrypted amount
+// from account's available confidential balance and adds it to the mint's
+// pending burn (folded into the supply later by ApplyPendingBurn). Authorized
+// by the token account's owner, not the mint authority.
+//
+// Proofs are the same three as Mint's, verified beforehand into context-state
+// accounts. Confirmed against the interface crate's BurnInstructionData and
+// process_confidential_burn: data is new_decryptable_available_balance(36) +
+// auditor ciphertext lo(64) + hi(64) + three proof offsets (i8, 0); accounts
+// are [token account(writable), mint(writable), equality ctx, validity ctx,
+// range ctx, owner(+multisig signers)]. A mint that also carries
+// PermissionedBurn needs a different instruction and rejects this one.
+func (t *token) ConfidentialBurn(account, mint, equalityContext, validityContext, rangeContext, owner *types.PublicKey, signers []*types.PublicKey, newDecryptableAvailableBalance, auditorCiphertextLo, auditorCiphertextHi []byte) (*types.Instruction, error) {
+	const name = "token confidential burn"
+	if account.IsNil() {
+		return nil, fmt.Errorf("%s: account is required", name)
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("%s: mint is required", name)
+	}
+	if equalityContext.IsNil() || validityContext.IsNil() || rangeContext.IsNil() {
+		return nil, fmt.Errorf("%s: all three proof context state accounts are required", name)
+	}
+	if err := validateAuthority(name, owner, signers); err != nil {
+		return nil, err
+	}
+	if len(newDecryptableAvailableBalance) != AeCiphertextLen {
+		return nil, fmt.Errorf("%s: new decryptable available balance is %d bytes, expected %d", name, len(newDecryptableAvailableBalance), AeCiphertextLen)
+	}
+	if len(auditorCiphertextLo) != 64 || len(auditorCiphertextHi) != 64 {
+		return nil, fmt.Errorf("%s: auditor ciphertexts are %d/%d bytes, expected 64 each", name, len(auditorCiphertextLo), len(auditorCiphertextHi))
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialMintBurnExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialMintBurnInstructionBurn)
+	data = codec.Binary.AppendBytes(data, newDecryptableAvailableBalance)
+	data = codec.Binary.AppendBytes(data, auditorCiphertextLo)
+	data = codec.Binary.AppendBytes(data, auditorCiphertextHi)
+	data = codec.Binary.AppendU8(data, 0)
+	data = codec.Binary.AppendU8(data, 0)
+	data = codec.Binary.AppendU8(data, 0)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewWritableAccount(mint),
+		types.NewReadonlyAccount(equalityContext),
+		types.NewReadonlyAccount(validityContext),
+		types.NewReadonlyAccount(rangeContext),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}
+
+// ConfidentialApplyPendingBurn builds a ConfidentialMintBurn extension's
+// ApplyPendingBurn instruction -- sub-instruction 5 under opcode 42, which
+// subtracts the mint's pending burn (what Burn accumulated) from its
+// confidential supply and resets the pending burn to zero. Authorized by the
+// mint authority. No proof, and no data beyond the discriminant.
+//
+// Confirmed against the interface crate's doc comment and
+// process_apply_pending_burn: accounts are [mint(writable), mint authority
+// (+multisig signers)]. It does not touch the decryptable supply; that is
+// UpdateDecryptableSupply's job.
+func (t *token) ConfidentialApplyPendingBurn(mint, authority *types.PublicKey, signers []*types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token apply pending burn: mint is required")
+	}
+	if err := validateAuthority("token apply pending burn", authority, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialMintBurnExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialMintBurnInstructionApplyPendingBurn)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(mint))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// ConfidentialUpdateDecryptableSupply builds a ConfidentialMintBurn
+// extension's UpdateDecryptableSupply instruction -- sub-instruction 2 under
+// opcode 42, which overwrites the mint's decryptable supply (the cheap AE
+// cache of its confidential supply) with newDecryptableSupply. Authorized by
+// the mint authority. No proof: the program cannot check that the value
+// matches the confidential supply, so the caller is trusted to keep them in
+// step.
+//
+// Confirmed against UpdateDecryptableSupplyData: data is the new decryptable
+// supply (36); accounts are [mint(writable), mint authority (+multisig
+// signers)].
+func (t *token) ConfidentialUpdateDecryptableSupply(mint, authority *types.PublicKey, signers []*types.PublicKey, newDecryptableSupply []byte) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token update decryptable supply: mint is required")
+	}
+	if err := validateAuthority("token update decryptable supply", authority, signers); err != nil {
+		return nil, err
+	}
+	if len(newDecryptableSupply) != AeCiphertextLen {
+		return nil, fmt.Errorf("token update decryptable supply: new decryptable supply is %d bytes, expected %d", len(newDecryptableSupply), AeCiphertextLen)
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialMintBurnExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialMintBurnInstructionUpdateDecryptableSupply)
+	data = codec.Binary.AppendBytes(data, newDecryptableSupply)
+
+	accounts := types.NewAccounts(types.NewWritableAccount(mint))
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// ConfidentialRotateSupplyElGamalPubkey builds a ConfidentialMintBurn
+// extension's RotateSupplyElGamalPubkey instruction -- sub-instruction 1
+// under opcode 42, which replaces the ElGamal key the mint's confidential
+// supply is encrypted under (and the ciphertext itself) with newSupplyElGamalPubkey.
+// Authorized by the mint authority. A CiphertextCiphertextEquality proof,
+// verified beforehand into equalityContext, ties the old ciphertext to the
+// re-encrypted one. The pending burn has to be zero.
+//
+// Confirmed against RotateSupplyElGamalPubkeyData and
+// process_rotate_supply_elgamal_pubkey: data is the new pubkey (32) + the
+// proof offset (i8, 0 = context state account); accounts are [mint(writable),
+// equality context state(readonly), mint authority (+multisig signers)].
+func (t *token) ConfidentialRotateSupplyElGamalPubkey(mint, equalityContext, authority *types.PublicKey, signers []*types.PublicKey, newSupplyElGamalPubkey []byte) (*types.Instruction, error) {
+	const name = "token rotate supply elgamal pubkey"
+	if mint.IsNil() {
+		return nil, fmt.Errorf("%s: mint is required", name)
+	}
+	if equalityContext.IsNil() {
+		return nil, fmt.Errorf("%s: equality context state account is required", name)
+	}
+	if err := validateAuthority(name, authority, signers); err != nil {
+		return nil, err
+	}
+	if len(newSupplyElGamalPubkey) != 32 {
+		return nil, fmt.Errorf("%s: new supply elgamal pubkey is %d bytes, expected 32", name, len(newSupplyElGamalPubkey))
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialMintBurnExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialMintBurnInstructionRotateSupplyElGamalPubkey)
+	data = codec.Binary.AppendBytes(data, newSupplyElGamalPubkey)
+	data = codec.Binary.AppendU8(data, 0) // proof_instruction_offset: 0 = context state account
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(mint),
+		types.NewReadonlyAccount(equalityContext),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}

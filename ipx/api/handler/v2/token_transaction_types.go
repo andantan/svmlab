@@ -10892,6 +10892,523 @@ func NewConfidentialTransferResponse(
 	}
 }
 
+// ConfidentialMintRequest mints an encrypted amount into Account's pending
+// confidential balance and adds it to Mint's confidential supply -- the amount
+// never appears in plaintext on chain. Account must already carry the
+// ConfidentialTransferAccount extension (see configure-account, and
+// approve-account if the mint requires it) and Mint both
+// ConfidentialMintBurn and ConfidentialTransferMint. Authorized by the mint's
+// mint authority.
+//
+// This builds only the Mint instruction. The three zero-knowledge proofs it
+// depends on must already be verified into context-state accounts: build them
+// with tool/prove/confidential-mint, create their accounts with
+// zk-elgamal-proof/context-state/create, and verify each with
+// context-state/verify (or verify-from-account with a compute_unit_limit --
+// the u128 range verifier costs about as much as a transaction's default
+// compute budget).
+//
+// NewDecryptableSupply, AuditorCiphertextLo and AuditorCiphertextHi are the
+// values tool/prove/confidential-mint returned alongside those proofs, and
+// must come from that same call: a later call draws new randomness, so its
+// values no longer match the proofs already verified.
+type ConfidentialMintRequest struct {
+	// Account is credited (its pending balance). It must already carry the
+	// ConfidentialTransferAccount extension.
+	Account string `json:"account" example:""`
+
+	// Mint must carry ConfidentialMintBurn and ConfidentialTransferMint, and
+	// is what Account holds.
+	Mint string `json:"mint" example:""`
+
+	// Authority is the mint's mint authority, or its multisig for a
+	// multisig-owned one (see MultisigSigners).
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// EqualityContextStateAccount holds the verified
+	// CiphertextCommitmentEquality proof's context (see
+	// context-state/verify/ciphertext-commitment-equality).
+	EqualityContextStateAccount string `json:"equality_context_state_account" example:""`
+
+	// CiphertextValidityContextStateAccount holds the verified
+	// BatchedGroupedCiphertext3HandlesValidity proof's context (see
+	// context-state/verify/batched-grouped-ciphertext-3-handles-validity).
+	CiphertextValidityContextStateAccount string `json:"ciphertext_validity_context_state_account" example:""`
+
+	// RangeProofContextStateAccount holds the verified BatchedRangeProofU128
+	// proof's context (see context-state/verify/batched-range-proof-u128).
+	RangeProofContextStateAccount string `json:"range_proof_context_state_account" example:""`
+
+	// NewDecryptableSupply is tool/prove/confidential-mint's own field of the
+	// same name, base58-encoded (36 bytes).
+	NewDecryptableSupply string `json:"new_decryptable_supply" example:""`
+
+	// AuditorCiphertextLo is tool/prove/confidential-mint's own
+	// auditor_ciphertext_lo, base58-encoded (64 bytes).
+	AuditorCiphertextLo string `json:"auditor_ciphertext_lo" example:""`
+
+	// AuditorCiphertextHi is tool/prove/confidential-mint's own
+	// auditor_ciphertext_hi, base58-encoded (64 bytes).
+	AuditorCiphertextHi string `json:"auditor_ciphertext_hi" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty,
+	// Authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account              *types.PublicKey
+	mint                 *types.PublicKey
+	authority            *types.PublicKey
+	equalityContext      *types.PublicKey
+	validityContext      *types.PublicKey
+	rangeContext         *types.PublicKey
+	newDecryptableSupply []byte
+	auditorCiphertextLo  []byte
+	auditorCiphertextHi  []byte
+	feePayer             *types.PublicKey
+	rbh                  *types.Hash
+	dna                  *types.PublicKey
+	tokenProgramID       *types.PublicKey
+	multisigSigners      []*types.PublicKey
+}
+
+func (r *ConfidentialMintRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+
+	if r.equalityContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.EqualityContextStateAccount)); err != nil {
+		return errors.New("equality_context_state_account: " + err.Error())
+	}
+	if r.validityContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.CiphertextValidityContextStateAccount)); err != nil {
+		return errors.New("ciphertext_validity_context_state_account: " + err.Error())
+	}
+	if r.rangeContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RangeProofContextStateAccount)); err != nil {
+		return errors.New("range_proof_context_state_account: " + err.Error())
+	}
+
+	if r.newDecryptableSupply, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.NewDecryptableSupply), core.AeCiphertextLen); err != nil {
+		return errors.New("new_decryptable_supply: " + err.Error())
+	}
+	if r.auditorCiphertextLo, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AuditorCiphertextLo), 64); err != nil {
+		return errors.New("auditor_ciphertext_lo: " + err.Error())
+	}
+	if r.auditorCiphertextHi, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AuditorCiphertextHi), 64); err != nil {
+		return errors.New("auditor_ciphertext_hi: " + err.Error())
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ConfidentialMintRequest) AccountKey() *types.PublicKey   { return r.account }
+func (r *ConfidentialMintRequest) MintKey() *types.PublicKey      { return r.mint }
+func (r *ConfidentialMintRequest) AuthorityKey() *types.PublicKey { return r.authority }
+func (r *ConfidentialMintRequest) EqualityContextKey() *types.PublicKey {
+	return r.equalityContext
+}
+func (r *ConfidentialMintRequest) ValidityContextKey() *types.PublicKey {
+	return r.validityContext
+}
+func (r *ConfidentialMintRequest) RangeContextKey() *types.PublicKey { return r.rangeContext }
+func (r *ConfidentialMintRequest) ToNewDecryptableSupply() []byte    { return r.newDecryptableSupply }
+func (r *ConfidentialMintRequest) ToAuditorCiphertextLo() []byte     { return r.auditorCiphertextLo }
+func (r *ConfidentialMintRequest) ToAuditorCiphertextHi() []byte     { return r.auditorCiphertextHi }
+func (r *ConfidentialMintRequest) FeePayerKey() *types.PublicKey     { return r.feePayer }
+func (r *ConfidentialMintRequest) Blockhash() *types.Hash            { return r.rbh }
+func (r *ConfidentialMintRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ConfidentialMintRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ConfidentialMintRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ConfidentialMintResponse reports the built transaction.
+type ConfidentialMintResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account   string `json:"account"`
+	Mint      string `json:"mint"`
+	Authority string `json:"authority"`
+	Program   string `json:"program"`
+
+	EqualityContextStateAccount           string `json:"equality_context_state_account"`
+	CiphertextValidityContextStateAccount string `json:"ciphertext_validity_context_state_account"`
+	RangeProofContextStateAccount         string `json:"range_proof_context_state_account"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewConfidentialMintResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, mint, authority, tokenProgram, equalityContext, validityContext, rangeContext, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ConfidentialMintResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ConfidentialMintResponse{
+		Transaction:                           codec.Base64.Encode(raw),
+		Message:                               codec.Base64.Encode(message),
+		RecentBlockhash:                       tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                           keys,
+		Signers:                               signers,
+		NonceAuthority:                        nonceAuth,
+		Account:                               account.Base58(),
+		Mint:                                  mint.Base58(),
+		Authority:                             authority.Base58(),
+		Program:                               tokenProgram.Base58(),
+		EqualityContextStateAccount:           equalityContext.Base58(),
+		CiphertextValidityContextStateAccount: validityContext.Base58(),
+		RangeProofContextStateAccount:         rangeContext.Base58(),
+		Fee:                                   newSystemPayer(feePayer, fee),
+	}
+}
+
+// ConfidentialBurnRequest burns an encrypted amount from Account's available
+// confidential balance and adds it to Mint's pending burn -- the amount never
+// appears in plaintext on chain. Account must carry the
+// ConfidentialTransferAccount extension and Mint both ConfidentialMintBurn and
+// ConfidentialTransferMint. Authorized by the account's owner, not the mint
+// authority. The burn only reaches the confidential supply once the mint
+// authority runs apply-pending-burn.
+//
+// This builds only the Burn instruction. The three zero-knowledge proofs it
+// depends on must already be verified into context-state accounts: build them
+// with tool/prove/confidential-burn, create their accounts with
+// zk-elgamal-proof/context-state/create, and verify each with
+// context-state/verify. NewDecryptableAvailableBalance and the auditor
+// ciphertexts are the values that tool returned alongside those proofs, and
+// must come from that same call.
+type ConfidentialBurnRequest struct {
+	// Account is debited (its available balance). It must already carry the
+	// ConfidentialTransferAccount extension and hold at least the amount.
+	Account string `json:"account" example:""`
+
+	// Mint must carry ConfidentialBurnBurn and ConfidentialTransferMint, and
+	// is what Account holds.
+	Mint string `json:"mint" example:""`
+
+	// Authority is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners) -- not the mint authority.
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// EqualityContextStateAccount holds the verified
+	// CiphertextCommitmentEquality proof's context (see
+	// context-state/verify/ciphertext-commitment-equality).
+	EqualityContextStateAccount string `json:"equality_context_state_account" example:""`
+
+	// CiphertextValidityContextStateAccount holds the verified
+	// BatchedGroupedCiphertext3HandlesValidity proof's context (see
+	// context-state/verify/batched-grouped-ciphertext-3-handles-validity).
+	CiphertextValidityContextStateAccount string `json:"ciphertext_validity_context_state_account" example:""`
+
+	// RangeProofContextStateAccount holds the verified BatchedRangeProofU128
+	// proof's context (see context-state/verify/batched-range-proof-u128).
+	RangeProofContextStateAccount string `json:"range_proof_context_state_account" example:""`
+
+	// NewDecryptableAvailableBalance is tool/prove/confidential-burn's own
+	// new_decryptable_available_balance, base58-encoded (36 bytes).
+	NewDecryptableAvailableBalance string `json:"new_decryptable_available_balance" example:""`
+
+	// AuditorCiphertextLo is tool/prove/confidential-burn's own
+	// auditor_ciphertext_lo, base58-encoded (64 bytes).
+	AuditorCiphertextLo string `json:"auditor_ciphertext_lo" example:""`
+
+	// AuditorCiphertextHi is tool/prove/confidential-burn's own
+	// auditor_ciphertext_hi, base58-encoded (64 bytes).
+	AuditorCiphertextHi string `json:"auditor_ciphertext_hi" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty,
+	// Authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account                        *types.PublicKey
+	mint                           *types.PublicKey
+	authority                      *types.PublicKey
+	equalityContext                *types.PublicKey
+	validityContext                *types.PublicKey
+	rangeContext                   *types.PublicKey
+	newDecryptableAvailableBalance []byte
+	auditorCiphertextLo            []byte
+	auditorCiphertextHi            []byte
+	feePayer                       *types.PublicKey
+	rbh                            *types.Hash
+	dna                            *types.PublicKey
+	tokenProgramID                 *types.PublicKey
+	multisigSigners                []*types.PublicKey
+}
+
+func (r *ConfidentialBurnRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+
+	if r.equalityContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.EqualityContextStateAccount)); err != nil {
+		return errors.New("equality_context_state_account: " + err.Error())
+	}
+	if r.validityContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.CiphertextValidityContextStateAccount)); err != nil {
+		return errors.New("ciphertext_validity_context_state_account: " + err.Error())
+	}
+	if r.rangeContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RangeProofContextStateAccount)); err != nil {
+		return errors.New("range_proof_context_state_account: " + err.Error())
+	}
+
+	if r.newDecryptableAvailableBalance, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.NewDecryptableAvailableBalance), core.AeCiphertextLen); err != nil {
+		return errors.New("new_decryptable_available_balance: " + err.Error())
+	}
+	if r.auditorCiphertextLo, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AuditorCiphertextLo), 64); err != nil {
+		return errors.New("auditor_ciphertext_lo: " + err.Error())
+	}
+	if r.auditorCiphertextHi, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AuditorCiphertextHi), 64); err != nil {
+		return errors.New("auditor_ciphertext_hi: " + err.Error())
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ConfidentialBurnRequest) AccountKey() *types.PublicKey   { return r.account }
+func (r *ConfidentialBurnRequest) MintKey() *types.PublicKey      { return r.mint }
+func (r *ConfidentialBurnRequest) AuthorityKey() *types.PublicKey { return r.authority }
+func (r *ConfidentialBurnRequest) EqualityContextKey() *types.PublicKey {
+	return r.equalityContext
+}
+func (r *ConfidentialBurnRequest) ValidityContextKey() *types.PublicKey {
+	return r.validityContext
+}
+func (r *ConfidentialBurnRequest) RangeContextKey() *types.PublicKey { return r.rangeContext }
+func (r *ConfidentialBurnRequest) ToNewDecryptableAvailableBalance() []byte {
+	return r.newDecryptableAvailableBalance
+}
+func (r *ConfidentialBurnRequest) ToAuditorCiphertextLo() []byte { return r.auditorCiphertextLo }
+func (r *ConfidentialBurnRequest) ToAuditorCiphertextHi() []byte { return r.auditorCiphertextHi }
+func (r *ConfidentialBurnRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *ConfidentialBurnRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *ConfidentialBurnRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ConfidentialBurnRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ConfidentialBurnRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ConfidentialBurnResponse reports the built transaction.
+type ConfidentialBurnResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account   string `json:"account"`
+	Mint      string `json:"mint"`
+	Authority string `json:"authority"`
+	Program   string `json:"program"`
+
+	EqualityContextStateAccount           string `json:"equality_context_state_account"`
+	CiphertextValidityContextStateAccount string `json:"ciphertext_validity_context_state_account"`
+	RangeProofContextStateAccount         string `json:"range_proof_context_state_account"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewConfidentialBurnResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, mint, authority, tokenProgram, equalityContext, validityContext, rangeContext, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ConfidentialBurnResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ConfidentialBurnResponse{
+		Transaction:                           codec.Base64.Encode(raw),
+		Message:                               codec.Base64.Encode(message),
+		RecentBlockhash:                       tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                           keys,
+		Signers:                               signers,
+		NonceAuthority:                        nonceAuth,
+		Account:                               account.Base58(),
+		Mint:                                  mint.Base58(),
+		Authority:                             authority.Base58(),
+		Program:                               tokenProgram.Base58(),
+		EqualityContextStateAccount:           equalityContext.Base58(),
+		CiphertextValidityContextStateAccount: validityContext.Base58(),
+		RangeProofContextStateAccount:         rangeContext.Base58(),
+		Fee:                                   newSystemPayer(feePayer, fee),
+	}
+}
+
 // InitializeTransferFeeConfigRequest attaches the TransferFeeConfig
 // extension to Mint, fixing the fee rate every transfer-checked-with-fee
 // withholds and who may later change it or withdraw what accumulates.
@@ -11490,6 +12007,189 @@ func NewInitializeConfidentialTransferMintResponse(
 	}
 
 	return res
+}
+
+// InitializeConfidentialMintBurnRequest attaches the ConfidentialMintBurn
+// extension to Mint, naming the ElGamal public key its confidential supply is
+// encrypted under and starting that supply at zero.
+//
+// This can only ever run in the narrow window every mint extension shares:
+// after the mint account has been allocated (sized to include this
+// extension, see extensions/mint/data-size) and before initialize-mint2 locks
+// the extension list forever. A mint that should also carry
+// ConfidentialTransferMint -- Mint and Burn read the auditor key from it --
+// needs both extensions in the allocated size.
+type InitializeConfidentialMintBurnRequest struct {
+	// Mint is the account this attaches to. It must already exist (see
+	// create-mint) and not yet be initialized -- initialize-mint2 has to
+	// run after this, never before.
+	Mint string `json:"mint" example:""`
+
+	// SupplyElgamalPubkey is the ElGamal public key the mint's confidential
+	// supply is encrypted under, base58-encoded raw 32 bytes (see
+	// tool/generate/elgamal-keypair). Its secret key is what later mint and
+	// burn proofs are built with, and it can be rotated (see
+	// rotate-supply-elgamal-pubkey).
+	SupplyElgamalPubkey string `json:"supply_elgamal_pubkey" example:""`
+
+	// SupplyAeKey encrypts the initial supply of zero into the decryptable
+	// supply the instruction carries, base58-encoded raw 16 bytes -- the same
+	// kind of key an account's decryptable balance uses. Keep it: every later
+	// mint and burn needs it to keep the decryptable supply in step.
+	SupplyAeKey string `json:"supply_ae_key" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this
+	// extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint                *types.PublicKey
+	supplyElGamalPubkey []byte
+	decryptableSupply   []byte
+	feePayer            *types.PublicKey
+	rbh                 *types.Hash
+	dna                 *types.PublicKey
+	tokenProgramID      *types.PublicKey
+}
+
+func (r *InitializeConfidentialMintBurnRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+
+	if r.supplyElGamalPubkey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.SupplyElgamalPubkey), 32); err != nil {
+		return errors.New("supply_elgamal_pubkey: " + err.Error())
+	}
+	aeKey, err := codec.Base58.DecodeFixed(strings.TrimSpace(r.SupplyAeKey), 16)
+	if err != nil {
+		return errors.New("supply_ae_key: " + err.Error())
+	}
+	if r.decryptableSupply, err = core.EncryptAeAmount(aeKey, 0); err != nil {
+		return errors.New("supply_ae_key: " + err.Error())
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *InitializeConfidentialMintBurnRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *InitializeConfidentialMintBurnRequest) ToSupplyElGamalPubkey() []byte {
+	return r.supplyElGamalPubkey
+}
+func (r *InitializeConfidentialMintBurnRequest) ToDecryptableSupply() []byte {
+	return r.decryptableSupply
+}
+func (r *InitializeConfidentialMintBurnRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *InitializeConfidentialMintBurnRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *InitializeConfidentialMintBurnRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *InitializeConfidentialMintBurnRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// InitializeConfidentialMintBurnResponse reports the built transaction
+// alongside the confidential transfer configuration it attaches.
+type InitializeConfidentialMintBurnResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint                string `json:"mint"`
+	SupplyElgamalPubkey string `json:"supply_elgamal_pubkey"`
+	DecryptableSupply   string `json:"decryptable_supply"`
+	Program             string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewInitializeConfidentialMintBurnResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, tokenProgram, nonceAuthority *types.PublicKey,
+	supplyElGamalPubkey, decryptableSupply []byte,
+	fee uint64,
+) *InitializeConfidentialMintBurnResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &InitializeConfidentialMintBurnResponse{
+		Transaction:         codec.Base64.Encode(raw),
+		Message:             codec.Base64.Encode(message),
+		RecentBlockhash:     tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:         keys,
+		Signers:             signers,
+		NonceAuthority:      nonceAuth,
+		Mint:                mint.Base58(),
+		SupplyElgamalPubkey: codec.Base58.Encode(supplyElGamalPubkey),
+		DecryptableSupply:   codec.Base58.Encode(decryptableSupply),
+		Program:             tokenProgram.Base58(),
+		Fee:                 newSystemPayer(feePayer, fee),
+	}
 }
 
 // CloseMintRequest closes a Token-2022 mint that carries the
@@ -15672,6 +16372,563 @@ func NewEnableHarvestToMintResponse(
 		Authority:       authority.Base58(),
 		Program:         tokenProgram.Base58(),
 		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// ConfidentialApplyPendingBurnRequest folds the mint's pending burn (what Burn
+// accumulated) into its confidential supply and resets the pending burn to
+// zero. Authorized by the mint authority. No zero-knowledge proof is needed,
+// and the instruction carries no data beyond its discriminant.
+type ConfidentialApplyPendingBurnRequest struct {
+	// Mint must carry the ConfidentialMintBurn extension.
+	Mint string `json:"mint" example:""`
+
+	// Authority is the mint's mint authority, or its multisig for a
+	// multisig-owned one (see MultisigSigners).
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this
+	// extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty,
+	// Authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that mint stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the mint, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint            *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *ConfidentialApplyPendingBurnRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ConfidentialApplyPendingBurnRequest) MintKey() *types.PublicKey      { return r.mint }
+func (r *ConfidentialApplyPendingBurnRequest) AuthorityKey() *types.PublicKey { return r.authority }
+func (r *ConfidentialApplyPendingBurnRequest) FeePayerKey() *types.PublicKey  { return r.feePayer }
+func (r *ConfidentialApplyPendingBurnRequest) Blockhash() *types.Hash         { return r.rbh }
+func (r *ConfidentialApplyPendingBurnRequest) DurableNonceMintKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ConfidentialApplyPendingBurnRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ConfidentialApplyPendingBurnRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ConfidentialApplyPendingBurnResponse reports the built transaction.
+type ConfidentialApplyPendingBurnResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint      string `json:"mint"`
+	Authority string `json:"authority"`
+	Program   string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewConfidentialApplyPendingBurnResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ConfidentialApplyPendingBurnResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ConfidentialApplyPendingBurnResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Mint:            mint.Base58(),
+		Authority:       authority.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// ConfidentialRotateSupplyElGamalPubkeyRequest replaces the ElGamal key the
+// mint's confidential supply is encrypted under -- and the ciphertext itself --
+// with a new one. Authorized by the mint authority. The mint's pending burn
+// must be zero (run apply-pending-burn first).
+//
+// This builds only the instruction. The CiphertextCiphertextEquality proof
+// must already be verified into a context-state account: build it with
+// tool/prove/confidential-rotate-supply-elgamal-pubkey, create the account with
+// zk-elgamal-proof/context-state/create/ciphertext-ciphertext-equality, and
+// verify it with context-state/verify/ciphertext-ciphertext-equality.
+type ConfidentialRotateSupplyElGamalPubkeyRequest struct {
+	// Mint must carry the ConfidentialMintBurn extension.
+	Mint string `json:"mint" example:""`
+
+	// NewSupplyElgamalPubkey is the key the supply moves to, base58-encoded raw
+	// 32 bytes -- the same one the prove tool was given.
+	NewSupplyElgamalPubkey string `json:"new_supply_elgamal_pubkey" example:""`
+
+	// EqualityContextStateAccount holds the verified
+	// CiphertextCiphertextEquality proof's context.
+	EqualityContextStateAccount string `json:"equality_context_state_account" example:""`
+
+	// Authority is the mint's mint authority, or its multisig for a
+	// multisig-owned one (see MultisigSigners).
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this
+	// extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty,
+	// Authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that mint stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the mint, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint            *types.PublicKey
+	newPubkey       []byte
+	eqContext       *types.PublicKey
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *ConfidentialRotateSupplyElGamalPubkeyRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.newPubkey, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.NewSupplyElgamalPubkey), 32); err != nil {
+		return errors.New("new_supply_elgamal_pubkey: " + err.Error())
+	}
+	if r.eqContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.EqualityContextStateAccount)); err != nil {
+		return errors.New("equality_context_state_account: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ConfidentialRotateSupplyElGamalPubkeyRequest) ToNewSupplyElgamalPubkey() []byte {
+	return r.newPubkey
+}
+func (r *ConfidentialRotateSupplyElGamalPubkeyRequest) EqualityContextKey() *types.PublicKey {
+	return r.eqContext
+}
+func (r *ConfidentialRotateSupplyElGamalPubkeyRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *ConfidentialRotateSupplyElGamalPubkeyRequest) AuthorityKey() *types.PublicKey {
+	return r.authority
+}
+func (r *ConfidentialRotateSupplyElGamalPubkeyRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+func (r *ConfidentialRotateSupplyElGamalPubkeyRequest) Blockhash() *types.Hash { return r.rbh }
+func (r *ConfidentialRotateSupplyElGamalPubkeyRequest) DurableNonceMintKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ConfidentialRotateSupplyElGamalPubkeyRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ConfidentialRotateSupplyElGamalPubkeyRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ConfidentialRotateSupplyElGamalPubkeyResponse reports the built transaction.
+type ConfidentialRotateSupplyElGamalPubkeyResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint                        string `json:"mint"`
+	Authority                   string `json:"authority"`
+	NewSupplyElgamalPubkey      string `json:"new_supply_elgamal_pubkey"`
+	EqualityContextStateAccount string `json:"equality_context_state_account"`
+	Program                     string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewConfidentialRotateSupplyElGamalPubkeyResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, authority, tokenProgram, eqContext, nonceAuthority *types.PublicKey,
+	newPubkey []byte,
+	fee uint64,
+) *ConfidentialRotateSupplyElGamalPubkeyResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ConfidentialRotateSupplyElGamalPubkeyResponse{
+		Transaction:                 codec.Base64.Encode(raw),
+		Message:                     codec.Base64.Encode(message),
+		RecentBlockhash:             tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                 keys,
+		Signers:                     signers,
+		NonceAuthority:              nonceAuth,
+		Mint:                        mint.Base58(),
+		Authority:                   authority.Base58(),
+		NewSupplyElgamalPubkey:      codec.Base58.Encode(newPubkey),
+		EqualityContextStateAccount: eqContext.Base58(),
+		Program:                     tokenProgram.Base58(),
+		Fee:                         newSystemPayer(feePayer, fee),
+	}
+}
+
+// ConfidentialUpdateDecryptableSupplyRequest overwrites the mint's
+// decryptable supply -- the cheap AE cache of its confidential supply. The
+// program cannot check the value against the confidential supply, so the
+// caller is trusted to keep the two in step. Authorized by the mint authority.
+type ConfidentialUpdateDecryptableSupplyRequest struct {
+	// Mint must carry the ConfidentialMintBurn extension.
+	Mint string `json:"mint" example:""`
+
+	// Authority is the mint's mint authority, or its multisig for a
+	// multisig-owned one (see MultisigSigners).
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// SupplyAeKey encrypts NewSupply into the decryptable supply the
+	// instruction carries, base58-encoded raw 16 bytes -- the key the mint was
+	// initialized with.
+	SupplyAeKey string `json:"supply_ae_key" example:""`
+
+	// NewSupply is the confidential supply the decryptable supply should now
+	// equal, in raw base units. The program cannot check it against the
+	// confidential supply, so it has to be the value the caller knows the
+	// supply to be (see the ElGamal decryption of the mint's
+	// confidential_supply).
+	NewSupply string `json:"new_supply" example:"600"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this
+	// extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty,
+	// Authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that mint stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the mint, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint            *types.PublicKey
+	newDecryptable  []byte
+	newSupply       uint64
+	authority       *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *ConfidentialUpdateDecryptableSupplyRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	aeKey, err := codec.Base58.DecodeFixed(strings.TrimSpace(r.SupplyAeKey), 16)
+	if err != nil {
+		return errors.New("supply_ae_key: " + err.Error())
+	}
+	if r.newSupply, err = strconv.ParseUint(strings.TrimSpace(r.NewSupply), 10, 64); err != nil {
+		return errors.New("new_supply: " + err.Error())
+	}
+	if r.newDecryptable, err = core.EncryptAeAmount(aeKey, r.newSupply); err != nil {
+		return errors.New("supply_ae_key: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ConfidentialUpdateDecryptableSupplyRequest) ToNewDecryptableSupply() []byte {
+	return r.newDecryptable
+}
+func (r *ConfidentialUpdateDecryptableSupplyRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *ConfidentialUpdateDecryptableSupplyRequest) AuthorityKey() *types.PublicKey {
+	return r.authority
+}
+func (r *ConfidentialUpdateDecryptableSupplyRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+func (r *ConfidentialUpdateDecryptableSupplyRequest) Blockhash() *types.Hash { return r.rbh }
+func (r *ConfidentialUpdateDecryptableSupplyRequest) DurableNonceMintKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ConfidentialUpdateDecryptableSupplyRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ConfidentialUpdateDecryptableSupplyRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ConfidentialUpdateDecryptableSupplyResponse reports the built transaction.
+type ConfidentialUpdateDecryptableSupplyResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint                 string `json:"mint"`
+	Authority            string `json:"authority"`
+	NewDecryptableSupply string `json:"new_decryptable_supply"`
+	Program              string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewConfidentialUpdateDecryptableSupplyResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	newDecryptableSupply []byte,
+	fee uint64,
+) *ConfidentialUpdateDecryptableSupplyResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ConfidentialUpdateDecryptableSupplyResponse{
+		Transaction:          codec.Base64.Encode(raw),
+		Message:              codec.Base64.Encode(message),
+		RecentBlockhash:      tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:          keys,
+		Signers:              signers,
+		NonceAuthority:       nonceAuth,
+		Mint:                 mint.Base58(),
+		Authority:            authority.Base58(),
+		NewDecryptableSupply: codec.Base58.Encode(newDecryptableSupply),
+		Program:              tokenProgram.Base58(),
+		Fee:                  newSystemPayer(feePayer, fee),
 	}
 }
 

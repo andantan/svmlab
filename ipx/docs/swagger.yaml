@@ -311,6 +311,58 @@ definitions:
       health:
         type: string
     type: object
+  misc.ProveConfidentialBurnRequest:
+    properties:
+      ae_key:
+        description: |-
+          AeKey decrypts the source's decryptable available balance and encrypts
+          the new one, base58-encoded raw 16 bytes.
+        example: ""
+        type: string
+      amount:
+        description: |-
+          Amount is the raw base-unit count to burn. It cannot exceed 2^48 - 1 nor
+          the source's available balance.
+        example: "400"
+        type: string
+      mint:
+        description: Mint must carry ConfidentialMintBurn and ConfidentialTransferMint.
+        example: ""
+        type: string
+      source:
+        description: |-
+          Source is the token account burned from, which must hold Mint and carry
+          the ConfidentialTransferAccount extension.
+        example: ""
+        type: string
+      source_elgamal_secret_key:
+        description: |-
+          SourceElgamalSecretKey is the secret key of the source account's own
+          ElGamal public key, base58-encoded raw 32 bytes.
+        example: ""
+        type: string
+    type: object
+  misc.ProveConfidentialBurnResponse:
+    properties:
+      auditor_ciphertext_hi:
+        type: string
+      auditor_ciphertext_lo:
+        type: string
+      auditor_elgamal_pubkey:
+        type: string
+      equality_proof_data:
+        type: string
+      new_decryptable_available_balance:
+        type: string
+      range_proof_data:
+        type: string
+      source_elgamal_pubkey:
+        type: string
+      supply_elgamal_pubkey:
+        type: string
+      validity_proof_data:
+        type: string
+    type: object
   misc.ProveConfidentialEmptyAccountRequest:
     properties:
       available_balance_ciphertext:
@@ -334,6 +386,91 @@ definitions:
       elgamal_pubkey:
         type: string
       zero_ciphertext_proof_data:
+        type: string
+    type: object
+  misc.ProveConfidentialMintRequest:
+    properties:
+      amount:
+        description: Amount is the raw base-unit count to mint. It cannot exceed 2^48
+          - 1.
+        example: "1000"
+        type: string
+      destination:
+        description: |-
+          Destination is the token account credited, which must hold Mint and
+          carry the ConfidentialTransferAccount extension.
+        example: ""
+        type: string
+      mint:
+        description: Mint must carry ConfidentialMintBurn and ConfidentialTransferMint.
+        example: ""
+        type: string
+      supply_ae_key:
+        description: |-
+          SupplyAeKey decrypts the mint's decryptable supply and encrypts the
+          new one, base58-encoded raw 16 bytes.
+        example: ""
+        type: string
+      supply_elgamal_secret_key:
+        description: |-
+          SupplyElgamalSecretKey is the secret key of the mint's supply ElGamal
+          public key, base58-encoded raw 32 bytes.
+        example: ""
+        type: string
+    type: object
+  misc.ProveConfidentialMintResponse:
+    properties:
+      auditor_ciphertext_hi:
+        type: string
+      auditor_ciphertext_lo:
+        type: string
+      auditor_elgamal_pubkey:
+        type: string
+      current_supply:
+        type: string
+      destination_elgamal_pubkey:
+        type: string
+      equality_proof_data:
+        type: string
+      new_decryptable_supply:
+        type: string
+      new_supply:
+        type: string
+      range_proof_data:
+        type: string
+      supply_elgamal_pubkey:
+        type: string
+      validity_proof_data:
+        type: string
+    type: object
+  misc.ProveConfidentialRotateSupplyElGamalPubkeyRequest:
+    properties:
+      mint:
+        description: Mint must carry the ConfidentialMintBurn extension.
+        example: ""
+        type: string
+      new_supply_elgamal_pubkey:
+        description: |-
+          NewSupplyElgamalPubkey is the key the supply moves to, base58-encoded
+          raw 32 bytes (see generate/elgamal-keypair).
+        example: ""
+        type: string
+      supply_elgamal_secret_key:
+        description: |-
+          SupplyElgamalSecretKey is the secret key of the mint's current supply
+          ElGamal public key, base58-encoded raw 32 bytes.
+        example: ""
+        type: string
+    type: object
+  misc.ProveConfidentialRotateSupplyElGamalPubkeyResponse:
+    properties:
+      ciphertext_ciphertext_equality_proof_data:
+        type: string
+      current_supply:
+        type: string
+      current_supply_elgamal_pubkey:
+        type: string
+      new_supply_elgamal_pubkey:
         type: string
     type: object
   misc.ProveConfidentialTransferRequest:
@@ -2505,6 +2642,218 @@ definitions:
       transaction:
         type: string
     type: object
+  v2.ConfidentialApplyPendingBurnRequest:
+    properties:
+      authority:
+        description: |-
+          Authority is the mint's mint authority, or its multisig for a
+          multisig-owned one (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that mint stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the mint, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: Mint must carry the ConfidentialMintBurn extension.
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty,
+          Authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token mint can never hold this
+          extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.ConfidentialApplyPendingBurnResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.ConfidentialBurnRequest:
+    properties:
+      account:
+        description: |-
+          Account is debited (its available balance). It must already carry the
+          ConfidentialTransferAccount extension and hold at least the amount.
+        example: ""
+        type: string
+      auditor_ciphertext_hi:
+        description: |-
+          AuditorCiphertextHi is tool/prove/confidential-burn's own
+          auditor_ciphertext_hi, base58-encoded (64 bytes).
+        example: ""
+        type: string
+      auditor_ciphertext_lo:
+        description: |-
+          AuditorCiphertextLo is tool/prove/confidential-burn's own
+          auditor_ciphertext_lo, base58-encoded (64 bytes).
+        example: ""
+        type: string
+      authority:
+        description: |-
+          Authority is Account's owner, or its multisig for a multisig-owned
+          account (see MultisigSigners) -- not the mint authority.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      ciphertext_validity_context_state_account:
+        description: |-
+          CiphertextValidityContextStateAccount holds the verified
+          BatchedGroupedCiphertext3HandlesValidity proof's context (see
+          context-state/verify/batched-grouped-ciphertext-3-handles-validity).
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      equality_context_state_account:
+        description: |-
+          EqualityContextStateAccount holds the verified
+          CiphertextCommitmentEquality proof's context (see
+          context-state/verify/ciphertext-commitment-equality).
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint must carry ConfidentialBurnBurn and ConfidentialTransferMint, and
+          is what Account holds.
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty,
+          Authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      new_decryptable_available_balance:
+        description: |-
+          NewDecryptableAvailableBalance is tool/prove/confidential-burn's own
+          new_decryptable_available_balance, base58-encoded (36 bytes).
+        example: ""
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      range_proof_context_state_account:
+        description: |-
+          RangeProofContextStateAccount holds the verified BatchedRangeProofU128
+          proof's context (see context-state/verify/batched-range-proof-u128).
+        example: ""
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.ConfidentialBurnResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      ciphertext_validity_context_state_account:
+        type: string
+      equality_context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      range_proof_context_state_account:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
   v2.ConfidentialConfigureAccountWithRegistryRequest:
     properties:
       account:
@@ -2754,6 +3103,234 @@ definitions:
           type: string
         type: array
       skipped_sources:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.ConfidentialMintRequest:
+    properties:
+      account:
+        description: |-
+          Account is credited (its pending balance). It must already carry the
+          ConfidentialTransferAccount extension.
+        example: ""
+        type: string
+      auditor_ciphertext_hi:
+        description: |-
+          AuditorCiphertextHi is tool/prove/confidential-mint's own
+          auditor_ciphertext_hi, base58-encoded (64 bytes).
+        example: ""
+        type: string
+      auditor_ciphertext_lo:
+        description: |-
+          AuditorCiphertextLo is tool/prove/confidential-mint's own
+          auditor_ciphertext_lo, base58-encoded (64 bytes).
+        example: ""
+        type: string
+      authority:
+        description: |-
+          Authority is the mint's mint authority, or its multisig for a
+          multisig-owned one (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      ciphertext_validity_context_state_account:
+        description: |-
+          CiphertextValidityContextStateAccount holds the verified
+          BatchedGroupedCiphertext3HandlesValidity proof's context (see
+          context-state/verify/batched-grouped-ciphertext-3-handles-validity).
+        example: ""
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      equality_context_state_account:
+        description: |-
+          EqualityContextStateAccount holds the verified
+          CiphertextCommitmentEquality proof's context (see
+          context-state/verify/ciphertext-commitment-equality).
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint must carry ConfidentialMintBurn and ConfidentialTransferMint, and
+          is what Account holds.
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty,
+          Authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      new_decryptable_supply:
+        description: |-
+          NewDecryptableSupply is tool/prove/confidential-mint's own field of the
+          same name, base58-encoded (36 bytes).
+        example: ""
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token account can never hold
+          this extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      range_proof_context_state_account:
+        description: |-
+          RangeProofContextStateAccount holds the verified BatchedRangeProofU128
+          proof's context (see context-state/verify/batched-range-proof-u128).
+        example: ""
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.ConfidentialMintResponse:
+    properties:
+      account:
+        type: string
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      ciphertext_validity_context_state_account:
+        type: string
+      equality_context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      range_proof_context_state_account:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
+        type: string
+    type: object
+  v2.ConfidentialRotateSupplyElGamalPubkeyRequest:
+    properties:
+      authority:
+        description: |-
+          Authority is the mint's mint authority, or its multisig for a
+          multisig-owned one (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that mint stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the mint, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      equality_context_state_account:
+        description: |-
+          EqualityContextStateAccount holds the verified
+          CiphertextCiphertextEquality proof's context.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: Mint must carry the ConfidentialMintBurn extension.
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty,
+          Authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      new_supply_elgamal_pubkey:
+        description: |-
+          NewSupplyElgamalPubkey is the key the supply moves to, base58-encoded raw
+          32 bytes -- the same one the prove tool was given.
+        example: ""
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token mint can never hold this
+          extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+    type: object
+  v2.ConfidentialRotateSupplyElGamalPubkeyResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      equality_context_state_account:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      new_supply_elgamal_pubkey:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
         items:
           type: string
         type: array
@@ -3058,6 +3635,103 @@ definitions:
       transaction:
         type: string
       transfer_amount_validity_context_state_account:
+        type: string
+    type: object
+  v2.ConfidentialUpdateDecryptableSupplyRequest:
+    properties:
+      authority:
+        description: |-
+          Authority is the mint's mint authority, or its multisig for a
+          multisig-owned one (see MultisigSigners).
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that mint stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the mint, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: Mint must carry the ConfidentialMintBurn extension.
+        example: ""
+        type: string
+      multisig_signers:
+        description: |-
+          MultisigSigners is empty for a single-signer authority. Non-empty,
+          Authority itself does not sign; the named members do, in its place.
+        items:
+          type: string
+        type: array
+      new_supply:
+        description: |-
+          NewSupply is the confidential supply the decryptable supply should now
+          equal, in raw base units. The program cannot check it against the
+          confidential supply, so it has to be the value the caller knows the
+          supply to be (see the ElGamal decryption of the mint's
+          confidential_supply).
+        example: "600"
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token mint can never hold this
+          extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      supply_ae_key:
+        description: |-
+          SupplyAeKey encrypts NewSupply into the decryptable supply the
+          instruction carries, base58-encoded raw 16 bytes -- the key the mint was
+          initialized with.
+        example: ""
+        type: string
+    type: object
+  v2.ConfidentialUpdateDecryptableSupplyResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      authority:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      new_decryptable_supply:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      transaction:
         type: string
     type: object
   v2.ConfidentialWithdrawRequest:
@@ -7989,6 +8663,94 @@ definitions:
           type: string
         type: array
       token_account:
+        type: string
+      transaction:
+        type: string
+    type: object
+  v2.InitializeConfidentialMintBurnRequest:
+    properties:
+      durable_nonce_account:
+        description: |-
+          DurableNonceAccount may be left empty, in which case the message is
+          built against RecentBlockhash directly and expires with it. Naming one
+          builds the message against the value that account stores instead, so it
+          never expires, and prepends the advance that consumes it; RecentBlockhash
+          is then used only to price the transaction. The authority is not a
+          field: it is read from the account, since it is a fact about it rather
+          than a choice.
+        example: ""
+        type: string
+      fee_payer:
+        description: FeePayer signs and pays the transaction fee.
+        example: EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK
+        type: string
+      mint:
+        description: |-
+          Mint is the account this attaches to. It must already exist (see
+          create-mint) and not yet be initialized -- initialize-mint2 has to
+          run after this, never before.
+        example: ""
+        type: string
+      program:
+        description: |-
+          Program must be Token-2022. A classic Token mint can never hold this
+          extension.
+        example: TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb
+        type: string
+      recent_blockhash:
+        description: |-
+          RecentBlockhash is always required, and there is no server-side fetch
+          behind it: this builds the message against exactly the value given,
+          which expires whenever the runtime says it does. When
+          DurableNonceAccount is also named, this is not what the message is
+          built against — it is only what prices it, since a nonce is never among
+          the cluster's recent blockhashes and pricing against one directly comes
+          back expired.
+        example: ""
+        type: string
+      supply_ae_key:
+        description: |-
+          SupplyAeKey encrypts the initial supply of zero into the decryptable
+          supply the instruction carries, base58-encoded raw 16 bytes -- the same
+          kind of key an account's decryptable balance uses. Keep it: every later
+          mint and burn needs it to keep the decryptable supply in step.
+        example: ""
+        type: string
+      supply_elgamal_pubkey:
+        description: |-
+          SupplyElgamalPubkey is the ElGamal public key the mint's confidential
+          supply is encrypted under, base58-encoded raw 32 bytes (see
+          tool/generate/elgamal-keypair). Its secret key is what later mint and
+          burn proofs are built with, and it can be rotated (see
+          rotate-supply-elgamal-pubkey).
+        example: ""
+        type: string
+    type: object
+  v2.InitializeConfidentialMintBurnResponse:
+    properties:
+      account_keys:
+        items:
+          type: string
+        type: array
+      decryptable_supply:
+        type: string
+      fee:
+        $ref: '#/definitions/v2.SystemPayer'
+      message:
+        type: string
+      mint:
+        type: string
+      nonce_authority:
+        type: string
+      program:
+        type: string
+      recent_blockhash:
+        type: string
+      signers:
+        items:
+          type: string
+        type: array
+      supply_elgamal_pubkey:
         type: string
       transaction:
         type: string
@@ -16087,6 +16849,65 @@ paths:
       summary: Generate a ristretto255 ElGamal key pair
       tags:
       - tool
+  /svm/tool/prove/confidential-burn:
+    post:
+      consumes:
+      - application/json
+      description: 'Builds the commitment-equality, batched grouped 3-handle validity
+        and batched u128 range proofs a single confidential burn requires, in one
+        call, because they are built from the same fresh randomness and only agree
+        with each other if drawn together. The mint and the source account are named
+        rather than their contents passed in: the source''s available balance ciphertext,
+        decryptable balance and ElGamal key, and the mint''s supply and auditor keys
+        are read from chain, since the deployed program compares the proofs against
+        exactly those. source_elgamal_secret_key has to match the source''s ElGamal
+        key and ae_key has to decrypt its decryptable balance, and both are checked,
+        as is the amount against that balance. Each *_proof_data blob goes to the
+        matching zk-elgamal-proof/context-state/verify endpoint, and auditor_ciphertext_lo/hi
+        and new_decryptable_available_balance are what the burn instruction itself
+        carries. The response cannot be rebuilt: a second call draws new randomness
+        and produces proofs that no longer match any context-state account already
+        verified from the first. The source''s available balance must not change between
+        building these proofs and the burn landing.'
+      parameters:
+      - description: Mint, source, source ElGamal secret, AE key, amount
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ProveConfidentialBurnRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.ProveConfidentialBurnResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build the three proofs one confidential Burn needs
+      tags:
+      - tool
   /svm/tool/prove/confidential-empty-account:
     post:
       consumes:
@@ -16128,6 +16949,117 @@ paths:
               type: string
             type: object
       summary: Build the zero-ciphertext proof one confidential EmptyAccount needs
+      tags:
+      - tool
+  /svm/tool/prove/confidential-mint:
+    post:
+      consumes:
+      - application/json
+      description: 'Builds the commitment-equality, batched grouped 3-handle validity
+        and batched u128 range proofs a single confidential mint requires, in one
+        call, because they are built from the same fresh randomness and only agree
+        with each other if drawn together. The mint and the destination account are
+        named rather than their contents passed in: the mint''s current confidential
+        supply and decryptable supply, the supply and auditor ElGamal keys, and the
+        destination''s ElGamal key are read from chain, since the deployed program
+        compares the proofs against exactly those. supply_elgamal_secret_key has to
+        match the mint''s supply key and supply_ae_key has to decrypt its decryptable
+        supply, and both are checked. Each *_proof_data blob goes to the matching
+        zk-elgamal-proof/context-state/verify endpoint, and auditor_ciphertext_lo/hi
+        and new_decryptable_supply are what the mint instruction itself carries. The
+        response cannot be rebuilt: a second call draws new randomness and produces
+        proofs that no longer match any context-state account already verified from
+        the first. The mint''s supply must not change between building these proofs
+        and the mint landing.'
+      parameters:
+      - description: Mint, destination, supply keys, amount
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ProveConfidentialMintRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.ProveConfidentialMintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build the three proofs one confidential Mint needs
+      tags:
+      - tool
+  /svm/tool/prove/confidential-rotate-supply-elgamal-pubkey:
+    post:
+      consumes:
+      - application/json
+      description: Decrypts the mint's confidential supply with the current supply
+        ElGamal secret key, re-encrypts it under new_supply_elgamal_pubkey, and proves
+        the two ciphertexts encrypt the same value. The mint's supply ciphertext and
+        key are read from chain, since the deployed program compares the proof against
+        exactly those, and the given secret is checked against the mint's supply key.
+        ciphertext_ciphertext_equality_proof_data goes to zk-elgamal-proof/context-state/verify/ciphertext-ciphertext-equality.
+        The supply must fit in 32 bits. The response goes stale if a mint or burn
+        changes the supply before the rotation lands, and the mint's pending burn
+        must be zero when it does.
+      parameters:
+      - description: Mint, current supply secret, new supply key
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/misc.ProveConfidentialRotateSupplyElGamalPubkeyRequest'
+      - description: Chain name, e.g. solana
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Chain network, e.g. testnet
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/misc.ProveConfidentialRotateSupplyElGamalPubkeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+        "502":
+          description: Bad Gateway
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Build the proof one RotateSupplyElGamalPubkey needs
       tags:
       - tool
   /svm/tool/prove/confidential-transfer:
@@ -18815,6 +19747,327 @@ paths:
       summary: Fund a new account, sized and owned for a Token multisig
       tags:
       - v2-transaction-token-multisig
+  /svm/v2/transaction/token/extensions/confidential-mint-burn/apply-pending-burn:
+    post:
+      consumes:
+      - application/json
+      description: Subtracts the mint's pending burn -- what confidential burns accumulated
+        -- from its confidential supply and resets the pending burn to zero. Authorized
+        by the mint authority. It does not touch the decryptable supply; update that
+        separately with update-decryptable-supply once the new supply is known. No
+        zero-knowledge proof is needed, and the instruction carries no data beyond
+        its own discriminant. recent_blockhash is always required and is never fetched
+        server-side. Left alone, it also builds the message and expires whenever the
+        runtime says it does. Naming durable_nonce_account builds the message against
+        the value that mint stores instead, so the transaction never expires, and
+        prepends the advance that consumes it; recent_blockhash then only prices the
+        transaction. The response reports nonce_authority in that case, which has
+        to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint, authority, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ConfidentialApplyPendingBurnRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ConfidentialApplyPendingBurnResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Fold the mint's pending burn into its confidential supply
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-mint-burn/burn:
+    post:
+      consumes:
+      - application/json
+      description: 'Burns an encrypted amount from account''s available confidential
+        balance and adds it to the mint''s pending burn -- the amount never appears
+        in plaintext on chain. Authorized by the account''s owner, not the mint authority.
+        The burn only reaches the confidential supply after the mint authority runs
+        apply-pending-burn, and rotating the supply key is refused while a burn is
+        pending. Account must carry ConfidentialTransferAccount and the mint both
+        ConfidentialMintBurn and ConfidentialTransferMint. Builds only the Burn instruction:
+        the three proofs must already be verified into context-state accounts, whose
+        addresses are named here -- build them with tool/prove/confidential-burn,
+        create the accounts with zk-elgamal-proof/context-state/create, and verify
+        each with context-state/verify. new_decryptable_available_balance and the
+        auditor ciphertexts must come from the same tool/prove call as those proofs,
+        and the account''s available balance must not change in between. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, mint, owner, context-state accounts, proof outputs,
+          and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ConfidentialBurnRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ConfidentialBurnResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Burn tokens confidentially from an account
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-mint-burn/initialize:
+    post:
+      consumes:
+      - application/json
+      description: 'Names the ElGamal public key the mint''s confidential supply is
+        encrypted under (supply_elgamal_pubkey, base58-encoded raw 32-byte ElGamal
+        public key, not a Solana address) and starts the supply at zero, with supply_ae_key
+        encrypting that zero into the decryptable supply the instruction carries (keep
+        the key: every later mint and burn needs it). This can only ever run in the
+        narrow window every mint extension shares: after the mint account has been
+        allocated with room for this extension (see extensions/mint/data-size) and
+        before initialize-mint2 locks the extension list forever -- there is no path
+        back into an already-initialized mint. Confidential mint and burn also read
+        the auditor key from ConfidentialTransferMint, so the mint should carry that
+        extension too. No zero-knowledge proof and no signer are needed. recent_blockhash
+        is always required and is never fetched server-side. Left alone, it also builds
+        the message and expires whenever the runtime says it does. Naming durable_nonce_account
+        builds the message against the value that account stores instead, so the transaction
+        never expires, and prepends the advance that consumes it; recent_blockhash
+        then only prices the transaction. The response reports nonce_authority in
+        that case, which has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint, supply ElGamal key, supply AE key, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.InitializeConfidentialMintBurnRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.InitializeConfidentialMintBurnResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Attach the ConfidentialMintBurn extension to a mint
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-mint-burn/mint:
+    post:
+      consumes:
+      - application/json
+      description: 'Mints an encrypted amount into account''s pending confidential
+        balance and adds it to the mint''s confidential supply -- the amount never
+        appears in plaintext on chain. Authorized by the mint''s mint authority. Account
+        must carry ConfidentialTransferAccount and the mint both ConfidentialMintBurn
+        and ConfidentialTransferMint. Builds only the Mint instruction: the three
+        proofs (commitment equality, batched grouped 3-handle validity, batched u128
+        range) must already be verified into context-state accounts, whose addresses
+        are named here -- build them with tool/prove/confidential-mint, create the
+        accounts with zk-elgamal-proof/context-state/create, and verify each with
+        context-state/verify (or verify-from-account with a compute_unit_limit for
+        the range proof). new_decryptable_supply and the auditor ciphertexts must
+        come from the same tool/prove call as those proofs. The minted amount lands
+        in pending balance, so the account still needs apply-pending-balance before
+        it can spend it. recent_blockhash is always required and is never fetched
+        server-side. Left alone, it also builds the message and expires whenever the
+        runtime says it does. Naming durable_nonce_account builds the message against
+        the value that account stores instead, so the transaction never expires, and
+        prepends the advance that consumes it; recent_blockhash then only prices the
+        transaction. The response reports nonce_authority in that case, which has
+        to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Account, mint, authority, context-state accounts, proof outputs,
+          and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ConfidentialMintRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ConfidentialMintResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Mint tokens confidentially into an account and the confidential supply
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-mint-burn/rotate-supply-elgamal-pubkey:
+    post:
+      consumes:
+      - application/json
+      description: 'Replaces the ElGamal key the mint''s confidential supply is encrypted
+        under, and the supply ciphertext itself, with new_supply_elgamal_pubkey. Authorized
+        by the mint authority. The mint''s pending burn must be zero (see apply-pending-burn).
+        Builds only the instruction: the CiphertextCiphertextEquality proof must already
+        be verified into a context-state account, whose address is named here -- build
+        it with tool/prove/confidential-rotate-supply-elgamal-pubkey, create the account
+        with zk-elgamal-proof/context-state/create/ciphertext-ciphertext-equality,
+        and verify it with context-state/verify/ciphertext-ciphertext-equality. The
+        proof is bound to the mint''s supply ciphertext and key as they are when it
+        is built, so a mint or burn in between makes it fail. Later mint and burn
+        proofs must use the new key. recent_blockhash is always required and is never
+        fetched server-side. Left alone, it also builds the message and expires whenever
+        the runtime says it does. Naming durable_nonce_account builds the message
+        against the value that mint stores instead, so the transaction never expires,
+        and prepends the advance that consumes it; recent_blockhash then only prices
+        the transaction. The response reports nonce_authority in that case, which
+        has to sign as well.'
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint, authority, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ConfidentialRotateSupplyElGamalPubkeyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ConfidentialRotateSupplyElGamalPubkeyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Rotate the ElGamal key the mint's confidential supply is encrypted
+        under
+      tags:
+      - v2-transaction-token-extensions
+  /svm/v2/transaction/token/extensions/confidential-mint-burn/update-decryptable-supply:
+    post:
+      consumes:
+      - application/json
+      description: Overwrites the mint's decryptable supply -- the cheap AE cache
+        of its confidential supply -- with new_supply encrypted under supply_ae_key.
+        Authorized by the mint authority. The program cannot check the value against
+        the confidential supply, so it has to be the value the caller knows the supply
+        to be, for example after apply-pending-burn. No zero-knowledge proof is needed.
+        recent_blockhash is always required and is never fetched server-side. Left
+        alone, it also builds the message and expires whenever the runtime says it
+        does. Naming durable_nonce_account builds the message against the value that
+        mint stores instead, so the transaction never expires, and prepends the advance
+        that consumes it; recent_blockhash then only prices the transaction. The response
+        reports nonce_authority in that case, which has to sign as well.
+      parameters:
+      - description: Cluster name
+        in: header
+        name: X-Chain-Name
+        required: true
+        type: string
+      - description: Cluster network
+        in: header
+        name: X-Chain-Network
+        required: true
+        type: string
+      - description: Mint, authority, and program
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/v2.ConfidentialUpdateDecryptableSupplyRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/v2.ConfidentialUpdateDecryptableSupplyResponse'
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Overwrite the mint's decryptable supply
+      tags:
+      - v2-transaction-token-extensions
   /svm/v2/transaction/token/extensions/confidential-transfer-account/apply-pending-balance:
     post:
       consumes:

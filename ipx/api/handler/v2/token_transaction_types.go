@@ -14833,6 +14833,182 @@ func sourceList(keys []*types.PublicKey) []string {
 	return out
 }
 
+// ConfidentialConfigureAccountWithRegistryRequest sets a token account up for
+// confidential transfers using the ElGamal public key in its owner's registry
+// (see elgamal-registry/create) instead of a PubkeyValidity proof. No
+// signature from the account's owner is needed -- the program only checks that
+// the registry's owner is the account's owner -- so anyone can pay for it.
+// The registry account is not a field: it is the PDA derived from the token
+// account's owner, read from the account.
+//
+// The account starts with an all-zero decryptable balance and the default
+// pending-credit limit. An all-zero AE ciphertext is not a valid encryption
+// of zero, so the owner's first apply-pending-balance is what makes the
+// decryptable balance real.
+type ConfidentialConfigureAccountWithRegistryRequest struct {
+	// Account must be a Token-2022 token account of a mint that carries the
+	// ConfidentialTransferMint extension, and must not already carry
+	// ConfidentialTransferAccount.
+	Account string `json:"account" example:""`
+
+	// RentPayer is optional. Named, it signs and lets the program resize Account
+	// itself to fit the confidential extension (and the confidential fee
+	// extension on a fee mint), paying any rent shortfall. Left empty, Account
+	// must already have room for them (see reallocate).
+	RentPayer string `json:"rent_payer" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account        *types.PublicKey
+	rentPayer      *types.PublicKey
+	feePayer       *types.PublicKey
+	rbh            *types.Hash
+	dna            *types.PublicKey
+	tokenProgramID *types.PublicKey
+}
+
+func (r *ConfidentialConfigureAccountWithRegistryRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if p := strings.TrimSpace(r.RentPayer); p != "" {
+		if r.rentPayer, err = types.NewPublicKeyFromBase58(p); err != nil {
+			return errors.New("rent_payer: " + err.Error())
+		}
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ConfidentialConfigureAccountWithRegistryRequest) AccountKey() *types.PublicKey {
+	return r.account
+}
+func (r *ConfidentialConfigureAccountWithRegistryRequest) RentPayerKey() *types.PublicKey {
+	return r.rentPayer
+}
+func (r *ConfidentialConfigureAccountWithRegistryRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+func (r *ConfidentialConfigureAccountWithRegistryRequest) Blockhash() *types.Hash { return r.rbh }
+func (r *ConfidentialConfigureAccountWithRegistryRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ConfidentialConfigureAccountWithRegistryRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// ConfidentialConfigureAccountWithRegistryResponse reports the built transaction.
+type ConfidentialConfigureAccountWithRegistryResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account         string `json:"account"`
+	Mint            string `json:"mint"`
+	RegistryAccount string `json:"registry_account"`
+	RentPayer       string `json:"rent_payer,omitempty"`
+	Program         string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewConfidentialConfigureAccountWithRegistryResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, mint, registry, payer, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ConfidentialConfigureAccountWithRegistryResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	payerStr := ""
+	if !payer.IsNil() {
+		payerStr = payer.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ConfidentialConfigureAccountWithRegistryResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Account:         account.Base58(),
+		Mint:            mint.Base58(),
+		RegistryAccount: registry.Base58(),
+		RentPayer:       payerStr,
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
 // InitializeConfidentialTransferFeeConfigRequest attaches the
 // ConfidentialTransferFeeConfig extension to Mint, naming who may later
 // change it (Authority) and the ElGamal public key withheld confidential

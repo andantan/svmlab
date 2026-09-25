@@ -76,6 +76,13 @@ const (
 	// then verified from there, instead of being carried in the verify
 	// instruction's own data.
 	RecordProgramAddress = "recr1L3PCGKLbckBqMNcJhuuyU1zgo8nBhfLVsJNwr5"
+
+	// ElGamalRegistryProgramAddress is the ElGamal registry program: one PDA
+	// per wallet holding that wallet's ElGamal public key, so a token
+	// account of that wallet can be set up for confidential transfers
+	// (ConfidentialTransfer ConfigureAccountWithRegistry) without a
+	// pubkey-validity proof or the owner's signature each time.
+	ElGamalRegistryProgramAddress = "regVYJW7tcT8zipN5YiBvHsvR5jXW1uLFxaHSbugABg"
 )
 
 // The same addresses decoded once at startup.
@@ -95,4 +102,5 @@ var (
 	VoteProgramID            = types.MustPublicKeyFromBase58(VoteProgramAddress)
 	ZkElgamalProofProgramID  = types.MustPublicKeyFromBase58(ZkElgamalProofProgramAddress)
 	RecordProgramID          = types.MustPublicKeyFromBase58(RecordProgramAddress)
+	ElGamalRegistryProgramID = types.MustPublicKeyFromBase58(ElGamalRegistryProgramAddress)
 )

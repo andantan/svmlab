@@ -1848,3 +1848,51 @@ func (t *token) ConfidentialWithdrawWithheldTokensFromAccounts(mint, destination
 
 	return types.NewInstruction(t.id, accounts, data), nil
 }
+
+// ConfidentialConfigureAccountWithRegistry builds a ConfidentialTransfer
+// extension's ConfigureAccountWithRegistry instruction -- sub-instruction 14,
+// the ConfigureAccount that takes the ElGamal public key from the owner's
+// registry account instead of a PubkeyValidity proof, and needs no
+// signature: the program only checks that the registry's owner is the token
+// account's owner, so anyone can pay for it.
+//
+// It carries no data. The account starts with an all-zero decryptable
+// balance and the default pending-credit limit, neither of which is
+// supplied here -- an all-zero AE ciphertext is not a valid encryption of
+// zero, so the owner's first apply-pending-balance is what makes the
+// decryptable balance real.
+//
+// Confirmed against the interface crate's own configure_account_with_registry
+// and process_configure_account_with_registry: accounts are [token
+// account(writable), mint(readonly), registry(readonly)] plus, when payer is
+// given, [payer(signer, writable), system program(readonly)], which lets the
+// program resize the account itself (including room for
+// ConfidentialTransferFeeAmount on a fee mint).
+func (t *token) ConfidentialConfigureAccountWithRegistry(account, mint, registry, payer *types.PublicKey) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("token configure account with registry: account is required")
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token configure account with registry: mint is required")
+	}
+	if registry.IsNil() {
+		return nil, fmt.Errorf("token configure account with registry: registry account is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionConfidentialTransferExtension)
+	data = codec.Binary.AppendU8(data, ConfidentialTransferInstructionConfigureAccountWithRegistry)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewReadonlyAccount(mint),
+		types.NewReadonlyAccount(registry),
+	)
+	if !payer.IsNil() {
+		accounts = append(accounts,
+			types.NewWritableSignerAccount(payer),
+			types.NewReadonlyAccount(SystemProgramID),
+		)
+	}
+
+	return types.NewInstruction(t.id, accounts, data), nil
+}

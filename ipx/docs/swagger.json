@@ -3180,6 +3180,110 @@
                 }
             }
         },
+        "/svm/v2/transaction/elgamal-registry/create": {
+            "post": {
+                "description": "ElGamal registry CreateRegistry: creates the wallet's registry account -- a 64-byte PDA of the registry program with seeds [\\\"elgamal-registry\\\", wallet], created by the program itself -- and records the ElGamal public key that a PubkeyValidity proof certifies. The proof must already be verified into a context-state account (see tool/prove/pubkey-validity and zk-elgamal-proof/context-state/{create,verify}/pubkey-validity). The wallet signs, and one wallet has exactly one registry. With it, any of the wallet's token accounts can be set up for confidential transfers without a proof or the owner's signature (see confidential-transfer-account/configure-account-with-registry), and they all share this one ElGamal key. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-elgamal-registry"
+                ],
+                "summary": "Create a wallet's ElGamal registry",
+                "parameters": [
+                    {
+                        "description": "Registry request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ElGamalRegistryCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ElGamalRegistryCreateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/elgamal-registry/update": {
+            "post": {
+                "description": "ElGamal registry UpdateRegistry: replaces the ElGamal public key in the wallet's existing registry account with the one a verified PubkeyValidity proof certifies. Token accounts already configured keep the key they were configured with; only later configure-account-with-registry calls see the new one. The wallet signs. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-elgamal-registry"
+                ],
+                "summary": "Replace the ElGamal public key in a wallet's registry",
+                "parameters": [
+                    {
+                        "description": "Registry request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ElGamalRegistryUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ElGamalRegistryUpdateResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    },
+                    "502": {
+                        "description": "Bad Gateway",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/record/close": {
             "post": {
                 "description": "SPL Record CloseAccount: drains record_account's lamports into receiver, which removes the account once the transaction ends. authority signs. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -5587,6 +5691,63 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.ConfigureAccountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-account/configure-account-with-registry": {
+            "post": {
+                "description": "ConfigureAccountWithRegistry: attaches ConfidentialTransferAccount to account using the ElGamal public key in its owner's registry (see elgamal-registry/create) instead of a PubkeyValidity proof, so no context-state account is needed. No signature from the account's owner is required -- the program only checks that the registry's owner is the account's owner -- so anyone can pay for it. The registry is found from the account's owner; it has to exist. Naming rent_payer lets the program resize the account itself (room for the confidential fee extension too, on a fee mint) and pay any rent shortfall, so the separate reallocate step is not needed; rent_payer signs. Without rent_payer the account must already have room. The account starts with an all-zero decryptable balance and the default pending-credit limit; an all-zero AE ciphertext is not a valid encryption of zero, so the owner's first apply-pending-balance is what makes the decryptable balance real. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Set up a token account for confidential transfers using the owner's ElGamal registry",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Account, optional payer, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialConfigureAccountWithRegistryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.ConfidentialConfigureAccountWithRegistryResponse"
                         }
                     },
                     "400": {
@@ -14085,6 +14246,88 @@
                 }
             }
         },
+        "v2.ConfidentialConfigureAccountWithRegistryRequest": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "description": "Account must be a Token-2022 token account of a mint that carries the\nConfidentialTransferMint extension, and must not already carry\nConfidentialTransferAccount.",
+                    "type": "string",
+                    "example": ""
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token account can never hold\nthis extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "rent_payer": {
+                    "description": "RentPayer is optional. Named, it signs and lets the program resize Account\nitself to fit the confidential extension (and the confidential fee\nextension on a fee mint), paying any rent shortfall. Left empty, Account\nmust already have room for them (see reallocate).",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.ConfidentialConfigureAccountWithRegistryResponse": {
+            "type": "object",
+            "properties": {
+                "account": {
+                    "type": "string"
+                },
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "registry_account": {
+                    "type": "string"
+                },
+                "rent_payer": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.ConfidentialEmptyAccountRequest": {
             "type": "object",
             "properties": {
@@ -18685,6 +18928,153 @@
                     }
                 },
                 "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ElGamalRegistryCreateRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "pubkey_validity_context_state_account": {
+                    "description": "PubkeyValidityContextStateAccount holds the verified PubkeyValidity\nproof for the ElGamal public key being registered (see\ntool/prove/pubkey-validity and\nzk-elgamal-proof/context-state/{create,verify}/pubkey-validity).",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "rent_payer": {
+                    "description": "RentPayer funds the registry account's rent-exempt minimum. The\nregistry program does not fund the account it creates -- it only\nallocates and assigns it, and refuses to if the address does not\nalready hold enough lamports -- so this transaction first transfers\nthe shortfall from RentPayer to the registry address. It may be left\nempty only when the address is already funded. It signs when named\nand is not the wallet's business: anyone can fund the address.",
+                    "type": "string",
+                    "example": ""
+                },
+                "wallet": {
+                    "description": "Wallet owns the registry and signs. The registry account itself is not\na field: it is the PDA derived from the wallet (seeds\n[\"elgamal-registry\", wallet]) and the response reports it.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.ElGamalRegistryCreateResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "pubkey_validity_context_state_account": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "registry_account": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "wallet": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.ElGamalRegistryUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "pubkey_validity_context_state_account": {
+                    "description": "PubkeyValidityContextStateAccount holds the verified PubkeyValidity\nproof for the ElGamal public key being registered (see\ntool/prove/pubkey-validity and\nzk-elgamal-proof/context-state/{create,verify}/pubkey-validity).",
+                    "type": "string",
+                    "example": ""
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                },
+                "wallet": {
+                    "description": "Wallet owns the registry and signs. The registry account itself is not\na field: it is the PDA derived from the wallet (seeds\n[\"elgamal-registry\", wallet]) and the response reports it.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                }
+            }
+        },
+        "v2.ElGamalRegistryUpdateResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "pubkey_validity_context_state_account": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "registry_account": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                },
+                "wallet": {
                     "type": "string"
                 }
             }

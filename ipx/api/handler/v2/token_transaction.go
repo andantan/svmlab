@@ -15762,6 +15762,219 @@ func (h *TokenTransactionHandler) ConfidentialEmptyAccount(w http.ResponseWriter
 	))
 }
 
+// ConfidentialConfigureAccountWithRegistry godoc
+// @Summary      Set up a token account for confidential transfers using the owner's ElGamal registry
+// @Description  ConfigureAccountWithRegistry: attaches ConfidentialTransferAccount to account using the ElGamal public key in its owner's registry (see elgamal-registry/create) instead of a PubkeyValidity proof, so no context-state account is needed. No signature from the account's owner is required -- the program only checks that the registry's owner is the account's owner -- so anyone can pay for it. The registry is found from the account's owner; it has to exist. Naming rent_payer lets the program resize the account itself (room for the confidential fee extension too, on a fee mint) and pay any rent shortfall, so the separate reallocate step is not needed; rent_payer signs. Without rent_payer the account must already have room. The account starts with an all-zero decryptable balance and the default pending-credit limit; an all-zero AE ciphertext is not a valid encryption of zero, so the owner's first apply-pending-balance is what makes the decryptable balance real. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.
+// @Tags         v2-transaction-token-extensions
+// @Accept       json
+// @Produce      json
+// @Param        X-Chain-Name     header    string                    true  "Cluster name"
+// @Param        X-Chain-Network  header    string                    true  "Cluster network"
+// @Param        body             body      ConfidentialConfigureAccountWithRegistryRequest    true  "Account, optional payer, and program"
+// @Success      200              {object}  ConfidentialConfigureAccountWithRegistryResponse
+// @Failure      400              {object}  map[string]string
+// @Router       /svm/v2/transaction/token/extensions/confidential-transfer-account/configure-account-with-registry [post]
+func (h *TokenTransactionHandler) ConfidentialConfigureAccountWithRegistry(w http.ResponseWriter, r *http.Request) {
+	req := new(ConfidentialConfigureAccountWithRegistryRequest)
+	if err := json.NewDecoder(r.Body).Decode(req); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("invalid request body: %s", err))
+		return
+	}
+	if err := req.ValidateRequest(); err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	chain, err := rpc.ChainFromContext(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	tokenProgram, err := core.TokenProgram(req.TokenProgramID())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	minRent, err := chain.Cli.MinimumBalanceForRentExemptionSystem(r.Context())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read rent-exemption minimum: %s", err))
+		return
+	}
+
+	lookups := []*types.PublicKey{
+		req.AccountKey(),
+		req.FeePayerKey(),
+	}
+	if !req.RentPayerKey().IsNil() {
+		lookups = append(lookups, req.RentPayerKey())
+	}
+	if !req.DurableNonceAccountKey().IsNil() {
+		lookups = append(lookups, req.DurableNonceAccountKey())
+	}
+	accounts, err := chain.Cli.GetMultipleAccounts(r.Context(), lookups, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read accounts: %s", err))
+		return
+	}
+
+	accountInfo := accounts[req.AccountKey().Base58()]
+	if !accountInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s does not exist", req.AccountKey()))
+		return
+	}
+	if accountInfo.Owner != req.TokenProgramID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s is not owned by %s", req.AccountKey(), req.TokenProgramID()))
+		return
+	}
+	accountData, err := accountInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read account data: %s", err))
+		return
+	}
+	tokenAccount, err := core.DecodeTokenAccount(req.TokenProgramID(), accountData)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s", err))
+		return
+	}
+	if core.FindExtensionData(accountData, core.ExtensionTypeConfidentialTransferAccount) != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("account: %s already carries ConfidentialTransferAccount", req.AccountKey()))
+		return
+	}
+	if !req.RentPayerKey().IsNil() {
+		if info := accounts[req.RentPayerKey().Base58()]; !info.Exists() {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("rent_payer: %s does not exist", req.RentPayerKey()))
+			return
+		}
+	}
+
+	registry, _, err := core.ElGamalRegistry.Address(tokenAccount.Owner)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	extra, err := chain.Cli.GetMultipleAccounts(r.Context(), []*types.PublicKey{registry, tokenAccount.Mint}, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read registry and mint: %s", err))
+		return
+	}
+	regInfo := extra[registry.Base58()]
+	if !regInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("the account's owner %s has no ElGamal registry at %s -- create one first (elgamal-registry/create)", tokenAccount.Owner, registry))
+		return
+	}
+	if regInfo.Owner != core.ElGamalRegistry.ID().Base58() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("registry: %s is not owned by %s", registry, core.ElGamalRegistry.ID()))
+		return
+	}
+	mintInfo := extra[tokenAccount.Mint.Base58()]
+	if !mintInfo.Exists() {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not exist", tokenAccount.Mint))
+		return
+	}
+	mintData, err := mintInfo.Bytes()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to read mint data: %s", err))
+		return
+	}
+	if core.FindExtensionData(mintData, core.ExtensionTypeConfidentialTransferMint) == nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("mint: %s does not carry the ConfidentialTransferMint extension", tokenAccount.Mint))
+		return
+	}
+
+	instruction, err := tokenProgram.ConfidentialConfigureAccountWithRegistry(req.AccountKey(), tokenAccount.Mint, registry, req.RentPayerKey())
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	instructions := types.NewInstructions(instruction)
+
+	var (
+		message        *types.Message
+		priced         *types.Message
+		nonceAuthority *types.PublicKey
+	)
+	if req.DurableNonceAccountKey().IsNil() {
+		if message, err = types.NewMessage(req.FeePayerKey(), req.Blockhash(), instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		priced = message
+	} else {
+		nonce, err := accounts[req.DurableNonceAccountKey().Base58()].NonceAccount()
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("durable_nonce_account: %s %s", req.DurableNonceAccountKey(), err))
+			return
+		}
+
+		advance, err := core.System.AdvanceNonceAccount(req.DurableNonceAccountKey(), nonce.Authority)
+		if err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if message, err = types.NewNonceMessage(req.FeePayerKey(), nonce.Nonce, advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		if priced, err = types.NewNonceMessage(req.FeePayerKey(), req.Blockhash(), advance, instructions); err != nil {
+			handler.WriteError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+
+		nonceAuthority = nonce.Authority
+	}
+
+	fee, ok, err := chain.Cli.FeeForMessage(r.Context(), priced, rpc.CommitmentConfirmed)
+	if err != nil {
+		handler.WriteError(w, http.StatusBadGateway, fmt.Sprintf("failed to price message: %s", err))
+		return
+	}
+	if !ok {
+		handler.WriteError(w, http.StatusBadRequest, "recent_blockhash has expired")
+		return
+	}
+
+	var feePayerBalance uint64
+	if info := accounts[req.FeePayerKey().Base58()]; info.Exists() {
+		feePayerBalance = info.Lamports
+	}
+	if feePayerBalance < fee {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s balance %d does not cover %d", req.FeePayerKey(), feePayerBalance, fee))
+		return
+	}
+	if !types.RentExemptAfter(feePayerBalance, fee, minRent) {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("fee_payer: %s would leave %d lamports, below the %d lamport rent-exemption minimum", req.FeePayerKey(), feePayerBalance-fee, minRent))
+		return
+	}
+
+	tx, err := types.NewTransaction(message)
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	txRaw, err := tx.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusBadRequest, fmt.Sprintf("failed to encode tx: %s", err))
+		return
+	}
+
+	messageBytes, err := message.Serialize()
+	if err != nil {
+		handler.WriteError(w, http.StatusInternalServerError, fmt.Sprintf("failed to encode message: %s", err))
+		return
+	}
+
+	// nonceAuthority is nil without a nonce, and IsNil is nil safe.
+	handler.WriteOK(w, NewConfidentialConfigureAccountWithRegistryResponse(
+		tx, txRaw, messageBytes,
+		req.FeePayerKey(), req.AccountKey(), tokenAccount.Mint, registry, req.RentPayerKey(), req.TokenProgramID(), nonceAuthority,
+		fee,
+	))
+}
+
 // ConfidentialWithdrawWithheldTokensFromMint godoc
 // @Summary      Withdraw the mint's withheld confidential fees into a token account
 // @Description  Moves the confidential fees gathered on the mint (see harvest-withheld-tokens-to-mint) into destination's available balance and zeroes the mint's withheld amount, without revealing it. Authorized by the TransferFeeConfig's withdraw withheld authority. The destination may be any token account of this mint that carries ConfidentialTransferAccount, including the sender's own. Builds only the instruction: the CiphertextCiphertextEquality proof must already be verified into a context-state account, whose address is named here -- build the proof and new_decryptable_available_balance with tool/prove/confidential-withdraw-withheld-from-mint, create the account with zk-elgamal-proof/context-state/create/ciphertext-ciphertext-equality, and verify it with context-state/verify/ciphertext-ciphertext-equality. The proof is bound to the mint's withheld ciphertext and to the destination's ElGamal key as they are when it is built, so harvesting more fees or reconfiguring the destination in between makes it fail. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.

@@ -272,6 +272,7 @@ func run() error {
 				r.Post("/transfer-with-fee", tk.ConfidentialTransferWithFee)
 				r.Post("/withdraw", tk.ConfidentialWithdraw)
 				r.Post("/empty-account", tk.ConfidentialEmptyAccount)
+				r.Post("/configure-account-with-registry", tk.ConfidentialConfigureAccountWithRegistry)
 				r.Post("/enable-confidential-credits", tk.EnableConfidentialCredits)
 				r.Post("/disable-confidential-credits", tk.DisableConfidentialCredits)
 				r.Post("/enable-non-confidential-credits", tk.EnableNonConfidentialCredits)
@@ -295,6 +296,12 @@ func run() error {
 			r.Post("/set-authority", rec.RecordSetAuthority)
 			r.Post("/close", rec.RecordClose)
 			r.Post("/reallocate", rec.RecordReallocate)
+		})
+
+		reg := v2.NewElGamalRegistryTransactionHandler(cfg)
+		r.Route("/transaction/elgamal-registry", func(r chi.Router) {
+			r.Post("/create", reg.ElGamalRegistryCreate)
+			r.Post("/update", reg.ElGamalRegistryUpdate)
 		})
 
 		zk := v2.NewZkElgamalProofTransactionHandler(cfg)

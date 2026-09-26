@@ -143,6 +143,7 @@ var extensionTypeDataLen = map[ExtensionType]int{
 	ExtensionTypeScaledUiAmount:                56,  // mint
 	ExtensionTypePausable:                      33,  // mint
 	ExtensionTypePausableAccount:               0,   // account
+	ExtensionTypePermissionedBurn:              32,  // mint
 }
 
 // mintOnlyExtensionTypes is which of the keys in extensionTypeDataLen may
@@ -169,6 +170,7 @@ var mintOnlyExtensionTypes = map[ExtensionType]bool{
 	ExtensionTypeConfidentialMintBurn:          true,
 	ExtensionTypeScaledUiAmount:                true,
 	ExtensionTypePausable:                      true,
+	ExtensionTypePermissionedBurn:              true,
 }
 
 // CalculateMintExtensionsLen returns the total byte size a mint needs to
@@ -2641,4 +2643,120 @@ func (t *token) UpdateGroupMemberPointer(mint, authority *types.PublicKey, signe
 	accounts := types.NewAccounts(types.NewWritableAccount(mint))
 
 	return types.NewInstruction(t.id, appendAuthority(accounts, authority, signers), data), nil
+}
+
+// InitializePermissionedBurn attaches the PermissionedBurn extension to mint,
+// naming the authority whose signature every burn of the mint has to carry in
+// addition to the token account owner's. TokenInstruction PermissionedBurnExtension
+// (46), sub 0; data is the authority address (32 bytes, plain); accounts are
+// [mint(writable)]. Once the authority is set, the plain Burn and BurnChecked
+// (and the plain confidential burn) are refused for the mint; the burns of this
+// extension are used instead. Like every mint extension, this can only run
+// before initialize-mint2.
+func (t *token) InitializePermissionedBurn(mint, authority *types.PublicKey) (*types.Instruction, error) {
+	if mint.IsNil() {
+		return nil, fmt.Errorf("token initialize permissioned burn: mint is required")
+	}
+	if authority.IsNil() {
+		return nil, fmt.Errorf("token initialize permissioned burn: authority is required")
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionPermissionedBurnExtension)
+	data = codec.Binary.AppendU8(data, PermissionedBurnInstructionInitialize)
+	data = codec.Binary.AppendBytes(data, authority.Bytes())
+
+	return types.NewInstruction(t.id, types.NewAccounts(types.NewWritableAccount(mint)), data), nil
+}
+
+// PermissionedBurn destroys amount from account like Burn, but also needs the
+// mint's permissioned burn authority to sign. Sub 1 under opcode 46; data is the
+// amount (u64); accounts are [account(writable), mint(writable), permissioned
+// burn authority(signer), owner or delegate (+multisig signers)].
+func (t *token) PermissionedBurn(account, mint, permissionedAuthority, owner *types.PublicKey, signers []*types.PublicKey, amount uint64) (*types.Instruction, error) {
+	return t.permissionedBurn("token permissioned burn", PermissionedBurnInstructionBurn, account, mint, permissionedAuthority, owner, signers, amount, nil)
+}
+
+// PermissionedBurnChecked is PermissionedBurn with the mint's decimals named
+// and verified. Sub 2 under opcode 46; data is the amount (u64) then the
+// decimals (u8); accounts as PermissionedBurn.
+func (t *token) PermissionedBurnChecked(account, mint, permissionedAuthority, owner *types.PublicKey, signers []*types.PublicKey, amount uint64, decimals uint8) (*types.Instruction, error) {
+	return t.permissionedBurn("token permissioned burn checked", PermissionedBurnInstructionBurnChecked, account, mint, permissionedAuthority, owner, signers, amount, &decimals)
+}
+
+func (t *token) permissionedBurn(name string, sub uint8, account, mint, permissionedAuthority, owner *types.PublicKey, signers []*types.PublicKey, amount uint64, decimals *uint8) (*types.Instruction, error) {
+	if account.IsNil() {
+		return nil, fmt.Errorf("%s: account is required", name)
+	}
+	if mint.IsNil() {
+		return nil, fmt.Errorf("%s: mint is required", name)
+	}
+	if permissionedAuthority.IsNil() {
+		return nil, fmt.Errorf("%s: permissioned burn authority is required", name)
+	}
+	if err := validateAuthority(name, owner, signers); err != nil {
+		return nil, err
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionPermissionedBurnExtension)
+	data = codec.Binary.AppendU8(data, sub)
+	data = codec.Binary.AppendU64(data, amount)
+	if decimals != nil {
+		data = codec.Binary.AppendU8(data, *decimals)
+	}
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewWritableAccount(mint),
+		types.NewReadonlySignerAccount(permissionedAuthority),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
+}
+
+// ConfidentialPermissionedBurn is the confidential burn of a mint that carries
+// PermissionedBurn: the same data and proofs as ConfidentialBurn, sent under
+// opcode 46 sub 3 with the permissioned burn authority's signature added.
+// Accounts are [token account(writable), mint(writable), equality ctx,
+// validity ctx, range ctx, permissioned burn authority(signer), owner (+multisig
+// signers)].
+func (t *token) ConfidentialPermissionedBurn(account, mint, equalityContext, validityContext, rangeContext, permissionedAuthority, owner *types.PublicKey, signers []*types.PublicKey, newDecryptableAvailableBalance, auditorCiphertextLo, auditorCiphertextHi []byte) (*types.Instruction, error) {
+	const name = "token confidential permissioned burn"
+	if account.IsNil() || mint.IsNil() {
+		return nil, fmt.Errorf("%s: account and mint are required", name)
+	}
+	if equalityContext.IsNil() || validityContext.IsNil() || rangeContext.IsNil() {
+		return nil, fmt.Errorf("%s: all three proof context state accounts are required", name)
+	}
+	if permissionedAuthority.IsNil() {
+		return nil, fmt.Errorf("%s: permissioned burn authority is required", name)
+	}
+	if err := validateAuthority(name, owner, signers); err != nil {
+		return nil, err
+	}
+	if len(newDecryptableAvailableBalance) != AeCiphertextLen {
+		return nil, fmt.Errorf("%s: new decryptable available balance is %d bytes, expected %d", name, len(newDecryptableAvailableBalance), AeCiphertextLen)
+	}
+	if len(auditorCiphertextLo) != 64 || len(auditorCiphertextHi) != 64 {
+		return nil, fmt.Errorf("%s: auditor ciphertexts are %d/%d bytes, expected 64 each", name, len(auditorCiphertextLo), len(auditorCiphertextHi))
+	}
+
+	data := codec.Binary.AppendU8(nil, TokenInstructionPermissionedBurnExtension)
+	data = codec.Binary.AppendU8(data, PermissionedBurnInstructionConfidentialBurn)
+	data = codec.Binary.AppendBytes(data, newDecryptableAvailableBalance)
+	data = codec.Binary.AppendBytes(data, auditorCiphertextLo)
+	data = codec.Binary.AppendBytes(data, auditorCiphertextHi)
+	data = codec.Binary.AppendU8(data, 0)
+	data = codec.Binary.AppendU8(data, 0)
+	data = codec.Binary.AppendU8(data, 0)
+
+	accounts := types.NewAccounts(
+		types.NewWritableAccount(account),
+		types.NewWritableAccount(mint),
+		types.NewReadonlyAccount(equalityContext),
+		types.NewReadonlyAccount(validityContext),
+		types.NewReadonlyAccount(rangeContext),
+		types.NewReadonlySignerAccount(permissionedAuthority),
+	)
+
+	return types.NewInstruction(t.id, appendAuthority(accounts, owner, signers), data), nil
 }

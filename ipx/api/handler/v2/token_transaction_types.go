@@ -24762,3 +24762,1032 @@ func NewSetPausableAuthorityResponse(
 		Fee:             newSystemPayer(feePayer, fee),
 	}
 }
+
+// PermissionedBurnRequest destroys supply held by a token account of a mint that carries
+// PermissionedBurn, which needs the mint's permissioned burn authority to sign in
+// addition to the token account's owner or delegate. The plain burn endpoints are
+// refused by such a mint.
+type PermissionedBurnRequest struct {
+	// TokenAccount is debited and never credited elsewhere: burning destroys
+	// supply rather than moving it. It must already exist and hold Mint.
+	TokenAccount string `json:"token_account" example:""`
+
+	// Mint is what TokenAccount must hold. It must carry PermissionedBurn.
+	Mint string `json:"mint" example:""`
+
+	// PermissionedBurnAuthority is the authority the mint's PermissionedBurn
+	// extension names. It has to sign every burn of the mint, in addition to
+	// TokenAccountAuthority.
+	PermissionedBurnAuthority string `json:"permissioned_burn_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// TokenAccountAuthority is TokenAccount's owner, or its delegate for no
+	// more than what was delegated.
+	TokenAccountAuthority string `json:"token_account_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Amount is the raw base-unit count to destroy, not a UI decimal string.
+	Amount string `json:"amount" example:"1000"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022: only it has extensions.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount          *types.PublicKey
+	mint                  *types.PublicKey
+	permissionedAuthority *types.PublicKey
+	tokenAccountAuthority *types.PublicKey
+	feePayer              *types.PublicKey
+	rbh                   *types.Hash
+	dna                   *types.PublicKey
+	tokenProgramID        *types.PublicKey
+	multisigSigners       []*types.PublicKey
+	amount                uint64
+}
+
+func (r *PermissionedBurnRequest) ValidateRequest() error {
+	var err error
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.permissionedAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.PermissionedBurnAuthority)); err != nil {
+		return errors.New("permissioned_burn_authority: " + err.Error())
+	}
+	if r.tokenAccountAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccountAuthority)); err != nil {
+		return errors.New("token_account_authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: must be a decimal base-unit count")
+	}
+	if r.amount == 0 {
+		return errors.New("amount: must be greater than zero")
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *PermissionedBurnRequest) TokenAccountKey() *types.PublicKey { return r.tokenAccount }
+func (r *PermissionedBurnRequest) PermissionedAuthorityKey() *types.PublicKey {
+	return r.permissionedAuthority
+}
+func (r *PermissionedBurnRequest) MintKey() *types.PublicKey { return r.mint }
+func (r *PermissionedBurnRequest) TokenAccountAuthorityKey() *types.PublicKey {
+	return r.tokenAccountAuthority
+}
+func (r *PermissionedBurnRequest) FeePayerKey() *types.PublicKey            { return r.feePayer }
+func (r *PermissionedBurnRequest) Blockhash() *types.Hash                   { return r.rbh }
+func (r *PermissionedBurnRequest) DurableNonceAccountKey() *types.PublicKey { return r.dna }
+func (r *PermissionedBurnRequest) TokenProgramID() *types.PublicKey         { return r.tokenProgramID }
+func (r *PermissionedBurnRequest) ToAmount() uint64                         { return r.amount }
+func (r *PermissionedBurnRequest) ToMultisigSigners() []*types.PublicKey    { return r.multisigSigners }
+
+// PermissionedBurnResponse mirrors BurnCheckedResponse, minus decimals.
+type PermissionedBurnResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	TokenAccount          string      `json:"token_account"`
+	Mint                  string      `json:"mint"`
+	TokenAccountAuthority string      `json:"token_account_authority"`
+	Program               string      `json:"program"`
+	Amount                string      `json:"amount"`
+	Fee                   SystemPayer `json:"fee"`
+}
+
+func NewPermissionedBurnResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, tokenAccount, mint, tokenAccountAuthority, tokenProgram, nonceAuthority *types.PublicKey,
+	amount, fee uint64,
+) *PermissionedBurnResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &PermissionedBurnResponse{
+		Transaction:           codec.Base64.Encode(raw),
+		Message:               codec.Base64.Encode(message),
+		RecentBlockhash:       tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:           keys,
+		Signers:               signers,
+		NonceAuthority:        nonceAuth,
+		TokenAccount:          tokenAccount.Base58(),
+		Mint:                  mint.Base58(),
+		TokenAccountAuthority: tokenAccountAuthority.Base58(),
+		Program:               tokenProgram.Base58(),
+		Amount:                strconv.FormatUint(amount, 10),
+		Fee:                   newSystemPayer(feePayer, fee),
+	}
+}
+
+// PermissionedBurnCheckedRequest destroys supply held by a token account of a mint that carries
+// PermissionedBurn, which needs the mint's permissioned burn authority to sign in
+// addition to the token account's owner or delegate. The plain burn endpoints are
+// refused by such a mint.
+type PermissionedBurnCheckedRequest struct {
+	// TokenAccount is debited and never credited elsewhere: burning destroys
+	// supply rather than moving it. It must already exist and hold Mint.
+	TokenAccount string `json:"token_account" example:""`
+
+	// Mint is what TokenAccount must hold, and is the source of the decimals
+	// checked against.
+	Mint string `json:"mint" example:""`
+
+	// PermissionedBurnAuthority is the authority the mint's PermissionedBurn
+	// extension names. It has to sign every burn of the mint, in addition to
+	// TokenAccountAuthority.
+	PermissionedBurnAuthority string `json:"permissioned_burn_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// TokenAccountAuthority is TokenAccount's owner, or its delegate for no
+	// more than what was delegated. Burning spends a balance, so it is the
+	// holder's to authorize, not the mint's — unlike minting, which checks
+	// the mint's own authority instead.
+	TokenAccountAuthority string `json:"token_account_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Amount is the raw base-unit count to destroy, not a UI decimal string.
+	Amount string `json:"amount" example:"1000"`
+
+	// Decimals is checked against Mint's own stored value rather than
+	// trusted, which is the whole point of the checked variant: catching a
+	// client that formatted Amount against the wrong decimals as a 400
+	// instead of an on-chain failure.
+	Decimals uint8 `json:"decimals" example:"6"`
+
+	// FeePayer signs and pays the transaction fee. Burning moves no lamports
+	// of its own, so this is the only balance this endpoint ever checks.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022: only it has extensions. It is required rather than defaulted, since a token
+	// account belongs to exactly one of the two forever, and it must agree
+	// with the mint's own owning program or the instruction fails on chain.
+	Program string `json:"program" example:"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty, the
+	// authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	tokenAccount          *types.PublicKey
+	mint                  *types.PublicKey
+	permissionedAuthority *types.PublicKey
+	tokenAccountAuthority *types.PublicKey
+	feePayer              *types.PublicKey
+	rbh                   *types.Hash
+	dna                   *types.PublicKey
+	tokenProgramID        *types.PublicKey
+	multisigSigners       []*types.PublicKey
+	amount                uint64
+}
+
+func (r *PermissionedBurnCheckedRequest) ValidateRequest() error {
+	var err error
+	if r.tokenAccount, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccount)); err != nil {
+		return errors.New("token_account: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.permissionedAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.PermissionedBurnAuthority)); err != nil {
+		return errors.New("permissioned_burn_authority: " + err.Error())
+	}
+	if r.tokenAccountAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.TokenAccountAuthority)); err != nil {
+		return errors.New("token_account_authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	amount := strings.TrimSpace(r.Amount)
+	if amount == "" {
+		return errors.New("amount is required")
+	}
+	if r.amount, err = strconv.ParseUint(amount, 10, 64); err != nil {
+		return errors.New("amount: must be a decimal base-unit count")
+	}
+	if r.amount == 0 {
+		return errors.New("amount: must be greater than zero")
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.TokenProgramID) && !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is neither the Token nor the Token-2022 program", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *PermissionedBurnCheckedRequest) TokenAccountKey() *types.PublicKey {
+	return r.tokenAccount
+}
+
+func (r *PermissionedBurnCheckedRequest) PermissionedAuthorityKey() *types.PublicKey {
+	return r.permissionedAuthority
+}
+func (r *PermissionedBurnCheckedRequest) MintKey() *types.PublicKey {
+	return r.mint
+}
+
+func (r *PermissionedBurnCheckedRequest) TokenAccountAuthorityKey() *types.PublicKey {
+	return r.tokenAccountAuthority
+}
+
+func (r *PermissionedBurnCheckedRequest) FeePayerKey() *types.PublicKey {
+	return r.feePayer
+}
+
+func (r *PermissionedBurnCheckedRequest) Blockhash() *types.Hash {
+	return r.rbh
+}
+
+func (r *PermissionedBurnCheckedRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+
+func (r *PermissionedBurnCheckedRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+func (r *PermissionedBurnCheckedRequest) ToAmount() uint64 {
+	return r.amount
+}
+
+func (r *PermissionedBurnCheckedRequest) ToDecimals() uint8 {
+	return r.Decimals
+}
+
+func (r *PermissionedBurnCheckedRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+type PermissionedBurnCheckedResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	TokenAccount          string      `json:"token_account"`
+	Mint                  string      `json:"mint"`
+	TokenAccountAuthority string      `json:"token_account_authority"`
+	Program               string      `json:"program"`
+	Amount                string      `json:"amount"`
+	Decimals              uint8       `json:"decimals"`
+	Fee                   SystemPayer `json:"fee"`
+}
+
+func NewPermissionedBurnCheckedResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, tokenAccount, mint, tokenAccountAuthority, tokenProgram, nonceAuthority *types.PublicKey,
+	amount uint64, decimals uint8, fee uint64,
+) *PermissionedBurnCheckedResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &PermissionedBurnCheckedResponse{
+		Transaction:           codec.Base64.Encode(raw),
+		Message:               codec.Base64.Encode(message),
+		RecentBlockhash:       tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:           keys,
+		Signers:               signers,
+		NonceAuthority:        nonceAuth,
+		TokenAccount:          tokenAccount.Base58(),
+		Mint:                  mint.Base58(),
+		TokenAccountAuthority: tokenAccountAuthority.Base58(),
+		Program:               tokenProgram.Base58(),
+		Amount:                strconv.FormatUint(amount, 10),
+		Decimals:              decimals,
+		Fee:                   newSystemPayer(feePayer, fee),
+	}
+}
+
+// InitializePermissionedBurnRequest attaches the PermissionedBurn extension to Mint, naming
+// the authority whose signature every burn of the mint has to carry in addition to
+// the token account owner's. Once it is set, the plain burn endpoints are refused
+// by the mint and the burns under extensions/permissioned-burn are used instead.
+//
+// This can only ever run in the narrow window every mint extension shares:
+// after the mint account has been allocated (sized to include this extension)
+// and before initialize-mint2 locks the extension list forever.
+type InitializePermissionedBurnRequest struct {
+	// Mint is the account this attaches to. It must already exist (see
+	// create-mint) and not yet be initialized -- initialize-mint2 has to
+	// run after this, never before.
+	Mint string `json:"mint" example:""`
+
+	// Authority has to co-sign every burn of the mint. Required: without one
+	// the extension would gate nothing.
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint           *types.PublicKey
+	authority      *types.PublicKey
+	feePayer       *types.PublicKey
+	rbh            *types.Hash
+	dna            *types.PublicKey
+	tokenProgramID *types.PublicKey
+}
+
+func (r *InitializePermissionedBurnRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *InitializePermissionedBurnRequest) MintKey() *types.PublicKey      { return r.mint }
+func (r *InitializePermissionedBurnRequest) AuthorityKey() *types.PublicKey { return r.authority }
+func (r *InitializePermissionedBurnRequest) FeePayerKey() *types.PublicKey  { return r.feePayer }
+func (r *InitializePermissionedBurnRequest) Blockhash() *types.Hash         { return r.rbh }
+func (r *InitializePermissionedBurnRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *InitializePermissionedBurnRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+
+// InitializePermissionedBurnResponse reports the built transaction.
+type InitializePermissionedBurnResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint      string `json:"mint"`
+	Authority string `json:"authority"`
+	Program   string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewInitializePermissionedBurnResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *InitializePermissionedBurnResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	res := &InitializePermissionedBurnResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Mint:            mint.Base58(),
+		Authority:       authority.Base58(),
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+
+	return res
+}
+
+// SetPermissionedBurnAuthorityRequest hands the PermissionedBurn extension's authority role over to NewAuthority,
+// or gives it up for good when NewAuthority is empty. SetAuthority is the only
+// way to change it after the extension was initialized. Authorized by the current
+// holder of the role.
+type SetPermissionedBurnAuthorityRequest struct {
+	// Mint must already carry the extension and be initialized.
+	Mint string `json:"mint" example:""`
+
+	// Authority is the permissioned burn authority, or its multisig for a multisig-owned one
+	// (see MultisigSigners).
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// NewAuthority takes over the role. Left empty, the role is given up for good:
+	// nothing can ever change it again.
+	NewAuthority string `json:"new_authority" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token mint can never hold this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty,
+	// Authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	mint            *types.PublicKey
+	authority       *types.PublicKey
+	newAuthority    *types.PublicKey
+	feePayer        *types.PublicKey
+	rbh             *types.Hash
+	dna             *types.PublicKey
+	tokenProgramID  *types.PublicKey
+	multisigSigners []*types.PublicKey
+}
+
+func (r *SetPermissionedBurnAuthorityRequest) ValidateRequest() error {
+	var err error
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+	if a := strings.TrimSpace(r.NewAuthority); a != "" {
+		if r.newAuthority, err = types.NewPublicKeyFromBase58(a); err != nil {
+			return errors.New("new_authority: " + err.Error())
+		}
+	}
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 mint", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *SetPermissionedBurnAuthorityRequest) MintKey() *types.PublicKey      { return r.mint }
+func (r *SetPermissionedBurnAuthorityRequest) AuthorityKey() *types.PublicKey { return r.authority }
+func (r *SetPermissionedBurnAuthorityRequest) ToNewAuthority() *types.PublicKey {
+	return r.newAuthority
+}
+func (r *SetPermissionedBurnAuthorityRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *SetPermissionedBurnAuthorityRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *SetPermissionedBurnAuthorityRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *SetPermissionedBurnAuthorityRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *SetPermissionedBurnAuthorityRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// SetPermissionedBurnAuthorityResponse reports the built transaction.
+type SetPermissionedBurnAuthorityResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Mint         string `json:"mint"`
+	Authority    string `json:"authority"`
+	NewAuthority string `json:"new_authority,omitempty"`
+	Program      string `json:"program"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewSetPermissionedBurnAuthorityResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, mint, authority, tokenProgram, nonceAuthority *types.PublicKey,
+	newAuthority *types.PublicKey,
+	fee uint64,
+) *SetPermissionedBurnAuthorityResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &SetPermissionedBurnAuthorityResponse{
+		Transaction:     codec.Base64.Encode(raw),
+		Message:         codec.Base64.Encode(message),
+		RecentBlockhash: tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:     keys,
+		Signers:         signers,
+		NonceAuthority:  nonceAuth,
+		Mint:            mint.Base58(),
+		Authority:       authority.Base58(),
+		NewAuthority:    optionalKeyString(newAuthority),
+		Program:         tokenProgram.Base58(),
+		Fee:             newSystemPayer(feePayer, fee),
+	}
+}
+
+// ConfidentialPermissionedBurnRequest is ConfidentialBurn for a mint that carries
+// PermissionedBurn: the same proofs and values, with the mint's permissioned burn
+// authority signing in addition to the account's owner. The plain confidential
+// burn is refused by such a mint.
+type ConfidentialPermissionedBurnRequest struct {
+	// Account is debited (its available balance). It must already carry the
+	// ConfidentialTransferAccount extension and hold at least the amount.
+	Account string `json:"account" example:""`
+
+	// Mint must carry ConfidentialPermissionedBurnBurn and ConfidentialTransferMint, and
+	// is what Account holds.
+	Mint string `json:"mint" example:""`
+
+	// PermissionedBurnAuthority is the authority the mint's PermissionedBurn
+	// extension names; it signs in addition to Authority.
+	PermissionedBurnAuthority string `json:"permissioned_burn_authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Authority is Account's owner, or its multisig for a multisig-owned
+	// account (see MultisigSigners) -- not the mint authority.
+	Authority string `json:"authority" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// EqualityContextStateAccount holds the verified
+	// CiphertextCommitmentEquality proof's context (see
+	// context-state/verify/ciphertext-commitment-equality).
+	EqualityContextStateAccount string `json:"equality_context_state_account" example:""`
+
+	// CiphertextValidityContextStateAccount holds the verified
+	// BatchedGroupedCiphertext3HandlesValidity proof's context (see
+	// context-state/verify/batched-grouped-ciphertext-3-handles-validity).
+	CiphertextValidityContextStateAccount string `json:"ciphertext_validity_context_state_account" example:""`
+
+	// RangeProofContextStateAccount holds the verified BatchedRangeProofU128
+	// proof's context (see context-state/verify/batched-range-proof-u128).
+	RangeProofContextStateAccount string `json:"range_proof_context_state_account" example:""`
+
+	// NewDecryptableAvailableBalance is tool/prove/confidential-burn's own
+	// new_decryptable_available_balance, base58-encoded (36 bytes).
+	NewDecryptableAvailableBalance string `json:"new_decryptable_available_balance" example:""`
+
+	// AuditorCiphertextLo is tool/prove/confidential-burn's own
+	// auditor_ciphertext_lo, base58-encoded (64 bytes).
+	AuditorCiphertextLo string `json:"auditor_ciphertext_lo" example:""`
+
+	// AuditorCiphertextHi is tool/prove/confidential-burn's own
+	// auditor_ciphertext_hi, base58-encoded (64 bytes).
+	AuditorCiphertextHi string `json:"auditor_ciphertext_hi" example:""`
+
+	// FeePayer signs and pays the transaction fee.
+	FeePayer string `json:"fee_payer" example:"EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"`
+
+	// Program must be Token-2022. A classic Token account can never hold
+	// this extension.
+	Program string `json:"program" example:"TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"`
+
+	// MultisigSigners is empty for a single-signer authority. Non-empty,
+	// Authority itself does not sign; the named members do, in its place.
+	MultisigSigners []string `json:"multisig_signers"`
+
+	// RecentBlockhash is always required, and there is no server-side fetch
+	// behind it: this builds the message against exactly the value given,
+	// which expires whenever the runtime says it does. When
+	// DurableNonceAccount is also named, this is not what the message is
+	// built against — it is only what prices it, since a nonce is never among
+	// the cluster's recent blockhashes and pricing against one directly comes
+	// back expired.
+	RecentBlockhash string `json:"recent_blockhash" example:""`
+
+	// DurableNonceAccount may be left empty, in which case the message is
+	// built against RecentBlockhash directly and expires with it. Naming one
+	// builds the message against the value that account stores instead, so it
+	// never expires, and prepends the advance that consumes it; RecentBlockhash
+	// is then used only to price the transaction. The authority is not a
+	// field: it is read from the account, since it is a fact about it rather
+	// than a choice.
+	DurableNonceAccount string `json:"durable_nonce_account" example:""`
+
+	account                        *types.PublicKey
+	mint                           *types.PublicKey
+	permissionedAuthority          *types.PublicKey
+	authority                      *types.PublicKey
+	equalityContext                *types.PublicKey
+	validityContext                *types.PublicKey
+	rangeContext                   *types.PublicKey
+	newDecryptableAvailableBalance []byte
+	auditorCiphertextLo            []byte
+	auditorCiphertextHi            []byte
+	feePayer                       *types.PublicKey
+	rbh                            *types.Hash
+	dna                            *types.PublicKey
+	tokenProgramID                 *types.PublicKey
+	multisigSigners                []*types.PublicKey
+}
+
+func (r *ConfidentialPermissionedBurnRequest) ValidateRequest() error {
+	var err error
+	if r.account, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Account)); err != nil {
+		return errors.New("account: " + err.Error())
+	}
+	if r.mint, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Mint)); err != nil {
+		return errors.New("mint: " + err.Error())
+	}
+	if r.permissionedAuthority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.PermissionedBurnAuthority)); err != nil {
+		return errors.New("permissioned_burn_authority: " + err.Error())
+	}
+	if r.authority, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.Authority)); err != nil {
+		return errors.New("authority: " + err.Error())
+	}
+
+	if r.equalityContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.EqualityContextStateAccount)); err != nil {
+		return errors.New("equality_context_state_account: " + err.Error())
+	}
+	if r.validityContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.CiphertextValidityContextStateAccount)); err != nil {
+		return errors.New("ciphertext_validity_context_state_account: " + err.Error())
+	}
+	if r.rangeContext, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.RangeProofContextStateAccount)); err != nil {
+		return errors.New("range_proof_context_state_account: " + err.Error())
+	}
+
+	if r.newDecryptableAvailableBalance, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.NewDecryptableAvailableBalance), core.AeCiphertextLen); err != nil {
+		return errors.New("new_decryptable_available_balance: " + err.Error())
+	}
+	if r.auditorCiphertextLo, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AuditorCiphertextLo), 64); err != nil {
+		return errors.New("auditor_ciphertext_lo: " + err.Error())
+	}
+	if r.auditorCiphertextHi, err = codec.Base58.DecodeFixed(strings.TrimSpace(r.AuditorCiphertextHi), 64); err != nil {
+		return errors.New("auditor_ciphertext_hi: " + err.Error())
+	}
+
+	if r.feePayer, err = types.NewPublicKeyFromBase58(strings.TrimSpace(r.FeePayer)); err != nil {
+		return errors.New("fee_payer: " + err.Error())
+	}
+
+	r.multisigSigners = make([]*types.PublicKey, len(r.MultisigSigners))
+	for i, s := range r.MultisigSigners {
+		if r.multisigSigners[i], err = types.NewPublicKeyFromBase58(strings.TrimSpace(s)); err != nil {
+			return fmt.Errorf("multisig_signers[%d]: %s", i, err)
+		}
+	}
+
+	rb := strings.TrimSpace(r.RecentBlockhash)
+	if rb == "" {
+		return errors.New("recent_blockhash is required")
+	}
+	if r.rbh, err = types.NewHashFromBase58(rb); err != nil {
+		return errors.New("recent_blockhash: " + err.Error())
+	}
+
+	if dn := strings.TrimSpace(r.DurableNonceAccount); dn != "" {
+		if r.dna, err = types.NewPublicKeyFromBase58(dn); err != nil {
+			return errors.New("durable_nonce_account: " + err.Error())
+		}
+	}
+
+	program := strings.TrimSpace(r.Program)
+	if program == "" {
+		return errors.New("program is required")
+	}
+	if r.tokenProgramID, err = types.NewPublicKeyFromBase58(program); err != nil {
+		return errors.New("program: " + err.Error())
+	}
+	if !r.tokenProgramID.Equal(core.Token2022ProgramID) {
+		return fmt.Errorf("program: %s is not Token-2022 -- extensions can only ever exist on a Token-2022 account", r.tokenProgramID)
+	}
+
+	return nil
+}
+
+func (r *ConfidentialPermissionedBurnRequest) AccountKey() *types.PublicKey { return r.account }
+func (r *ConfidentialPermissionedBurnRequest) PermissionedAuthorityKey() *types.PublicKey {
+	return r.permissionedAuthority
+}
+func (r *ConfidentialPermissionedBurnRequest) MintKey() *types.PublicKey      { return r.mint }
+func (r *ConfidentialPermissionedBurnRequest) AuthorityKey() *types.PublicKey { return r.authority }
+func (r *ConfidentialPermissionedBurnRequest) EqualityContextKey() *types.PublicKey {
+	return r.equalityContext
+}
+func (r *ConfidentialPermissionedBurnRequest) ValidityContextKey() *types.PublicKey {
+	return r.validityContext
+}
+func (r *ConfidentialPermissionedBurnRequest) RangeContextKey() *types.PublicKey {
+	return r.rangeContext
+}
+func (r *ConfidentialPermissionedBurnRequest) ToNewDecryptableAvailableBalance() []byte {
+	return r.newDecryptableAvailableBalance
+}
+func (r *ConfidentialPermissionedBurnRequest) ToAuditorCiphertextLo() []byte {
+	return r.auditorCiphertextLo
+}
+func (r *ConfidentialPermissionedBurnRequest) ToAuditorCiphertextHi() []byte {
+	return r.auditorCiphertextHi
+}
+func (r *ConfidentialPermissionedBurnRequest) FeePayerKey() *types.PublicKey { return r.feePayer }
+func (r *ConfidentialPermissionedBurnRequest) Blockhash() *types.Hash        { return r.rbh }
+func (r *ConfidentialPermissionedBurnRequest) DurableNonceAccountKey() *types.PublicKey {
+	return r.dna
+}
+func (r *ConfidentialPermissionedBurnRequest) TokenProgramID() *types.PublicKey {
+	return r.tokenProgramID
+}
+func (r *ConfidentialPermissionedBurnRequest) ToMultisigSigners() []*types.PublicKey {
+	return r.multisigSigners
+}
+
+// ConfidentialPermissionedBurnResponse reports the built transaction.
+type ConfidentialPermissionedBurnResponse struct {
+	Transaction     string   `json:"transaction"`
+	Message         string   `json:"message"`
+	RecentBlockhash string   `json:"recent_blockhash"`
+	AccountKeys     []string `json:"account_keys"`
+	Signers         []string `json:"signers"`
+
+	NonceAuthority string `json:"nonce_authority,omitempty"`
+
+	Account   string `json:"account"`
+	Mint      string `json:"mint"`
+	Authority string `json:"authority"`
+	Program   string `json:"program"`
+
+	EqualityContextStateAccount           string `json:"equality_context_state_account"`
+	CiphertextValidityContextStateAccount string `json:"ciphertext_validity_context_state_account"`
+	RangeProofContextStateAccount         string `json:"range_proof_context_state_account"`
+
+	Fee SystemPayer `json:"fee"`
+}
+
+func NewConfidentialPermissionedBurnResponse(
+	tx *types.Transaction, raw, message []byte,
+	feePayer, account, mint, authority, tokenProgram, equalityContext, validityContext, rangeContext, nonceAuthority *types.PublicKey,
+	fee uint64,
+) *ConfidentialPermissionedBurnResponse {
+	nonceAuth := ""
+	if !nonceAuthority.IsNil() {
+		nonceAuth = nonceAuthority.Base58()
+	}
+
+	keys := make([]string, len(tx.Message.AccountKeys))
+	for i, k := range tx.Message.AccountKeys {
+		keys[i] = k.Base58()
+	}
+
+	signers := make([]string, tx.Message.NumSigners())
+	for i, k := range tx.Message.Signers() {
+		signers[i] = k.Base58()
+	}
+
+	return &ConfidentialPermissionedBurnResponse{
+		Transaction:                           codec.Base64.Encode(raw),
+		Message:                               codec.Base64.Encode(message),
+		RecentBlockhash:                       tx.Message.RecentBlockhash.Base58(),
+		AccountKeys:                           keys,
+		Signers:                               signers,
+		NonceAuthority:                        nonceAuth,
+		Account:                               account.Base58(),
+		Mint:                                  mint.Base58(),
+		Authority:                             authority.Base58(),
+		Program:                               tokenProgram.Base58(),
+		EqualityContextStateAccount:           equalityContext.Base58(),
+		CiphertextValidityContextStateAccount: validityContext.Base58(),
+		RangeProofContextStateAccount:         rangeContext.Base58(),
+		Fee:                                   newSystemPayer(feePayer, fee),
+	}
+}

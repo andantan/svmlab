@@ -530,8 +530,8 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     initialize-member는 멤버 민트 authority와 그룹 update authority **둘 다 서명**
   - **미구현: `Emit`**(메타데이터 return data, 상태 변화 없음 — 빌더는 core에 있고 엔드포인트
     없음). 시뮬레이션에서만 의미가 있고 계정 데이터를 직접 읽으면 같은 정보
-  - 남은 확장: transfer-hook 2(훅 프로그램 필요), permissioned-burn 4(+ConfidentialBurn).
-    확장 다 끝난 뒤 보완 패스 → Metaplex Token Metadata(기존 SPL Token용)
+  - 남은 확장: transfer-hook 2(훅 프로그램 필요). 확장 다 끝난 뒤 보완 패스 →
+    Metaplex Token Metadata(기존 SPL Token용)
 
   **SetAuthority의 확장 권한 11종 — devnet 확인.** `AuthorityType` 0~17 상수를 전부
   `core/token.go`에 선언(순서가 업스트림 `into()`와 동일하게 4 TransferFeeConfig,
@@ -551,9 +551,32 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     역할 수행(이자율 100→250, pause/resume, multiplier 2→3), T가 비우면 필드 None +
     이후 모든 시도가 "has no … authority"로 거절(11종 전부). 옛 권한 거절은 서버 사전검사를
     확인한 것이고 프로그램 쪽 거절은 별도로 보지 않음
-  - **남은 권한 타입 2개**: 10 TransferHookProgramId, 17 PermissionedBurn — 각 확장을 만들 때
+  - **남은 권한 타입 1개**: 10 TransferHookProgramId — transfer-hook을 만들 때
+    (17 PermissionedBurn은 아래 permissioned-burn과 함께 완료)
   - 참고: 세션 중 스크래치패드(테스트 키·헬퍼)가 지워져 이전 테스트 민트 키를 잃음(온체인
     영향 없음)
+
+  **permissioned-burn 5개 — devnet 확인.** 확장 타입 28(민트 전용, 32B = 권한자 MaybeNull),
+  opcode 46. 일반 Burn/BurnChecked/confidential burn은 이 권한자가 설정된 민트에서 프로그램이
+  **거절**(`Custom(12)` InvalidInstruction)하고, 대신 아래를 씀 — 권한자가 **민트의
+  permissioned burn authority + 토큰 계정 owner/delegate 둘 다** 서명
+  - `extensions/permissioned-burn/initialize`(sub 0, 권한자 필수), `burn`(1, amount),
+    `burn-checked`(2, amount+decimals), `confidential-burn`(3, 프루프 3개+auditor
+    ciphertext, 계정 `[account, mint, eq, validity, range, permissioned 권한자, owner]`),
+    `set-authority`(AuthorityType 17, 비우면 일반 burn 복귀)
+  - burn/burn-checked는 기존 Burn/BurnChecked 핸들러를 복제해 permissioned 권한자 필드와
+    확장 존재/권한자 일치 검사를 추가, confidential-burn은 `prove/confidential-burn`을 그대로
+    사용(프루프가 permissioned 권한자와 무관)
+  - 확인: 일반 burn 거절 → permissioned burn(A 공동서명) 통과 1000→900→850, 권한자 오입력·
+    decimals 오입력은 사전검사 거절, set-authority로 이전 후 비우면 일반 burn 복귀(830).
+    확장 3개(CT mint+MintBurn+PermissionedBurn, 471B) 민트에서 confidential mint 500 →
+    apply → **permissioned confidential burn 200**: available/decryptable 300, 민트
+    confidential_supply 500, pending_burn 200. 같은 민트에서 일반 confidential burn은 거절
+  - **버그 수정**: `permissioned_burn`(타입 28)이 크기표/민트전용표에서 빠져 `mint/data-size`가
+    "토큰 계정 확장"이라며 거절 → 32B·민트 전용으로 정정(202B 확인). 표를 확장 enum 전체와
+    대조했고 누락은 이것 하나
+  - **이제 남은 확장은 transfer-hook 하나**(초기화/업데이트 + 권한 타입 10). 훅 프로그램이
+    따로 필요해 가장 무거움. 그 뒤 기존 엔드포인트 보완 패스 → Metaplex Token Metadata
 
 
 

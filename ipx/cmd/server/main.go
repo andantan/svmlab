@@ -261,6 +261,13 @@ func run() error {
 				r.Post("/initialize", tk.InitializeConfidentialTransferMint)
 				r.Post("/update", tk.UpdateConfidentialTransferMint)
 			})
+			r.Route("/extensions/permissioned-burn", func(r chi.Router) {
+				r.Post("/initialize", tk.InitializePermissionedBurn)
+				r.Post("/burn", tk.PermissionedBurn)
+				r.Post("/burn-checked", tk.PermissionedBurnChecked)
+				r.Post("/confidential-burn", tk.ConfidentialPermissionedBurn)
+				r.Post("/set-authority", tk.SetPermissionedBurnAuthority)
+			})
 			r.Route("/extensions/token-metadata", func(r chi.Router) {
 				r.Post("/initialize", tk.InitializeTokenMetadata)
 				r.Post("/update-field", tk.UpdateTokenMetadataField)

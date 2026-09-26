@@ -530,8 +530,31 @@ API 원칙에서 벗어나므로 전부 뒤로 미룸.
     initialize-member는 멤버 민트 authority와 그룹 update authority **둘 다 서명**
   - **미구현: `Emit`**(메타데이터 return data, 상태 변화 없음 — 빌더는 core에 있고 엔드포인트
     없음). 시뮬레이션에서만 의미가 있고 계정 데이터를 직접 읽으면 같은 정보
-  - 남은 확장: transfer-hook 2(훅 프로그램 필요), permissioned-burn 4, SetAuthority 확장
-    권한 13종. 확장 다 끝난 뒤 보완 패스 → Metaplex Token Metadata(기존 SPL Token용)
+  - 남은 확장: transfer-hook 2(훅 프로그램 필요), permissioned-burn 4(+ConfidentialBurn).
+    확장 다 끝난 뒤 보완 패스 → Metaplex Token Metadata(기존 SPL Token용)
+
+  **SetAuthority의 확장 권한 11종 — devnet 확인.** `AuthorityType` 0~17 상수를 전부
+  `core/token.go`에 선언(순서가 업스트림 `into()`와 동일하게 4 TransferFeeConfig,
+  5 WithheldWithdraw, 6 CloseMint, 7 InterestRate, 8 PermanentDelegate, 9 ConfidentialTransferMint,
+  10 TransferHookProgramId, 11 ConfidentialTransferFeeConfig, 12~14 포인터 3종,
+  15 ScaledUiAmount, 16 Pause, 17 PermissionedBurn)하고 `SetAuthority`가 0~17을 받게 함.
+  "4·5는 SetAuthority로 안 다룬다"던 주석은 **틀렸음**을 정정
+  - 엔드포인트(모두 `extensions/<ext>/…`, 바디 `authority`(현재)+`new_authority`+멀티시그,
+    **new_authority를 비우면 영구 포기**): `transfer-fee-config/set-config-authority`(4),
+    `transfer-fee-config/set-withdraw-withheld-authority`(5), `interest-bearing/set-rate-authority`(7),
+    `permanent-delegate/set-authority`(8), `confidential-transfer-mint/set-authority`(9),
+    `confidential-transfer-fee-config/set-authority`(11), `{metadata,group,group-member}-pointer/
+    set-authority`(12/13/14), `scaled-ui-amount/set-authority`(15), `pausable/set-authority`(16)
+  - 사전검사: 확장이 있는지, `authority`가 그 확장의 실제 현재 권한자인지(대부분 확장 데이터
+    앞 32바이트, TransferFeeConfig는 두 필드를 각각 `DecodeTransferFeeConfig`로)
+  - 확인: 9확장 한 민트(813B)에서 권한을 T로 넘김 → 온체인 필드 변경, 옛 권한 거절, T가 실제로
+    역할 수행(이자율 100→250, pause/resume, multiplier 2→3), T가 비우면 필드 None +
+    이후 모든 시도가 "has no … authority"로 거절(11종 전부). 옛 권한 거절은 서버 사전검사를
+    확인한 것이고 프로그램 쪽 거절은 별도로 보지 않음
+  - **남은 권한 타입 2개**: 10 TransferHookProgramId, 17 PermissionedBurn — 각 확장을 만들 때
+  - 참고: 세션 중 스크래치패드(테스트 키·헬퍼)가 지워져 이전 테스트 민트 키를 잃음(온체인
+    영향 없음)
+
 
 
 

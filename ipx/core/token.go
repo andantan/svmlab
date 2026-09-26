@@ -78,22 +78,31 @@ const TokenInstructionBatch uint8 = 255
 // a mint and the next two to a token account, and the program rejects the
 // wrong pairing rather than silently ignoring it.
 //
-// TokenAuthorityCloseMint is a Token-2022-only extension authority (the
-// MintCloseAuthority extension's role) and is not contiguous with the four
-// classic values above -- upstream's AuthorityType also enumerates
-// TransferFeeConfig (4) and WithheldWithdraw (5) in between, which this
-// codebase does not declare here since those are already covered by their
-// own dedicated builders (InitializeTransferFeeConfig names both at
-// mint-extension setup, not through SetAuthority), confirmed against the
-// interface crate's AuthorityType::into() match rather than assumed
-// contiguous.
+// The authority types beyond the classic four belong to Token-2022 extensions,
+// numbered as upstream's AuthorityType::into() has them (not contiguous with the
+// classic values). Each names the role an extension's authority field plays, and
+// SetAuthority is the only way to hand that role to someone else, or to give it
+// up for good, after the extension was initialized: an extension's Initialize
+// names its authority once, and nothing else changes it.
 const (
 	TokenAuthorityMintTokens uint8 = iota
 	TokenAuthorityFreezeAccount
 	TokenAuthorityAccountOwner
 	TokenAuthorityCloseAccount
-
-	TokenAuthorityCloseMint uint8 = 6
+	TokenAuthorityTransferFeeConfig
+	TokenAuthorityWithheldWithdraw
+	TokenAuthorityCloseMint
+	TokenAuthorityInterestRate
+	TokenAuthorityPermanentDelegate
+	TokenAuthorityConfidentialTransferMint
+	TokenAuthorityTransferHookProgramId
+	TokenAuthorityConfidentialTransferFeeConfig
+	TokenAuthorityMetadataPointer
+	TokenAuthorityGroupPointer
+	TokenAuthorityGroupMemberPointer
+	TokenAuthorityScaledUiAmount
+	TokenAuthorityPause
+	TokenAuthorityPermissionedBurn
 )
 
 // NativeMintAddress is the mint that stands in for SOL itself.
@@ -1572,8 +1581,8 @@ func (t *token) SetAuthority(account *types.PublicKey, authorityType uint8, curr
 	if account.IsNil() {
 		return nil, fmt.Errorf("token set authority: account is required")
 	}
-	if authorityType > TokenAuthorityCloseAccount && authorityType != TokenAuthorityCloseMint {
-		return nil, fmt.Errorf("token set authority: authority type is %d, expected 0 through %d or %d (close mint)", authorityType, TokenAuthorityCloseAccount, TokenAuthorityCloseMint)
+	if authorityType > TokenAuthorityPermissionedBurn {
+		return nil, fmt.Errorf("token set authority: authority type is %d, expected 0 through %d", authorityType, TokenAuthorityPermissionedBurn)
 	}
 	if err := validateAuthority("token set authority", currentAuthority, signers); err != nil {
 		return nil, err

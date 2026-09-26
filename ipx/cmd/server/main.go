@@ -235,6 +235,8 @@ func run() error {
 			r.Post("/freeze-account", tk.FreezeAccount)
 			r.Post("/thaw-account", tk.ThawAccount)
 			r.Route("/extensions/transfer-fee-config", func(r chi.Router) {
+				r.Post("/set-config-authority", tk.SetTransferFeeConfigAuthority)
+				r.Post("/set-withdraw-withheld-authority", tk.SetTransferFeeWithdrawAuthority)
 				r.Post("/reallocate", tk.ReallocateTransferFeeConfig)
 				r.Post("/initialize", tk.InitializeTransferFeeConfig)
 				r.Post("/set", tk.SetTransferFee)
@@ -254,6 +256,7 @@ func run() error {
 				r.Post("/close", tk.CloseMint)
 			})
 			r.Route("/extensions/confidential-transfer-mint", func(r chi.Router) {
+				r.Post("/set-authority", tk.SetConfidentialTransferMintAuthority)
 				r.Post("/reallocate", tk.ReallocateConfidentialTransferMint)
 				r.Post("/initialize", tk.InitializeConfidentialTransferMint)
 				r.Post("/update", tk.UpdateConfidentialTransferMint)
@@ -271,14 +274,17 @@ func run() error {
 				r.Post("/initialize-member", tk.InitializeTokenGroupMember)
 			})
 			r.Route("/extensions/metadata-pointer", func(r chi.Router) {
+				r.Post("/set-authority", tk.SetMetadataPointerAuthority)
 				r.Post("/initialize", tk.InitializeMetadataPointer)
 				r.Post("/update", tk.UpdateMetadataPointer)
 			})
 			r.Route("/extensions/group-pointer", func(r chi.Router) {
+				r.Post("/set-authority", tk.SetGroupPointerAuthority)
 				r.Post("/initialize", tk.InitializeGroupPointer)
 				r.Post("/update", tk.UpdateGroupPointer)
 			})
 			r.Route("/extensions/group-member-pointer", func(r chi.Router) {
+				r.Post("/set-authority", tk.SetGroupMemberPointerAuthority)
 				r.Post("/initialize", tk.InitializeGroupMemberPointer)
 				r.Post("/update", tk.UpdateGroupMemberPointer)
 			})
@@ -287,14 +293,17 @@ func run() error {
 				r.Post("/update", tk.UpdateDefaultAccountState)
 			})
 			r.Route("/extensions/interest-bearing", func(r chi.Router) {
+				r.Post("/set-rate-authority", tk.SetInterestBearingRateAuthority)
 				r.Post("/initialize", tk.InitializeInterestBearingMint)
 				r.Post("/update-rate", tk.UpdateInterestBearingRate)
 			})
 			r.Route("/extensions/scaled-ui-amount", func(r chi.Router) {
+				r.Post("/set-authority", tk.SetScaledUiAmountAuthority)
 				r.Post("/initialize", tk.InitializeScaledUiAmount)
 				r.Post("/update-multiplier", tk.UpdateScaledUiAmountMultiplier)
 			})
 			r.Route("/extensions/pausable", func(r chi.Router) {
+				r.Post("/set-authority", tk.SetPausableAuthority)
 				r.Post("/initialize", tk.InitializePausable)
 				r.Post("/pause", tk.PauseMint)
 				r.Post("/resume", tk.ResumeMint)
@@ -313,6 +322,7 @@ func run() error {
 				r.Post("/initialize", tk.InitializeNonTransferableMint)
 			})
 			r.Route("/extensions/permanent-delegate", func(r chi.Router) {
+				r.Post("/set-authority", tk.SetPermanentDelegateAuthority)
 				r.Post("/initialize", tk.InitializePermanentDelegate)
 			})
 			r.Route("/extensions/confidential-mint-burn", func(r chi.Router) {
@@ -324,6 +334,7 @@ func run() error {
 				r.Post("/update-decryptable-supply", tk.ConfidentialUpdateDecryptableSupply)
 			})
 			r.Route("/extensions/confidential-transfer-fee-config", func(r chi.Router) {
+				r.Post("/set-authority", tk.SetConfidentialTransferFeeConfigAuthority)
 				r.Post("/initialize", tk.InitializeConfidentialTransferFeeConfig)
 				r.Post("/enable-harvest-to-mint", tk.EnableHarvestToMint)
 				r.Post("/disable-harvest-to-mint", tk.DisableHarvestToMint)

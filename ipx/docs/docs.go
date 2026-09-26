@@ -7163,6 +7163,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-fee-config/set-authority": {
+            "post": {
+                "description": "Hands the ConfidentialTransferFeeConfig authority -- who enables and disables harvesting confidential fees to the mint -- to new_authority, or gives it up for good when empty. This is not the withdraw withheld authority, which is set on the transfer-fee-config. Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's confidential transfer fee authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetConfidentialTransferFeeConfigAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetConfidentialTransferFeeConfigAuthorityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/extensions/confidential-transfer-fee-config/withdraw-withheld-tokens-from-accounts": {
             "post": {
                 "description": "Moves the confidential fees withheld on each of source_accounts straight into destination's available balance and zeroes them, without revealing the amount and without going through the mint (see withdraw-withheld-tokens-from-mint for that route). Authorized by the TransferFeeConfig's withdraw withheld authority. Builds only the instruction: the CiphertextCiphertextEquality proof must already be verified into a context-state account, whose address is named here -- build the proof and new_decryptable_available_balance with tool/prove/confidential-withdraw-withheld-from-accounts using the same source_accounts, create the account with zk-elgamal-proof/context-state/create/ciphertext-ciphertext-equality, and verify it with context-state/verify/ciphertext-ciphertext-equality. The proof covers the sum of the sources' withheld ciphertexts as they are when it is built, so any transfer into a source in between makes it fail. Every source must carry ConfidentialTransferFeeAmount, and the transaction has to fit the 1232-byte limit, which caps how many sources one call can carry; this endpoint checks both. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -7377,6 +7434,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.ReallocateConfidentialTransferMintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/confidential-transfer-mint/set-authority": {
+            "post": {
+                "description": "Hands the ConfidentialTransferMint authority -- who approves new confidential accounts and reconfigures the extension -- to new_authority, or gives it up for good when empty. Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's confidential transfer authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetConfidentialTransferMintAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetConfidentialTransferMintAuthorityResponse"
                         }
                     },
                     "400": {
@@ -7790,6 +7904,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/token/extensions/group-member-pointer/set-authority": {
+            "post": {
+                "description": "Hands the group member pointer authority to new_authority, or gives it up for good when empty (the pointer is then fixed). Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's group member pointer authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetGroupMemberPointerAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetGroupMemberPointerAuthorityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/extensions/group-member-pointer/update": {
             "post": {
                 "description": "Changes the address the mint's GroupMemberPointer extension points to (member_address, optional -- left empty the pointer is cleared). Authorized by the pointer's authority. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -7904,6 +8075,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/token/extensions/group-pointer/set-authority": {
+            "post": {
+                "description": "Hands the group pointer authority to new_authority, or gives it up for good when empty (the pointer is then fixed). Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's group pointer authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetGroupPointerAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetGroupPointerAuthorityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/extensions/group-pointer/update": {
             "post": {
                 "description": "Changes the address the mint's GroupPointer extension points to (group_address, optional -- left empty the pointer is cleared). Authorized by the pointer's authority. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -8004,6 +8232,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.InitializeInterestBearingMintResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/interest-bearing/set-rate-authority": {
+            "post": {
+                "description": "Hands the interest-bearing rate authority to new_authority, or gives it up for good when empty (the rate is then fixed). Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's interest rate authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetInterestBearingRateAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetInterestBearingRateAuthorityResponse"
                         }
                     },
                     "400": {
@@ -8289,6 +8574,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.InitializeMetadataPointerResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/metadata-pointer/set-authority": {
+            "post": {
+                "description": "Hands the metadata pointer authority to new_authority, or gives it up for good when empty (the pointer is then fixed). Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's metadata pointer authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetMetadataPointerAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetMetadataPointerAuthorityResponse"
                         }
                     },
                     "400": {
@@ -8873,6 +9215,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/token/extensions/pausable/set-authority": {
+            "post": {
+                "description": "Hands the pause authority to new_authority, or gives it up for good when empty (a paused mint then stays paused, an unpaused one can never be paused). Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's pause authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetPausableAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetPausableAuthorityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/extensions/permanent-delegate/initialize": {
             "post": {
                 "description": "Names a permanent delegate for the mint -- an authority that can transfer or burn any holder's tokens of this mint, without approval and for as long as the mint exists. Required: a mint that should not have one does not carry this extension. This can only ever run in the narrow window every mint extension shares: after the mint account has been allocated with room for this extension (see extensions/mint/data-size) and before initialize-mint2 locks the extension list forever. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -8930,6 +9329,63 @@ const docTemplate = `{
                 }
             }
         },
+        "/svm/v2/transaction/token/extensions/permanent-delegate/set-authority": {
+            "post": {
+                "description": "Hands the permanent delegate role -- the authority that can transfer or burn any holder's tokens -- to new_authority, or gives it up for good when empty, which removes that power from the mint permanently. Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's permanent delegate",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetPermanentDelegateAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetPermanentDelegateAuthorityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/svm/v2/transaction/token/extensions/scaled-ui-amount/initialize": {
             "post": {
                 "description": "Names who may later change the display multiplier (authority, optional -- left empty the multiplier is fixed for good) and the initial multiplier, a positive decimal that is not subnormal. The extension only changes how amounts are displayed; it never mints tokens. This can only ever run in the narrow window every mint extension shares: after the mint account has been allocated with room for this extension (see extensions/mint/data-size) and before initialize-mint2 locks the extension list forever. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
@@ -8973,6 +9429,63 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.InitializeScaledUiAmountResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/scaled-ui-amount/set-authority": {
+            "post": {
+                "description": "Hands the scaled UI amount multiplier authority to new_authority, or gives it up for good when empty (the multiplier is then fixed). Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's multiplier authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetScaledUiAmountAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetScaledUiAmountAuthorityResponse"
                         }
                     },
                     "400": {
@@ -9771,6 +10284,120 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/v2.SetTransferFeeResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/transfer-fee-config/set-config-authority": {
+            "post": {
+                "description": "Hands the TransferFeeConfig's config authority -- who may change the transfer fee rate -- to new_authority, or gives it up for good when empty. Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's transfer fee config authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetTransferFeeConfigAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetTransferFeeConfigAuthorityResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "string"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/svm/v2/transaction/token/extensions/transfer-fee-config/set-withdraw-withheld-authority": {
+            "post": {
+                "description": "Hands the TransferFeeConfig's withdraw withheld authority -- who may collect the fees withheld on the mint and its accounts -- to new_authority, or gives it up for good when empty (after which withheld fees can never be withdrawn). Authorized by the current holder of the role. recent_blockhash is always required and is never fetched server-side. Left alone, it also builds the message and expires whenever the runtime says it does. Naming durable_nonce_account builds the message against the value that account stores instead, so the transaction never expires, and prepends the advance that consumes it; recent_blockhash then only prices the transaction. The response reports nonce_authority in that case, which has to sign as well.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "v2-transaction-token-extensions"
+                ],
+                "summary": "Change or clear a mint's withdraw withheld authority",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Cluster name",
+                        "name": "X-Chain-Name",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Cluster network",
+                        "name": "X-Chain-Network",
+                        "in": "header",
+                        "required": true
+                    },
+                    {
+                        "description": "Mint, authority, and program",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetTransferFeeWithdrawAuthorityRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/v2.SetTransferFeeWithdrawAuthorityResponse"
                         }
                     },
                     "400": {
@@ -27534,6 +28161,188 @@ const docTemplate = `{
                 }
             }
         },
+        "v2.SetConfidentialTransferFeeConfigAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the confidential transfer fee authority, who enables and disables harvesting to the mint, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetConfidentialTransferFeeConfigAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetConfidentialTransferMintAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the confidential transfer authority, who approves accounts and reconfigures the extension, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetConfidentialTransferMintAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.SetFreezeAuthorityClearRequest": {
             "type": "object",
             "properties": {
@@ -27709,6 +28518,279 @@ const docTemplate = `{
                 }
             }
         },
+        "v2.SetGroupMemberPointerAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the group member pointer authority, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetGroupMemberPointerAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetGroupPointerAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the group pointer authority, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetGroupPointerAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetInterestBearingRateAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the interest rate authority, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetInterestBearingRateAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.SetLoadedAccountsDataSizeLimitRequest": {
             "type": "object",
             "properties": {
@@ -27753,6 +28835,97 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "nonce_authority": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetMetadataPointerAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the metadata pointer authority, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetMetadataPointerAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
                     "type": "string"
                 },
                 "recent_blockhash": {
@@ -27944,6 +29117,370 @@ const docTemplate = `{
                 }
             }
         },
+        "v2.SetPausableAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the pause authority, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetPausableAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetPermanentDelegateAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the current permanent delegate, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetPermanentDelegateAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetScaledUiAmountAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the multiplier authority, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetScaledUiAmountAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetTransferFeeConfigAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the transfer fee config authority, who may change the fee, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetTransferFeeConfigAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
+                    "type": "string"
+                }
+            }
+        },
         "v2.SetTransferFeeRequest": {
             "type": "object",
             "properties": {
@@ -28039,6 +29576,97 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "transfer_fee_config_authority": {
+                    "type": "string"
+                }
+            }
+        },
+        "v2.SetTransferFeeWithdrawAuthorityRequest": {
+            "type": "object",
+            "properties": {
+                "authority": {
+                    "description": "Authority is the withdraw withheld authority, who may collect withheld fees, or its multisig for a multisig-owned one\n(see MultisigSigners).",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "durable_nonce_account": {
+                    "description": "DurableNonceAccount may be left empty, in which case the message is\nbuilt against RecentBlockhash directly and expires with it. Naming one\nbuilds the message against the value that account stores instead, so it\nnever expires, and prepends the advance that consumes it; RecentBlockhash\nis then used only to price the transaction. The authority is not a\nfield: it is read from the account, since it is a fact about it rather\nthan a choice.",
+                    "type": "string",
+                    "example": ""
+                },
+                "fee_payer": {
+                    "description": "FeePayer signs and pays the transaction fee.",
+                    "type": "string",
+                    "example": "EodYvwsT22JTdNmvCeC974WjPiVYcxvfGpYLJxnB3JqK"
+                },
+                "mint": {
+                    "description": "Mint must already carry the extension and be initialized.",
+                    "type": "string",
+                    "example": ""
+                },
+                "multisig_signers": {
+                    "description": "MultisigSigners is empty for a single-signer authority. Non-empty,\nAuthority itself does not sign; the named members do, in its place.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "new_authority": {
+                    "description": "NewAuthority takes over the role. Left empty, the role is given up for good:\nnothing can ever change it again.",
+                    "type": "string",
+                    "example": ""
+                },
+                "program": {
+                    "description": "Program must be Token-2022. A classic Token mint can never hold this extension.",
+                    "type": "string",
+                    "example": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+                },
+                "recent_blockhash": {
+                    "description": "RecentBlockhash is always required, and there is no server-side fetch\nbehind it: this builds the message against exactly the value given,\nwhich expires whenever the runtime says it does. When\nDurableNonceAccount is also named, this is not what the message is\nbuilt against — it is only what prices it, since a nonce is never among\nthe cluster's recent blockhashes and pricing against one directly comes\nback expired.",
+                    "type": "string",
+                    "example": ""
+                }
+            }
+        },
+        "v2.SetTransferFeeWithdrawAuthorityResponse": {
+            "type": "object",
+            "properties": {
+                "account_keys": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "authority": {
+                    "type": "string"
+                },
+                "fee": {
+                    "$ref": "#/definitions/v2.SystemPayer"
+                },
+                "message": {
+                    "type": "string"
+                },
+                "mint": {
+                    "type": "string"
+                },
+                "new_authority": {
+                    "type": "string"
+                },
+                "nonce_authority": {
+                    "type": "string"
+                },
+                "program": {
+                    "type": "string"
+                },
+                "recent_blockhash": {
+                    "type": "string"
+                },
+                "signers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "transaction": {
                     "type": "string"
                 }
             }
